@@ -1,7 +1,7 @@
 # WRK - Intelligent Workspace for Nonprofit Teams
 
 <p align="center">
-  <img src="public/favicon.png" width="80" alt="WRK Logo">
+  <img src="public/images/wrk_favicon.png" width="80" alt="WRK Logo">
 </p>
 
 **WRK** is a comprehensive workspace management platform designed for nonprofit organizations. It streamlines project management, meeting intelligence, funder relations, and team collaboration with AI-powered insights.
@@ -282,9 +282,7 @@ php artisan queue:work
 
 ---
 
-## 📄 License
 
-Proprietary - POPVOX Foundation
 
 ---
 
