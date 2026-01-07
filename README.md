@@ -291,10 +291,4 @@ php artisan queue:work
 
 ---
 
-## 📄 License
-
-Proprietary - POPVOX Foundation
-
----
-
 *Built with ❤️ for nonprofit teams who need powerful tools without enterprise complexity.*
