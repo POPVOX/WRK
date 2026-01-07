@@ -10,8 +10,7 @@ class GoogleAuthController extends Controller
 {
     public function __construct(
         protected GoogleCalendarService $calendarService
-    ) {
-    }
+    ) {}
 
     /**
      * Redirect to Google OAuth.
@@ -33,14 +32,14 @@ class GoogleAuthController extends Controller
 
         // Verify the state parameter for CSRF protection
         $state = $request->get('state');
-        if (!$this->calendarService->verifyState($state)) {
+        if (! $this->calendarService->verifyState($state)) {
             return redirect()->route('dashboard')
                 ->with('error', 'Invalid state parameter. Please try again.');
         }
 
         $code = $request->get('code');
 
-        if (!$code) {
+        if (! $code) {
             return redirect()->route('dashboard')
                 ->with('error', 'No authorization code received from Google.');
         }
@@ -49,14 +48,14 @@ class GoogleAuthController extends Controller
             $this->calendarService->handleCallback($code, Auth::user());
 
             // Check if user came from onboarding
-            if (!Auth::user()->profile_completed_at) {
+            if (! Auth::user()->profile_completed_at) {
                 return redirect()->route('onboarding', ['calendarConnected' => 1]);
             }
 
             return redirect()->route('dashboard')
                 ->with('success', 'Google Calendar connected successfully!');
         } catch (\Exception $e) {
-            \Log::error('Google OAuth Error: ' . $e->getMessage());
+            \Log::error('Google OAuth Error: '.$e->getMessage());
 
             return redirect()->route('dashboard')
                 ->with('error', 'Failed to connect Google Calendar. Please try again.');

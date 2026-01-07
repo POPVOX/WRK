@@ -19,7 +19,7 @@ class ProjectDocumentFactory extends Factory
             'project_id' => Project::factory(),
             'title' => fake()->sentence(3),
             'type' => 'file',
-            'file_path' => fake()->word() . '.md',
+            'file_path' => fake()->word().'.md',
             'file_type' => 'md',
             'is_knowledge_base' => true,
             'ai_indexed' => false,
@@ -28,7 +28,7 @@ class ProjectDocumentFactory extends Factory
 
     public function link(): static
     {
-        return $this->state(fn(array $attributes) => [
+        return $this->state(fn (array $attributes) => [
             'type' => 'link',
             'url' => fake()->url(),
             'file_path' => null,
@@ -38,7 +38,7 @@ class ProjectDocumentFactory extends Factory
 
     public function indexed(): static
     {
-        return $this->state(fn(array $attributes) => [
+        return $this->state(fn (array $attributes) => [
             'ai_indexed' => true,
             'content_hash' => fake()->sha256(),
         ]);

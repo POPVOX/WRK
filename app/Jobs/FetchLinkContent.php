@@ -11,7 +11,6 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use App\Jobs\IndexDocumentContent;
 use Illuminate\Support\Str;
 
 class FetchLinkContent implements ShouldQueue
@@ -30,15 +29,16 @@ class FetchLinkContent implements ShouldQueue
     public function handle(): void
     {
         $doc = ProjectDocument::find($this->documentId);
-        if (!$doc || $doc->type !== 'link' || empty($doc->url)) {
+        if (! $doc || $doc->type !== 'link' || empty($doc->url)) {
             return;
         }
 
         $url = $doc->url;
 
         // Basic safety: only allow http/https and block local/private networks
-        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+        if (! filter_var($url, FILTER_VALIDATE_URL)) {
             Log::warning('FetchLinkContent: invalid URL', ['doc_id' => $doc->id, 'url' => $url]);
+
             return;
         }
 
@@ -46,21 +46,24 @@ class FetchLinkContent implements ShouldQueue
         $host = $parts['host'] ?? '';
         $scheme = strtolower($parts['scheme'] ?? '');
 
-        if (!in_array($scheme, ['http', 'https'], true)) {
+        if (! in_array($scheme, ['http', 'https'], true)) {
             Log::warning('FetchLinkContent: blocked non-http scheme', ['doc_id' => $doc->id, 'url' => $url]);
+
             return;
         }
 
         $allow = array_values(array_filter(config('ai.safety.link.allow_domains', [])));
         $deny = array_values(array_filter(config('ai.safety.link.deny_domains', [])));
 
-        if (!empty($deny) && in_array($host, $deny, true)) {
+        if (! empty($deny) && in_array($host, $deny, true)) {
             Log::warning('FetchLinkContent: blocked by denylist', ['doc_id' => $doc->id, 'host' => $host]);
+
             return;
         }
 
-        if (!empty($allow) && !in_array($host, $allow, true)) {
+        if (! empty($allow) && ! in_array($host, $allow, true)) {
             Log::warning('FetchLinkContent: host not in allowlist', ['doc_id' => $doc->id, 'host' => $host]);
+
             return;
         }
 
@@ -68,6 +71,7 @@ class FetchLinkContent implements ShouldQueue
         $blockedPrefixes = ['10.', '192.168.', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.', '169.254.'];
         if (in_array($host, $blockedHosts, true) || Str::startsWith($host, $blockedPrefixes)) {
             Log::warning('FetchLinkContent: blocked private/loopback host', ['doc_id' => $doc->id, 'host' => $host]);
+
             return;
         }
 

@@ -133,6 +133,6 @@ class TeamMemberSeeder extends Seeder
             );
         }
 
-        $this->command->info('Seeded ' . count($teamMembers) . ' team members with photos.');
+        $this->command->info('Seeded '.count($teamMembers).' team members with photos.');
     }
 }

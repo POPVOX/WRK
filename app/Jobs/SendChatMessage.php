@@ -10,7 +10,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class SendChatMessage implements ShouldQueue
@@ -18,8 +17,11 @@ class SendChatMessage implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $projectId;
+
     public int $userId;
+
     public string $prompt;
+
     public string $system;
 
     public $timeout = 90;
@@ -35,8 +37,9 @@ class SendChatMessage implements ShouldQueue
     public function handle(): void
     {
         $project = Project::find($this->projectId);
-        if (!$project) {
+        if (! $project) {
             Log::warning('SendChatMessage: Project not found', ['project_id' => $this->projectId]);
+
             return;
         }
 

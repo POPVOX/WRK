@@ -31,8 +31,9 @@ class SyncCalendarEvents implements ShouldQueue
 
     public function handle(GoogleCalendarService $calendarService): void
     {
-        if (!$calendarService->isConnected($this->user)) {
+        if (! $calendarService->isConnected($this->user)) {
             Log::info("Calendar sync skipped for user {$this->user->id} - not connected");
+
             return;
         }
 
@@ -65,12 +66,12 @@ class SyncCalendarEvents implements ShouldQueue
                     }
 
                     // Update location if missing or changed
-                    if (!$existingMeeting->location && $location) {
+                    if (! $existingMeeting->location && $location) {
                         $updates['location'] = $location;
                     }
 
                     // Update meeting link if missing
-                    if (!$existingMeeting->meeting_link) {
+                    if (! $existingMeeting->meeting_link) {
                         if ($hangoutLink) {
                             $updates['meeting_link'] = $hangoutLink;
                             $updates['meeting_link_type'] = 'google_meet';
@@ -90,10 +91,11 @@ class SyncCalendarEvents implements ShouldQueue
                         }
                     }
 
-                    if (!empty($updates)) {
+                    if (! empty($updates)) {
                         $existingMeeting->update($updates);
                         $updated++;
                     }
+
                     continue;
                 }
 
@@ -103,8 +105,9 @@ class SyncCalendarEvents implements ShouldQueue
 
                 foreach ($attendees as $attendee) {
                     $email = $attendee->getEmail();
-                    if ($email === $this->user->email)
+                    if ($email === $this->user->email) {
                         continue;
+                    }
 
                     $name = $attendee->getDisplayName() ?? explode('@', $email)[0];
                     $eventAttendees[] = ['email' => $email, 'name' => $name];
@@ -116,10 +119,10 @@ class SyncCalendarEvents implements ShouldQueue
                     );
 
                     // Try to link to organization based on email domain
-                    if (!$person->organization_id) {
+                    if (! $person->organization_id) {
                         $domain = explode('@', $email)[1] ?? null;
-                        if ($domain && !in_array($domain, ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com'])) {
-                            $org = Organization::where('website', 'like', '%' . $domain . '%')->first();
+                        if ($domain && ! in_array($domain, ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com'])) {
+                            $org = Organization::where('website', 'like', '%'.$domain.'%')->first();
                             if ($org) {
                                 $person->update(['organization_id' => $org->id]);
                             }
@@ -148,7 +151,7 @@ class SyncCalendarEvents implements ShouldQueue
 
                 // 2. Check conferenceData for other video platforms
                 $conferenceData = $event->getConferenceData();
-                if ($conferenceData && !$meetingLink) {
+                if ($conferenceData && ! $meetingLink) {
                     $entryPoints = $conferenceData->getEntryPoints();
                     if ($entryPoints) {
                         foreach ($entryPoints as $entryPoint) {
@@ -173,7 +176,7 @@ class SyncCalendarEvents implements ShouldQueue
                 }
 
                 // 3. Check location field for Zoom/Meet links
-                if (!$meetingLink && $location) {
+                if (! $meetingLink && $location) {
                     if (preg_match('/(https?:\/\/[^\s]+(?:zoom\.us|meet\.google\.com|teams\.microsoft\.com)[^\s]*)/i', $location, $matches)) {
                         $meetingLink = $matches[1];
                         if (str_contains($meetingLink, 'zoom.us')) {
@@ -187,7 +190,7 @@ class SyncCalendarEvents implements ShouldQueue
                 }
 
                 // 4. Check description for video links
-                if (!$meetingLink && $description) {
+                if (! $meetingLink && $description) {
                     if (preg_match('/(https?:\/\/[^\s]+(?:zoom\.us|meet\.google\.com|teams\.microsoft\.com)[^\s]*)/i', $description, $matches)) {
                         $meetingLink = $matches[1];
                         if (str_contains($meetingLink, 'zoom.us')) {
@@ -229,7 +232,7 @@ class SyncCalendarEvents implements ShouldQueue
 
             Log::info("Calendar sync completed for user {$this->user->id}: {$imported} new, {$updated} updated");
         } catch (\Exception $e) {
-            Log::error("Calendar sync failed for user {$this->user->id}: " . $e->getMessage());
+            Log::error("Calendar sync failed for user {$this->user->id}: ".$e->getMessage());
         }
     }
 
@@ -239,7 +242,7 @@ class SyncCalendarEvents implements ShouldQueue
     protected function generateTitle(?string $rawTitle, string $description, array $attendees, Carbon $date): string
     {
         // If we have a good summary that's not just a date, use it
-        if ($rawTitle && !preg_match('/^\d{1,2}\/\d{1,2}|^\w+day|^meeting$/i', $rawTitle)) {
+        if ($rawTitle && ! preg_match('/^\d{1,2}\/\d{1,2}|^\w+day|^meeting$/i', $rawTitle)) {
             return $rawTitle;
         }
 
@@ -261,17 +264,17 @@ class SyncCalendarEvents implements ShouldQueue
         }
 
         // Build title from attendee names
-        if (!empty($attendees)) {
+        if (! empty($attendees)) {
             $names = array_slice(array_column($attendees, 'name'), 0, 3);
             $nameList = implode(', ', $names);
             if (count($attendees) > 3) {
-                $nameList .= ' +' . (count($attendees) - 3);
+                $nameList .= ' +'.(count($attendees) - 3);
             }
+
             return "Meeting with {$nameList}";
         }
 
         // Fall back to date-based title
-        return "Meeting: " . $date->format('M j, Y');
+        return 'Meeting: '.$date->format('M j, Y');
     }
 }
-

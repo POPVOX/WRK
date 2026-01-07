@@ -38,11 +38,17 @@ class MeetingList extends Component
 
     // Bulk import state
     public bool $showBulkImportModal = false;
+
     public string $bulkImportText = '';
+
     public array $extractedMeetings = [];
+
     public bool $isExtracting = false;
+
     public bool $isImporting = false;
+
     public ?string $importError = null;
+
     public ?string $importSuccess = null;
 
     public function updatingSearch()
@@ -88,6 +94,7 @@ class MeetingList extends Component
     {
         if (empty(trim($this->bulkImportText))) {
             $this->importError = 'Please paste some text to extract meetings from.';
+
             return;
         }
 
@@ -102,11 +109,13 @@ class MeetingList extends Component
 
         if ($result['error']) {
             $this->importError = $result['error'];
+
             return;
         }
 
         if (empty($result['meetings'])) {
             $this->importError = 'No meetings could be extracted from the text. Please try with more structured information.';
+
             return;
         }
 
@@ -123,6 +132,7 @@ class MeetingList extends Component
     {
         if (empty($this->extractedMeetings)) {
             $this->importError = 'No meetings to import.';
+
             return;
         }
 
@@ -145,7 +155,7 @@ class MeetingList extends Component
             $this->dispatch('notify', type: 'success', message: "{$createdCount} meetings imported!");
         }
 
-        if (!empty($result['errors'])) {
+        if (! empty($result['errors'])) {
             $this->importError = implode("\n", $result['errors']);
         }
     }
@@ -154,8 +164,9 @@ class MeetingList extends Component
     {
         $meeting = Meeting::find($id);
 
-        if (!$meeting) {
+        if (! $meeting) {
             $this->dispatch('notify', type: 'error', message: 'Meeting not found.');
+
             return;
         }
 
@@ -194,9 +205,9 @@ class MeetingList extends Component
     {
         $query = Meeting::upcoming()
             ->with(['people', 'organizations', 'issues'])
-            ->when($this->search, fn($q) => $q->where('title', 'like', "%{$this->search}%"))
-            ->when($this->organization, fn($q) => $q->whereHas('organizations', fn($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn($q) => $q->whereHas('issues', fn($i) => $i->where('issues.id', $this->issue)));
+            ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
+            ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
+            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)));
 
         return $query->get();
     }
@@ -206,9 +217,9 @@ class MeetingList extends Component
     {
         $query = Meeting::needsNotes()
             ->with(['people', 'organizations'])
-            ->when($this->search, fn($q) => $q->where('title', 'like', "%{$this->search}%"))
-            ->when($this->organization, fn($q) => $q->whereHas('organizations', fn($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn($q) => $q->whereHas('issues', fn($i) => $i->where('issues.id', $this->issue)));
+            ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
+            ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
+            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)));
 
         return $query->limit(10)->get();
     }
@@ -218,15 +229,15 @@ class MeetingList extends Component
     {
         $query = Meeting::withNotes()
             ->with(['people', 'organizations', 'issues'])
-            ->when($this->search, fn($q) => $q->where('title', 'like', "%{$this->search}%"))
-            ->when($this->organization, fn($q) => $q->whereHas('organizations', fn($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn($q) => $q->whereHas('issues', fn($i) => $i->where('issues.id', $this->issue)));
+            ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
+            ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
+            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)));
 
         // Period filter
-        $query->when($this->completedPeriod === 'week', fn($q) => $q->where('meeting_date', '>=', now()->subWeek()))
-            ->when($this->completedPeriod === 'month', fn($q) => $q->where('meeting_date', '>=', now()->subMonth()))
-            ->when($this->completedPeriod === 'quarter', fn($q) => $q->where('meeting_date', '>=', now()->subQuarter()))
-            ->when($this->completedPeriod === 'year', fn($q) => $q->where('meeting_date', '>=', now()->subYear()));
+        $query->when($this->completedPeriod === 'week', fn ($q) => $q->where('meeting_date', '>=', now()->subWeek()))
+            ->when($this->completedPeriod === 'month', fn ($q) => $q->where('meeting_date', '>=', now()->subMonth()))
+            ->when($this->completedPeriod === 'quarter', fn ($q) => $q->where('meeting_date', '>=', now()->subQuarter()))
+            ->when($this->completedPeriod === 'year', fn ($q) => $q->where('meeting_date', '>=', now()->subYear()));
 
         return $query->paginate(15, pageName: 'completed');
     }
@@ -235,9 +246,9 @@ class MeetingList extends Component
     public function getAllMeetingsProperty()
     {
         $query = Meeting::with(['people', 'organizations', 'issues'])
-            ->when($this->search, fn($q) => $q->where('title', 'like', "%{$this->search}%"))
-            ->when($this->organization, fn($q) => $q->whereHas('organizations', fn($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn($q) => $q->whereHas('issues', fn($i) => $i->where('issues.id', $this->issue)));
+            ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
+            ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
+            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)));
 
         // Filter by view type
         if ($this->view === 'upcoming') {
@@ -259,13 +270,13 @@ class MeetingList extends Component
         $query = Meeting::with(['people', 'organizations', 'issues'])
             ->where('meeting_date', '>=', now()->startOfMonth())
             ->where('meeting_date', '<=', now()->addMonths(6)->endOfMonth())
-            ->when($this->search, fn($q) => $q->where('title', 'like', "%{$this->search}%"))
-            ->when($this->organization, fn($q) => $q->whereHas('organizations', fn($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn($q) => $q->whereHas('issues', fn($i) => $i->where('issues.id', $this->issue)))
+            ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
+            ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
+            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)))
             ->orderBy('meeting_date')
             ->get();
 
-        return $query->groupBy(fn($m) => $m->meeting_date->format('Y-m'));
+        return $query->groupBy(fn ($m) => $m->meeting_date->format('Y-m'));
     }
 
     public function render()
@@ -285,4 +296,3 @@ class MeetingList extends Component
         ]);
     }
 }
-

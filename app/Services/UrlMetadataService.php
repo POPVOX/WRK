@@ -31,8 +31,9 @@ class UrlMetadataService
                 ])
                 ->get($url);
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 Log::warning("Failed to fetch URL: {$url} - Status: {$response->status()}");
+
                 return $result;
             }
 
@@ -65,20 +66,22 @@ class UrlMetadataService
 
             // Clean up values
             $result = array_map(function ($value) {
-                if ($value === null)
+                if ($value === null) {
                     return null;
+                }
+
                 return trim(html_entity_decode(strip_tags($value)));
             }, $result);
 
             // Make image URL absolute if relative
-            if ($result['image'] && !str_starts_with($result['image'], 'http')) {
+            if ($result['image'] && ! str_starts_with($result['image'], 'http')) {
                 $parsedUrl = parse_url($url);
-                $baseUrl = $parsedUrl['scheme'] . '://' . $parsedUrl['host'];
-                $result['image'] = $baseUrl . '/' . ltrim($result['image'], '/');
+                $baseUrl = $parsedUrl['scheme'].'://'.$parsedUrl['host'];
+                $result['image'] = $baseUrl.'/'.ltrim($result['image'], '/');
             }
 
         } catch (\Exception $e) {
-            Log::error("Error extracting metadata from {$url}: " . $e->getMessage());
+            Log::error("Error extracting metadata from {$url}: ".$e->getMessage());
         }
 
         return $result;
@@ -90,22 +93,22 @@ class UrlMetadataService
     private function extractMetaContent(string $html, string $name): ?string
     {
         // Try property attribute first (Open Graph)
-        if (preg_match('/<meta[^>]+property=["\']' . preg_quote($name, '/') . '["\'][^>]+content=["\']([^"\']+)["\'][^>]*>/i', $html, $matches)) {
+        if (preg_match('/<meta[^>]+property=["\']'.preg_quote($name, '/').'["\'][^>]+content=["\']([^"\']+)["\'][^>]*>/i', $html, $matches)) {
             return $matches[1];
         }
 
         // Try with content before property
-        if (preg_match('/<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']' . preg_quote($name, '/') . '["\'][^>]*>/i', $html, $matches)) {
+        if (preg_match('/<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']'.preg_quote($name, '/').'["\'][^>]*>/i', $html, $matches)) {
             return $matches[1];
         }
 
         // Try name attribute
-        if (preg_match('/<meta[^>]+name=["\']' . preg_quote($name, '/') . '["\'][^>]+content=["\']([^"\']+)["\'][^>]*>/i', $html, $matches)) {
+        if (preg_match('/<meta[^>]+name=["\']'.preg_quote($name, '/').'["\'][^>]+content=["\']([^"\']+)["\'][^>]*>/i', $html, $matches)) {
             return $matches[1];
         }
 
         // Try with content before name
-        if (preg_match('/<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']' . preg_quote($name, '/') . '["\'][^>]*>/i', $html, $matches)) {
+        if (preg_match('/<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']'.preg_quote($name, '/').'["\'][^>]*>/i', $html, $matches)) {
             return $matches[1];
         }
 
@@ -120,6 +123,7 @@ class UrlMetadataService
         if (preg_match('/<title[^>]*>([^<]+)<\/title>/i', $html, $matches)) {
             return trim($matches[1]);
         }
+
         return null;
     }
 
@@ -150,6 +154,7 @@ class UrlMetadataService
                 }
             }
         }
+
         return null;
     }
 

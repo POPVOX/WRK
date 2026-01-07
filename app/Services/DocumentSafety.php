@@ -34,8 +34,8 @@ class DocumentSafety
         }
 
         // Append directory separator to avoid prefix tricks
-        $base = rtrim($base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
-        $real = rtrim($real, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        $base = rtrim($base, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
+        $real = rtrim($real, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
 
         return Str::startsWith($real, $base);
     }
@@ -68,9 +68,10 @@ class DocumentSafety
      */
     public static function hashFile(string $fullPath): ?string
     {
-        if (!is_file($fullPath) || !is_readable($fullPath)) {
+        if (! is_file($fullPath) || ! is_readable($fullPath)) {
             return null;
         }
+
         return hash_file('sha256', $fullPath) ?: null;
     }
 }

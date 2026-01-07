@@ -20,45 +20,68 @@ class GrantShow extends Component
     use WithFileUploads;
 
     public Grant $grant;
+
     public string $activeTab = 'overview';
 
     // Document upload
     public $uploadFile;
+
     public string $uploadTitle = '';
+
     public string $uploadType = 'other';
+
     public string $uploadMode = 'file'; // 'file' or 'paste'
+
     public string $pasteContent = '';
 
     // Requirements
     public bool $showAddRequirement = false;
+
     public string $reqName = '';
+
     public string $reqType = 'progress_report';
+
     public ?string $reqDueDate = null;
+
     public string $reqNotes = '';
 
     // Report generation
     public bool $isGenerating = false;
+
     public bool $isExtracting = false;
+
     public ?string $generatedReport = null;
+
     public string $reportType = 'progress';
 
     // Edit Grant Modal
     public bool $showEditModal = false;
+
     public string $editName = '';
+
     public string $editStatus = 'pending';
+
     public ?string $editAmount = '';
+
     public ?string $editStartDate = null;
+
     public ?string $editEndDate = null;
+
     public string $editDescription = '';
+
     public string $editDeliverables = '';
+
     public string $editVisibility = 'management';
+
     public string $editNotes = '';
+
     public string $editScope = 'all';
+
     public ?int $editPrimaryProjectId = null;
 
     public function mount(Grant $grant): void
     {
-        if (!Auth::user()?->isAdmin()) {
+        if (! Auth::user()?->isAdmin()) {
             abort(403, 'Access denied. Admin only.');
         }
 
@@ -140,8 +163,8 @@ class GrantShow extends Component
         ]);
 
         $ext = strtolower($this->uploadFile->getClientOriginalExtension());
-        $fileName = \Illuminate\Support\Str::slug($this->uploadTitle) . '-' . time() . '.' . $ext;
-        $path = $this->uploadFile->storeAs('grant_documents/' . $this->grant->id, $fileName, 'public');
+        $fileName = \Illuminate\Support\Str::slug($this->uploadTitle).'-'.time().'.'.$ext;
+        $path = $this->uploadFile->storeAs('grant_documents/'.$this->grant->id, $fileName, 'public');
 
         $fullPath = Storage::disk('public')->path($path);
 
@@ -172,8 +195,8 @@ class GrantShow extends Component
             'uploadType' => 'required|in:application,agreement,report,amendment,other',
         ]);
 
-        $fileName = \Illuminate\Support\Str::slug($this->uploadTitle) . '-' . time() . '.txt';
-        $path = 'grant_documents/' . $this->grant->id . '/' . $fileName;
+        $fileName = \Illuminate\Support\Str::slug($this->uploadTitle).'-'.time().'.txt';
+        $path = 'grant_documents/'.$this->grant->id.'/'.$fileName;
 
         Storage::disk('public')->put($path, $this->pasteContent);
         $fullPath = Storage::disk('public')->path($path);
@@ -201,13 +224,15 @@ class GrantShow extends Component
     {
         $document = GrantDocument::where('grant_id', $this->grant->id)->findOrFail($documentId);
 
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             session()->flash('error', 'AI features are disabled.');
+
             return;
         }
 
         if ($this->isExtracting) {
             session()->flash('message', 'Extraction already in progress...');
+
             return;
         }
 
@@ -222,13 +247,15 @@ class GrantShow extends Component
 
     public function extractAllRequirements(): void
     {
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             session()->flash('error', 'AI features are disabled.');
+
             return;
         }
 
         if ($this->isExtracting) {
             session()->flash('message', 'Extraction already in progress...');
+
             return;
         }
 
@@ -236,6 +263,7 @@ class GrantShow extends Component
 
         if ($unprocessedDocs->isEmpty()) {
             session()->flash('message', 'All documents have already been processed.');
+
             return;
         }
 
@@ -266,8 +294,8 @@ class GrantShow extends Component
     // === Requirements ===
     public function toggleAddRequirement(): void
     {
-        $this->showAddRequirement = !$this->showAddRequirement;
-        if (!$this->showAddRequirement) {
+        $this->showAddRequirement = ! $this->showAddRequirement;
+        if (! $this->showAddRequirement) {
             $this->resetRequirementForm();
         }
     }
@@ -315,8 +343,9 @@ class GrantShow extends Component
     // === Report Generation ===
     public function generateReport(): void
     {
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             session()->flash('error', 'AI features are disabled.');
+
             return;
         }
 
@@ -330,7 +359,7 @@ class GrantShow extends Component
         if (Storage::disk('local')->exists($cachePath)) {
             $this->generatedReport = Storage::disk('local')->get($cachePath);
         } else {
-            $this->generatedReport = "Report generation in progress...";
+            $this->generatedReport = 'Report generation in progress...';
         }
 
         $this->isGenerating = false;
@@ -375,7 +404,7 @@ class GrantShow extends Component
                 'impact_assessment' => 'Impact Assessment',
                 'other' => 'Other',
             ],
-        ])->title($this->grant->name . ' - Grant');
+        ])->title($this->grant->name.' - Grant');
     }
 
     protected function getConsolidatedInsights(): array
@@ -400,19 +429,19 @@ class GrantShow extends Component
             $data = $doc->ai_extracted_data ?? [];
 
             // Collect summaries
-            if (!empty($data['summary'])) {
+            if (! empty($data['summary'])) {
                 $summaries[] = $data['summary'];
             }
 
             // Funder priorities
-            if (!empty($data['funder_priorities'])) {
+            if (! empty($data['funder_priorities'])) {
                 foreach ($data['funder_priorities'] as $p) {
                     $priorities[] = is_array($p) ? ($p['priority'] ?? $p) : $p;
                 }
             }
 
             // Funder values
-            if (!empty($data['funder_values'])) {
+            if (! empty($data['funder_values'])) {
                 if (is_array($data['funder_values'])) {
                     $values = array_merge($values, $data['funder_values']);
                 } else {
@@ -421,33 +450,33 @@ class GrantShow extends Component
             }
 
             // Funder approach
-            if (!empty($data['funder_approach'])) {
+            if (! empty($data['funder_approach'])) {
                 $approaches[] = $data['funder_approach'];
             }
 
             // Goals
-            if (!empty($data['goals'])) {
+            if (! empty($data['goals'])) {
                 foreach ($data['goals'] as $g) {
                     $goals[] = is_array($g) ? ($g['goal'] ?? $g) : $g;
                 }
             }
 
             // Milestones
-            if (!empty($data['milestones'])) {
+            if (! empty($data['milestones'])) {
                 foreach ($data['milestones'] as $m) {
                     $milestones[] = $m;
                 }
             }
 
             // Key dates
-            if (!empty($data['key_dates'])) {
+            if (! empty($data['key_dates'])) {
                 foreach ($data['key_dates'] as $d) {
                     $keyDates[] = $d;
                 }
             }
 
             // Restrictions
-            if (!empty($data['restrictions'])) {
+            if (! empty($data['restrictions'])) {
                 if (is_array($data['restrictions'])) {
                     $restrictions = array_merge($restrictions, $data['restrictions']);
                 } else {
@@ -456,7 +485,7 @@ class GrantShow extends Component
             }
 
             // Compliance
-            if (!empty($data['compliance_notes'])) {
+            if (! empty($data['compliance_notes'])) {
                 if (is_array($data['compliance_notes'])) {
                     $compliance = array_merge($compliance, $data['compliance_notes']);
                 } else {

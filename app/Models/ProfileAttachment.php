@@ -44,7 +44,7 @@ class ProfileAttachment extends Model
      */
     public function getUrlAttribute(): string
     {
-        return asset('storage/' . $this->path);
+        return asset('storage/'.$this->path);
     }
 
     /**
@@ -54,10 +54,11 @@ class ProfileAttachment extends Model
     {
         $bytes = $this->size;
         if ($bytes >= 1048576) {
-            return number_format($bytes / 1048576, 1) . ' MB';
+            return number_format($bytes / 1048576, 1).' MB';
         } elseif ($bytes >= 1024) {
-            return number_format($bytes / 1024, 1) . ' KB';
+            return number_format($bytes / 1024, 1).' KB';
         }
-        return $bytes . ' bytes';
+
+        return $bytes.' bytes';
     }
 }

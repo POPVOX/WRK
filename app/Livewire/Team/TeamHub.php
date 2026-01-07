@@ -7,7 +7,6 @@ use App\Models\TeamResource;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -18,27 +17,43 @@ class TeamHub extends Component
     use WithPagination;
 
     public string $activeTab = 'team';
+
     public string $newMessage = '';
+
     public string $aiQuery = '';
+
     public string $aiResponse = '';
+
     public string $lastQuestion = '';
+
     public bool $isQuerying = false;
+
     public array $chatHistory = [];
 
     // Resource form
     public bool $showResourceForm = false;
+
     public ?int $editingResourceId = null;
+
     public string $resourceTitle = '';
+
     public string $resourceDescription = '';
+
     public string $resourceCategory = 'resource';
+
     public string $resourceUrl = '';
+
     public string $resourceIcon = '📄';
 
     // Add Team Member form
     public bool $showAddMemberForm = false;
+
     public string $memberName = '';
+
     public string $memberEmail = '';
+
     public string $memberTitle = '';
+
     public string $memberRole = 'staff';
 
     protected $queryString = ['activeTab'];
@@ -85,7 +100,7 @@ class TeamHub extends Component
     {
         $message = TeamMessage::find($messageId);
         if ($message) {
-            $message->update(['is_pinned' => !$message->is_pinned]);
+            $message->update(['is_pinned' => ! $message->is_pinned]);
         }
     }
 
@@ -106,6 +121,7 @@ class TeamHub extends Component
             if (empty($handbookContent)) {
                 $this->aiResponse = "I couldn't find the staff handbook. Please ensure it's been uploaded.";
                 $this->isQuerying = false;
+
                 return;
             }
 
@@ -120,13 +136,13 @@ class TeamHub extends Component
                 'anthropic-version' => '2023-06-01',
                 'Content-Type' => 'application/json',
             ])->timeout(60)->post('https://api.anthropic.com/v1/messages', [
-                        'model' => 'claude-sonnet-4-20250514',
-                        'max_tokens' => 2000,
-                        'system' => $this->getHandbookSystemPrompt($handbookContent),
-                        'messages' => [
-                            ['role' => 'user', 'content' => $this->aiQuery],
-                        ],
-                    ]);
+                'model' => 'claude-sonnet-4-20250514',
+                'max_tokens' => 2000,
+                'system' => $this->getHandbookSystemPrompt($handbookContent),
+                'messages' => [
+                    ['role' => 'user', 'content' => $this->aiQuery],
+                ],
+            ]);
 
             if ($response->successful()) {
                 $data = $response->json();
@@ -140,7 +156,7 @@ class TeamHub extends Component
                 $this->aiResponse = 'Error querying the handbook. Please try again.';
             }
         } catch (\Exception $e) {
-            $this->aiResponse = 'Error: ' . $e->getMessage();
+            $this->aiResponse = 'Error: '.$e->getMessage();
         }
 
         $this->lastQuestion = $this->aiQuery;
@@ -271,8 +287,9 @@ PROMPT;
     public function moveResourceUp(int $resourceId): void
     {
         $resource = TeamResource::find($resourceId);
-        if (!$resource)
+        if (! $resource) {
             return;
+        }
 
         // Find the resource above it in the same category
         $above = TeamResource::where('category', $resource->category)
@@ -293,8 +310,9 @@ PROMPT;
     public function moveResourceDown(int $resourceId): void
     {
         $resource = TeamResource::find($resourceId);
-        if (!$resource)
+        if (! $resource) {
             return;
+        }
 
         // Find the resource below it in the same category
         $below = TeamResource::where('category', $resource->category)
@@ -379,7 +397,7 @@ PROMPT;
             $coords = $cityCoordinates[$location] ?? null;
 
             // Try partial match if exact match not found
-            if (!$coords) {
+            if (! $coords) {
                 foreach ($cityCoordinates as $city => $coordinates) {
                     if (stripos($location, explode(',', $city)[0]) !== false) {
                         $coords = $coordinates;

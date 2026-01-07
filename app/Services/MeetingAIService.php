@@ -4,11 +4,11 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 class MeetingAIService
 {
     protected ?string $apiKey;
+
     protected string $baseUrl = 'https://api.anthropic.com/v1';
 
     public function __construct()
@@ -26,6 +26,7 @@ class MeetingAIService
         // Anthropic doesn't have audio transcription
         // Audio transcription is handled by browser's Web Speech API
         Log::info('Audio transcription requested - use browser Web Speech API');
+
         return null;
     }
 
@@ -36,6 +37,7 @@ class MeetingAIService
     {
         if (empty($this->apiKey)) {
             Log::error('Anthropic API key not configured');
+
             return $this->getEmptyExtraction();
         }
 
@@ -67,18 +69,19 @@ PROMPT;
                 'anthropic-version' => '2023-06-01',
                 'Content-Type' => 'application/json',
             ])->post("{$this->baseUrl}/messages", [
-                        'model' => 'claude-sonnet-4-20250514',
-                        'max_tokens' => 1024,
-                        'messages' => [
-                            [
-                                'role' => 'user',
-                                'content' => $prompt,
-                            ],
-                        ],
-                    ]);
+                'model' => 'claude-sonnet-4-20250514',
+                'max_tokens' => 1024,
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => $prompt,
+                    ],
+                ],
+            ]);
 
-            if (!$response->successful()) {
-                Log::error('Anthropic API error: ' . $response->body());
+            if (! $response->successful()) {
+                Log::error('Anthropic API error: '.$response->body());
+
                 return $this->getEmptyExtraction();
             }
 
@@ -96,7 +99,8 @@ PROMPT;
 
             return $data ?? $this->getEmptyExtraction();
         } catch (\Exception $e) {
-            Log::error('AI extraction error: ' . $e->getMessage());
+            Log::error('AI extraction error: '.$e->getMessage());
+
             return $this->getEmptyExtraction();
         }
     }

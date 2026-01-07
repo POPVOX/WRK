@@ -17,16 +17,18 @@ class PressClipSeeder extends Seeder
     {
         $csvPath = base_path('POPVOX Foundation Media Hits - 2025.csv');
 
-        if (!file_exists($csvPath)) {
+        if (! file_exists($csvPath)) {
             $this->command->error("CSV file not found: {$csvPath}");
+
             return;
         }
 
         // Read the CSV file
         $handle = fopen($csvPath, 'r');
 
-        if (!$handle) {
-            $this->command->error("Could not open CSV file");
+        if (! $handle) {
+            $this->command->error('Could not open CSV file');
+
             return;
         }
 
@@ -39,7 +41,7 @@ class PressClipSeeder extends Seeder
             return str_replace(["\r", "\n"], '', $h);
         }, $headers);
 
-        $this->command->info("Headers found: " . implode(', ', $headers));
+        $this->command->info('Headers found: '.implode(', ', $headers));
 
         $imported = 0;
         $skipped = 0;
@@ -67,7 +69,7 @@ class PressClipSeeder extends Seeder
             $publishedAt = null;
             $dateStr = trim($data['Date'] ?? '');
 
-            if (!empty($dateStr)) {
+            if (! empty($dateStr)) {
                 try {
                     // Fix typo like "1/6/0205" -> "1/6/2025"
                     $dateStr = preg_replace('/\/0(\d{3})$/', '/2$1', $dateStr);
@@ -88,6 +90,7 @@ class PressClipSeeder extends Seeder
             $url = trim($data['URL'] ?? '');
             if (empty($url)) {
                 $skipped++;
+
                 continue;
             }
 
@@ -95,6 +98,7 @@ class PressClipSeeder extends Seeder
             if (PressClip::where('url', $url)->exists()) {
                 $this->command->info("Skipping duplicate: {$url}");
                 $skipped++;
+
                 continue;
             }
 
@@ -126,14 +130,14 @@ class PressClipSeeder extends Seeder
             // Build notes from topic and pitched status
             $pitched = trim($data['Pitched?'] ?? '');
             $notes = '';
-            if (!empty($topic)) {
+            if (! empty($topic)) {
                 $notes .= "Topics: {$topic}";
             }
-            if (!empty($pitched)) {
-                $notes .= ($notes ? "\n" : '') . "Pitched: {$pitched}";
+            if (! empty($pitched)) {
+                $notes .= ($notes ? "\n" : '')."Pitched: {$pitched}";
             }
-            if (!empty($stafferMentioned)) {
-                $notes .= ($notes ? "\n" : '') . "Staff mentioned: {$stafferMentioned}";
+            if (! empty($stafferMentioned)) {
+                $notes .= ($notes ? "\n" : '')."Staff mentioned: {$stafferMentioned}";
             }
 
             // Create the press clip
@@ -155,10 +159,10 @@ class PressClipSeeder extends Seeder
                 ]);
 
                 $imported++;
-                $this->command->info("Imported: {$outletName} - " . ($publishedAt ? $publishedAt->format('Y-m-d') : 'no date'));
+                $this->command->info("Imported: {$outletName} - ".($publishedAt ? $publishedAt->format('Y-m-d') : 'no date'));
             } catch (\Exception $e) {
-                $this->command->error("Line {$lineNumber}: Error importing - " . $e->getMessage());
-                Log::error("PressClip import error", [
+                $this->command->error("Line {$lineNumber}: Error importing - ".$e->getMessage());
+                Log::error('PressClip import error', [
                     'line' => $lineNumber,
                     'data' => $data,
                     'error' => $e->getMessage(),
@@ -242,7 +246,7 @@ class PressClipSeeder extends Seeder
         }
 
         // Fallback: Generate title from outlet and author
-        if (!empty($journalist)) {
+        if (! empty($journalist)) {
             return "{$outlet} coverage by {$journalist}";
         }
 
@@ -287,7 +291,7 @@ class PressClipSeeder extends Seeder
         }
 
         // Filter to substantial quotes (longer than 50 chars)
-        $quotes = array_filter($matches[1], fn($q) => strlen($q) > 50);
+        $quotes = array_filter($matches[1], fn ($q) => strlen($q) > 50);
 
         if (empty($quotes)) {
             return null;

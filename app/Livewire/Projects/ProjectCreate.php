@@ -13,34 +13,48 @@ use Livewire\Component;
 class ProjectCreate extends Component
 {
     public string $name = '';
+
     public string $description = '';
+
     public string $goals = '';
+
     public ?string $start_date = null;
+
     public ?string $target_end_date = null;
+
     public string $status = 'active';
 
     // New fields
     public string $scope = '';
+
     public string $lead = '';
+
     public string $url = '';
+
     public string $tagsInput = ''; // Comma-separated tags
 
     // Hierarchy fields
     public ?int $parent_project_id = null;
+
     public string $project_type = 'initiative';
 
     // AI Extraction
     public bool $showAiExtract = false;
+
     public string $freeText = '';
+
     public bool $isExtracting = false;
+
     public bool $hasExtracted = false;
 
     // Lead options
     public array $leadOptions = ['Anne', 'Aubrey', 'Caitlin', 'Chloe', 'Danielle', 'Marci'];
+
     public array $scopeOptions = ['US', 'Global', 'Comms'];
 
     // Duplicate tracking
     public bool $isDuplicate = false;
+
     public string $sourceProjectName = '';
 
     public function mount(?Project $project = null): void
@@ -49,7 +63,7 @@ class ProjectCreate extends Component
             // Pre-fill form with data from source project
             $this->isDuplicate = true;
             $this->sourceProjectName = $project->name;
-            $this->name = $project->name . ' (Copy)';
+            $this->name = $project->name.' (Copy)';
             $this->description = $project->description ?? '';
             $this->goals = $project->goals ?? '';
             $this->status = 'planning'; // Start as planning
@@ -83,13 +97,14 @@ class ProjectCreate extends Component
 
     public function toggleAiExtract()
     {
-        $this->showAiExtract = !$this->showAiExtract;
+        $this->showAiExtract = ! $this->showAiExtract;
     }
 
     public function extractFromText()
     {
         if (empty(trim($this->freeText))) {
             $this->dispatch('notify', type: 'error', message: 'Please enter some text to extract from.');
+
             return;
         }
 
@@ -101,16 +116,16 @@ class ProjectCreate extends Component
                 'anthropic-version' => '2023-06-01',
                 'Content-Type' => 'application/json',
             ])->post('https://api.anthropic.com/v1/messages', [
-                        'model' => 'claude-sonnet-4-20250514',
-                        'max_tokens' => 1500,
-                        'system' => $this->getExtractionSystemPrompt(),
-                        'messages' => [
-                            [
-                                'role' => 'user',
-                                'content' => "Extract project details from this text:\n\n{$this->freeText}",
-                            ]
-                        ]
-                    ]);
+                'model' => 'claude-sonnet-4-20250514',
+                'max_tokens' => 1500,
+                'system' => $this->getExtractionSystemPrompt(),
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => "Extract project details from this text:\n\n{$this->freeText}",
+                    ],
+                ],
+            ]);
 
             $content = $response->json('content.0.text');
 
@@ -123,7 +138,7 @@ class ProjectCreate extends Component
                 $this->dispatch('notify', type: 'error', message: 'Could not extract project details. Please try again.');
             }
         } catch (\Exception $e) {
-            \Log::error('Project AI extraction error: ' . $e->getMessage());
+            \Log::error('Project AI extraction error: '.$e->getMessage());
             $this->dispatch('notify', type: 'error', message: 'Error during extraction. Please try again.');
         }
 
@@ -132,7 +147,7 @@ class ProjectCreate extends Component
 
     protected function getExtractionSystemPrompt(): string
     {
-        return <<<PROMPT
+        return <<<'PROMPT'
 You are an assistant that extracts structured project information from free-form text.
 
 Extract the following fields from the provided text:
@@ -192,43 +207,43 @@ PROMPT;
         try {
             $data = json_decode($jsonStr, true);
 
-            if (!$data) {
+            if (! $data) {
                 return;
             }
 
             // Populate form fields
-            if (!empty($data['title'])) {
+            if (! empty($data['title'])) {
                 $this->name = $data['title'];
             }
-            if (!empty($data['description'])) {
+            if (! empty($data['description'])) {
                 $this->description = $data['description'];
             }
-            if (!empty($data['goals'])) {
+            if (! empty($data['goals'])) {
                 $this->goals = $data['goals'];
             }
-            if (!empty($data['start_date']) && $data['start_date'] !== 'null') {
+            if (! empty($data['start_date']) && $data['start_date'] !== 'null') {
                 $this->start_date = $data['start_date'];
             }
-            if (!empty($data['end_date']) && $data['end_date'] !== 'null') {
+            if (! empty($data['end_date']) && $data['end_date'] !== 'null') {
                 $this->target_end_date = $data['end_date'];
             }
-            if (!empty($data['status'])) {
+            if (! empty($data['status'])) {
                 $this->status = $data['status'];
             }
-            if (!empty($data['scope'])) {
+            if (! empty($data['scope'])) {
                 $this->scope = $data['scope'];
             }
-            if (!empty($data['lead'])) {
+            if (! empty($data['lead'])) {
                 $this->lead = $data['lead'];
             }
-            if (!empty($data['url']) && $data['url'] !== 'null') {
+            if (! empty($data['url']) && $data['url'] !== 'null') {
                 $this->url = $data['url'];
             }
-            if (!empty($data['tags']) && is_array($data['tags'])) {
+            if (! empty($data['tags']) && is_array($data['tags'])) {
                 $this->tagsInput = implode(', ', $data['tags']);
             }
         } catch (\Exception $e) {
-            \Log::error('Error parsing extracted project data: ' . $e->getMessage());
+            \Log::error('Error parsing extracted project data: '.$e->getMessage());
         }
     }
 
@@ -238,7 +253,7 @@ PROMPT;
 
         // Parse tags from comma-separated string
         $tags = [];
-        if (!empty($this->tagsInput)) {
+        if (! empty($this->tagsInput)) {
             $tags = array_map('trim', explode(',', $this->tagsInput));
             $tags = array_filter($tags); // Remove empty values
         }
@@ -253,7 +268,7 @@ PROMPT;
             'scope' => $this->scope ?: null,
             'lead' => $this->lead ?: null,
             'url' => $this->url ?: null,
-            'tags' => !empty($tags) ? $tags : null,
+            'tags' => ! empty($tags) ? $tags : null,
             'created_by' => auth()->id(),
             'parent_project_id' => $this->parent_project_id,
             'project_type' => $this->project_type,

@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\Meeting;
-use Carbon\Carbon;
 use Illuminate\Console\Command;
 
 class RegenerateMeetingTitles extends Command
@@ -23,7 +22,7 @@ class RegenerateMeetingTitles extends Command
             $query->where('user_id', $userId);
         }
 
-        if (!$this->option('all')) {
+        if (! $this->option('all')) {
             // Only process meetings with empty/generic titles
             $query->where(function ($q) {
                 $q->whereNull('title')
@@ -46,6 +45,7 @@ class RegenerateMeetingTitles extends Command
 
             if ($oldTitle === $newTitle) {
                 $skipped++;
+
                 continue;
             }
 
@@ -74,7 +74,7 @@ class RegenerateMeetingTitles extends Command
         $date = $meeting->meeting_date;
 
         // If we have a good existing title that's not generic, keep it
-        if ($rawTitle && !preg_match('/^\d{1,2}\/\d{1,2}|^\w+day|^meeting:|^meeting$|^untitled/i', $rawTitle)) {
+        if ($rawTitle && ! preg_match('/^\d{1,2}\/\d{1,2}|^\w+day|^meeting:|^meeting$|^untitled/i', $rawTitle)) {
             return $rawTitle;
         }
 
@@ -93,7 +93,7 @@ class RegenerateMeetingTitles extends Command
             foreach ($lines as $line) {
                 $line = trim(strip_tags($line));
                 // Skip empty lines and markdown headers
-                if (strlen($line) > 5 && strlen($line) < 80 && !str_starts_with($line, '#')) {
+                if (strlen($line) > 5 && strlen($line) < 80 && ! str_starts_with($line, '#')) {
                     return $line;
                 }
             }
@@ -105,12 +105,13 @@ class RegenerateMeetingTitles extends Command
             $names = $attendees->take(3)->pluck('name')->toArray();
             $nameList = implode(', ', $names);
             if ($attendees->count() > 3) {
-                $nameList .= ' +' . ($attendees->count() - 3);
+                $nameList .= ' +'.($attendees->count() - 3);
             }
+
             return "Meeting with {$nameList}";
         }
 
         // Fall back to date-based title
-        return "Meeting: " . $date->format('M j, Y');
+        return 'Meeting: '.$date->format('M j, Y');
     }
 }

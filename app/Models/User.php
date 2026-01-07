@@ -101,12 +101,16 @@ class User extends Authenticatable
      */
     public function canView(string $visibility): bool
     {
-        if ($visibility === 'all')
+        if ($visibility === 'all') {
             return true;
-        if ($visibility === 'management' && $this->isManagement())
+        }
+        if ($visibility === 'management' && $this->isManagement()) {
             return true;
-        if ($visibility === 'admin' && $this->isAdmin())
+        }
+        if ($visibility === 'admin' && $this->isAdmin()) {
             return true;
+        }
+
         return false;
     }
 

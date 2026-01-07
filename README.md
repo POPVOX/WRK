@@ -266,6 +266,14 @@ php artisan queue:work
 - ✅ AI/cache resilience (cached chat/status answers on failure; health banners)
 - ✅ Safer link ingestion (domain allow/deny, private host blocking, size caps)
 
+### Beta Feedback System ✨ NEW
+- ✅ Floating feedback widget on every page (bottom-right)
+- ✅ Screenshot attachment support for visual feedback
+- ✅ Automatic metadata capture (URL, browser, user context)
+- ✅ Admin feedback management panel (Product Refinements)
+- ✅ AI-powered feedback analysis with actionable recommendations
+- ✅ Status tracking (New → Reviewed → Actionable → Resolved)
+
 ---
 
 ## 📋 Roadmap
@@ -279,6 +287,7 @@ php artisan queue:work
 - [ ] API for external integrations
 - [ ] Embedding-based search for higher-recall RAG
 - [ ] Alerting hooks (Slack/Email) on AI/queue/calendar faults
+- [ ] Feedback analytics dashboard with trends over time
 
 ---
 

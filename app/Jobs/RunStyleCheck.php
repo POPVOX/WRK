@@ -4,8 +4,8 @@ namespace App\Jobs;
 
 use App\Models\Project;
 use App\Models\ProjectDocument;
-use App\Support\AI\AnthropicClient;
 use App\Services\DocumentSafety;
+use App\Support\AI\AnthropicClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -19,9 +19,13 @@ class RunStyleCheck implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $projectId;
+
     public int $documentId;
+
     public string $filePath;
+
     public string $content;
+
     public string $contentHash;
 
     public $timeout = 120;
@@ -40,11 +44,12 @@ class RunStyleCheck implements ShouldQueue
         $project = Project::find($this->projectId);
         $document = ProjectDocument::find($this->documentId);
 
-        if (!$project || !$document || $document->project_id !== $project->id) {
+        if (! $project || ! $document || $document->project_id !== $project->id) {
             Log::warning('RunStyleCheck: Project/Document mismatch or missing', [
                 'project_id' => $this->projectId,
                 'document_id' => $this->documentId,
             ]);
+
             return;
         }
 
@@ -52,9 +57,9 @@ class RunStyleCheck implements ShouldQueue
         $styleGuide = is_file($styleGuidePath) ? (file_get_contents($styleGuidePath) ?: '') : '';
 
         $system = "You are a writing assistant that strictly returns JSON.\n"
-            . "You check content for compliance with the POPVOX Foundation Style Guide and suggest improvements.\n"
-            . "Return a JSON object with the shape: {\"suggestions\": [{\"original\": string, \"replacement\": string, \"rule\": string, \"importance\": \"high\"|\"medium\"|\"low\"}]}.\n"
-            . "Do not include any additional text.";
+            ."You check content for compliance with the POPVOX Foundation Style Guide and suggest improvements.\n"
+            ."Return a JSON object with the shape: {\"suggestions\": [{\"original\": string, \"replacement\": string, \"rule\": string, \"importance\": \"high\"|\"medium\"|\"low\"}]}.\n"
+            .'Do not include any additional text.';
 
         $user = <<<PROMPT
 STYLE_GUIDE:
@@ -73,7 +78,7 @@ PROMPT;
         ]);
 
         $suggestions = [];
-        if (!empty($response['content'][0]['text'])) {
+        if (! empty($response['content'][0]['text'])) {
             $json = trim($response['content'][0]['text']);
             $decoded = json_decode($json, true);
             if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
@@ -103,7 +108,7 @@ PROMPT;
         // Update document flags (cache key fields)
         $document->content_hash = $this->contentHash;
         $document->ai_indexed = true;
-        $document->ai_summary = count($suggestions) . ' suggestion(s) ready';
+        $document->ai_summary = count($suggestions).' suggestion(s) ready';
         $document->save();
 
         Log::info('RunStyleCheck complete', [

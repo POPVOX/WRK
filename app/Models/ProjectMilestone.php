@@ -68,7 +68,7 @@ class ProjectMilestone extends Model
     {
         return $this->due_date &&
             $this->due_date->isPast() &&
-            !in_array($this->status, ['completed', 'deferred']);
+            ! in_array($this->status, ['completed', 'deferred']);
     }
 
     // Keep backwards compatibility with existing code

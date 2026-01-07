@@ -3,7 +3,8 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         // Create FTS5 table for KB content (doc_id/project_id stored as UNINDEXED metadata)
@@ -20,6 +21,6 @@ return new class extends Migration {
 
     public function down(): void
     {
-        DB::statement("DROP TABLE IF EXISTS kb_index");
+        DB::statement('DROP TABLE IF EXISTS kb_index');
     }
 };

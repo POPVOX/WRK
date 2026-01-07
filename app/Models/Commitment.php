@@ -116,6 +116,7 @@ class Commitment extends Model
         if ($this->project) {
             return $this->project->name;
         }
+
         return 'Unknown';
     }
 }

@@ -18,7 +18,7 @@ class Permissions extends Component
     {
         $this->rows = User::orderBy('name')
             ->get(['id', 'name', 'email', 'access_level', 'is_admin'])
-            ->map(fn($u) => [
+            ->map(fn ($u) => [
                 'id' => $u->id,
                 'name' => $u->name,
                 'email' => $u->email,
@@ -53,4 +53,3 @@ class Permissions extends Component
         return view('livewire.admin.permissions');
     }
 }
-

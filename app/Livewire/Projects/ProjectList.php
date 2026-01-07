@@ -16,10 +16,15 @@ class ProjectList extends Component
     use WithPagination;
 
     public string $search = '';
+
     public string $filterStatus = '';
+
     public string $filterScope = '';
+
     public string $filterLead = '';
+
     public string $sortBy = 'date'; // 'date', 'alpha', 'lead', 'status'
+
     public string $viewMode = 'grid'; // 'grid', 'list', 'tree', 'timeline'
 
     // Hierarchy filter: 'roots' (parent projects only), 'all' (flat list)
@@ -83,8 +88,8 @@ class ProjectList extends Component
             ->withCount(['meetings', 'decisions', 'milestones', 'questions', 'children'])
             ->when($this->search, function ($q) {
                 $q->where(function ($q) {
-                    $q->where('name', 'like', '%' . $this->search . '%')
-                        ->orWhere('description', 'like', '%' . $this->search . '%');
+                    $q->where('name', 'like', '%'.$this->search.'%')
+                        ->orWhere('description', 'like', '%'.$this->search.'%');
                 });
             })
             ->when($this->filterStatus, function ($q) {
@@ -140,7 +145,7 @@ class ProjectList extends Component
                 $monthName = $monthDate->format('M Y');
 
                 $monthProjects = $allProjects->filter(function ($project) use ($monthDate) {
-                    if (!$project->start_date && !$project->target_end_date) {
+                    if (! $project->start_date && ! $project->target_end_date) {
                         return false;
                     }
 

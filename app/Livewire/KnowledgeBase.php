@@ -2,12 +2,11 @@
 
 namespace App\Livewire;
 
+use App\Models\KbCollection;
 use App\Models\Project;
 use App\Models\ProjectDocument;
-use App\Models\KbCollection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -15,17 +14,24 @@ use Livewire\Component;
 class KnowledgeBase extends Component
 {
     public string $q = '';
+
     public ?int $projectId = null;
+
     public ?string $type = null; // 'file' | 'link' | null
+
     public ?string $ext = null;  // md, txt, pdf, etc.
+
     public ?string $tag = null;  // tag filter substring
 
     public array $projects = [];
+
     public array $results = [];
+
     public bool $isSearching = false;
 
     // Saved searches (collections)
     public array $collections = [];
+
     public string $newCollectionName = '';
 
     public function mount(): void
@@ -70,7 +76,7 @@ class KnowledgeBase extends Component
     public function loadCollection(int $id): void
     {
         $c = KbCollection::where('user_id', Auth::id())->find($id);
-        if (!$c) {
+        if (! $c) {
             return;
         }
         $this->q = (string) ($c->query ?? '');
@@ -114,10 +120,11 @@ class KnowledgeBase extends Component
         ", [$match]);
 
         $ids = collect($ftsRows)->pluck('doc_id')->unique()->values();
-        $snippetMap = collect($ftsRows)->keyBy('doc_id')->map(fn($r) => $r->snip)->all();
+        $snippetMap = collect($ftsRows)->keyBy('doc_id')->map(fn ($r) => $r->snip)->all();
 
         if ($ids->isEmpty()) {
             $this->isSearching = false;
+
             return;
         }
 

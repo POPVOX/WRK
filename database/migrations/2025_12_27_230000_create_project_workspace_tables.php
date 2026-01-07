@@ -4,7 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         // Add initiative fields to projects
@@ -64,16 +65,16 @@ return new class extends Migration {
         // Add new fields to existing project_milestones table
         if (Schema::hasTable('project_milestones')) {
             Schema::table('project_milestones', function (Blueprint $table) {
-                if (!Schema::hasColumn('project_milestones', 'workstream_id')) {
+                if (! Schema::hasColumn('project_milestones', 'workstream_id')) {
                     $table->foreignId('workstream_id')->nullable()->after('project_id')->constrained('project_workstreams')->onDelete('set null');
                 }
-                if (!Schema::hasColumn('project_milestones', 'publication_id')) {
+                if (! Schema::hasColumn('project_milestones', 'publication_id')) {
                     $table->foreignId('publication_id')->nullable()->after('workstream_id')->constrained('project_publications')->onDelete('set null');
                 }
-                if (!Schema::hasColumn('project_milestones', 'event_id')) {
+                if (! Schema::hasColumn('project_milestones', 'event_id')) {
                     $table->foreignId('event_id')->nullable()->after('publication_id')->constrained('project_events')->onDelete('set null');
                 }
-                if (!Schema::hasColumn('project_milestones', 'due_date')) {
+                if (! Schema::hasColumn('project_milestones', 'due_date')) {
                     $table->date('due_date')->nullable()->after('description');
                 }
             });
@@ -82,16 +83,16 @@ return new class extends Migration {
         // Add new fields to existing project_documents table
         if (Schema::hasTable('project_documents')) {
             Schema::table('project_documents', function (Blueprint $table) {
-                if (!Schema::hasColumn('project_documents', 'workstream_id')) {
+                if (! Schema::hasColumn('project_documents', 'workstream_id')) {
                     $table->foreignId('workstream_id')->nullable()->after('project_id')->constrained('project_workstreams')->onDelete('set null');
                 }
-                if (!Schema::hasColumn('project_documents', 'ai_indexed')) {
+                if (! Schema::hasColumn('project_documents', 'ai_indexed')) {
                     $table->boolean('ai_indexed')->default(false)->after('file_size');
                 }
-                if (!Schema::hasColumn('project_documents', 'ai_summary')) {
+                if (! Schema::hasColumn('project_documents', 'ai_summary')) {
                     $table->text('ai_summary')->nullable()->after('ai_indexed');
                 }
-                if (!Schema::hasColumn('project_documents', 'file_type')) {
+                if (! Schema::hasColumn('project_documents', 'file_type')) {
                     $table->string('file_type', 20)->nullable()->after('file_path');
                 }
             });

@@ -27,12 +27,12 @@ class SuggestDocumentTags implements ShouldQueue
 
     public function handle(): void
     {
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             return;
         }
 
         $doc = ProjectDocument::find($this->documentId);
-        if (!$doc) {
+        if (! $doc) {
             return;
         }
 
@@ -49,8 +49,8 @@ class SuggestDocumentTags implements ShouldQueue
             return;
         }
 
-        $system = "You are a helpful assistant that extracts concise tags from content. Return ONLY a JSON array of 3-7 short tags (strings), no extra text.";
-        $user = "Content:\n" . mb_substr($content, 0, 12000);
+        $system = 'You are a helpful assistant that extracts concise tags from content. Return ONLY a JSON array of 3-7 short tags (strings), no extra text.';
+        $user = "Content:\n".mb_substr($content, 0, 12000);
 
         $res = AnthropicClient::send([
             'system' => $system,
@@ -61,17 +61,17 @@ class SuggestDocumentTags implements ShouldQueue
         ]);
 
         $tags = [];
-        if (!empty($res['content'][0]['text'])) {
+        if (! empty($res['content'][0]['text'])) {
             $json = trim($res['content'][0]['text']);
             $decoded = json_decode($json, true);
             if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                 $tags = array_values(array_unique(array_filter(array_map(function ($t) {
-                    return trim((string)$t);
+                    return trim((string) $t);
                 }, $decoded))));
             }
         }
 
-        if (!empty($tags)) {
+        if (! empty($tags)) {
             $doc->suggested_tags = $tags;
             $doc->save();
             Log::info('SuggestDocumentTags: tags generated', ['doc_id' => $doc->id, 'count' => count($tags)]);

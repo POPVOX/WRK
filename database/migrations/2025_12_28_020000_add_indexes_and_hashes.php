@@ -4,16 +4,17 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         // project_documents: add hash + last_seen_at + indexes
         if (Schema::hasTable('project_documents')) {
             Schema::table('project_documents', function (Blueprint $table) {
-                if (!Schema::hasColumn('project_documents', 'content_hash')) {
+                if (! Schema::hasColumn('project_documents', 'content_hash')) {
                     $table->string('content_hash')->nullable()->after('file_size');
                 }
-                if (!Schema::hasColumn('project_documents', 'last_seen_at')) {
+                if (! Schema::hasColumn('project_documents', 'last_seen_at')) {
                     $table->timestamp('last_seen_at')->nullable()->after('content_hash');
                 }
 

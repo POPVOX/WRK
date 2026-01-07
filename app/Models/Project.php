@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Project extends Model
 {
     use HasFactory;
+
     protected $fillable = [
         'name',
         'scope',
@@ -184,12 +185,14 @@ class Project extends Model
             array_unshift($ancestors, $project);
             $project = $project->parent;
         }
+
         return $ancestors;
     }
 
     public function rootAncestor(): ?Project
     {
         $ancestors = $this->ancestors();
+
         return $ancestors[0] ?? null;
     }
 
@@ -214,6 +217,7 @@ class Project extends Model
     {
         $path = $this->ancestors();
         $path[] = $this;
+
         return $path;
     }
 
@@ -265,7 +269,7 @@ class Project extends Model
     public function needsStatusRefresh(): bool
     {
         // Refresh if: never generated
-        if (!$this->ai_status_generated_at) {
+        if (! $this->ai_status_generated_at) {
             return true;
         }
 
@@ -308,4 +312,3 @@ class Project extends Model
         return $this->milestones()->where('status', 'completed')->count();
     }
 }
-
