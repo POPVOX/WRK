@@ -180,3 +180,4 @@ class FeedbackWidget extends Component
         return view('livewire.feedback-widget');
     }
 }
+

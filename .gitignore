@@ -22,3 +22,7 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Private data seeders (not to be committed)
+/database/seeders/PrivateDataSeeder.php
+/database/seeders/private/
