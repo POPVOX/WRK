@@ -18,26 +18,27 @@ class ExtractGrantRequirements implements ShouldQueue
 
     public function __construct(
         public int $documentId
-    ) {
-    }
+    ) {}
 
     public function handle(): void
     {
         $document = GrantDocument::with('grant')->find($this->documentId);
-        if (!$document || !$document->grant) {
+        if (! $document || ! $document->grant) {
             return;
         }
 
         // Read the file content
-        $fullPath = storage_path('app/public/' . $document->file_path);
-        if (!file_exists($fullPath)) {
+        $fullPath = storage_path('app/public/'.$document->file_path);
+        if (! file_exists($fullPath)) {
             Log::warning("ExtractGrantRequirements: File not found at {$fullPath}");
+
             return;
         }
 
         $content = $this->extractTextFromFile($fullPath, $document->file_type);
         if (empty($content)) {
             Log::warning("ExtractGrantRequirements: Could not extract text from {$document->title}");
+
             return;
         }
 
@@ -45,6 +46,7 @@ class ExtractGrantRequirements implements ShouldQueue
         $apiKey = config('services.anthropic.api_key');
         if (empty($apiKey)) {
             Log::warning('ExtractGrantRequirements: No Anthropic API key configured. Set ANTHROPIC_API_KEY in .env');
+
             return;
         }
 
@@ -56,12 +58,12 @@ class ExtractGrantRequirements implements ShouldQueue
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->timeout(120)->post('https://api.anthropic.com/v1/messages', [
-                        'model' => config('ai.model', 'claude-sonnet-4-20250514'),
-                        'max_tokens' => 4000,
-                        'messages' => [
-                            ['role' => 'user', 'content' => $prompt],
-                        ],
-                    ]);
+                'model' => config('ai.model', 'claude-sonnet-4-20250514'),
+                'max_tokens' => 4000,
+                'messages' => [
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+            ]);
 
             if ($response->successful()) {
                 $result = $response->json('content.0.text', '');
@@ -79,10 +81,10 @@ class ExtractGrantRequirements implements ShouldQueue
 
                 Log::info("ExtractGrantRequirements: Successfully processed document {$document->id}");
             } else {
-                Log::error('ExtractGrantRequirements: API error - ' . $response->body());
+                Log::error('ExtractGrantRequirements: API error - '.$response->body());
             }
         } catch (\Exception $e) {
-            Log::error('ExtractGrantRequirements: ' . $e->getMessage());
+            Log::error('ExtractGrantRequirements: '.$e->getMessage());
         }
     }
 
@@ -94,26 +96,29 @@ class ExtractGrantRequirements implements ShouldQueue
             // Handle text-based files directly
             if (in_array($ext, ['txt', 'md'])) {
                 $content = file_get_contents($path) ?: '';
+
                 return $this->cleanUtf8($content);
             }
 
             // Handle PDF files with PdfParser
             if ($ext === 'pdf') {
-                $parser = new \Smalot\PdfParser\Parser();
+                $parser = new \Smalot\PdfParser\Parser;
                 $pdf = $parser->parseFile($path);
                 $text = $pdf->getText();
+
                 return $this->cleanUtf8($text);
             }
 
             // Handle DOCX files (basic extraction via ZipArchive)
             if ($ext === 'docx') {
-                $zip = new \ZipArchive();
+                $zip = new \ZipArchive;
                 if ($zip->open($path) === true) {
                     $content = $zip->getFromName('word/document.xml');
                     $zip->close();
                     if ($content) {
                         // Strip XML tags to get plain text
                         $text = strip_tags($content);
+
                         return $this->cleanUtf8($text);
                     }
                 }
@@ -124,11 +129,13 @@ class ExtractGrantRequirements implements ShouldQueue
                 $content = file_get_contents($path) ?: '';
                 // Extract ASCII text from DOC binary
                 $text = preg_replace('/[^\x20-\x7E\n\r\t]/', ' ', $content);
+
                 return $this->cleanUtf8($text);
             }
 
         } catch (\Exception $e) {
-            Log::warning("ExtractGrantRequirements: Error extracting text from file: " . $e->getMessage());
+            Log::warning('ExtractGrantRequirements: Error extracting text from file: '.$e->getMessage());
+
             return '';
         }
 
@@ -148,7 +155,7 @@ class ExtractGrantRequirements implements ShouldQueue
 
         // Limit content length for API (avoid token limits)
         if (strlen($text) > 50000) {
-            $text = substr($text, 0, 50000) . "\n\n[Content truncated for processing...]";
+            $text = substr($text, 0, 50000)."\n\n[Content truncated for processing...]";
         }
 
         return trim($text);
@@ -241,10 +248,10 @@ PROMPT;
                 ->where('name', $req['name'])
                 ->exists();
 
-            if (!$exists) {
+            if (! $exists) {
                 // Parse due date from description if possible, otherwise default to 3 months
                 $dueDate = now()->addMonths(3);
-                if (!empty($req['due_description'])) {
+                if (! empty($req['due_description'])) {
                     try {
                         $parsed = \Carbon\Carbon::parse($req['due_description']);
                         if ($parsed->isFuture()) {

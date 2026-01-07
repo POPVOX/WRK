@@ -42,8 +42,11 @@ class Meeting extends Model
      * Meeting status constants.
      */
     public const STATUS_NEW = 'new';
+
     public const STATUS_ACTION_NEEDED = 'action_needed';
+
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_COMPLETE = 'complete';
 
     public const STATUSES = [
@@ -196,7 +199,7 @@ class Meeting extends Model
      */
     public function hasNotes(): bool
     {
-        return !empty($this->raw_notes);
+        return ! empty($this->raw_notes);
     }
 
     /**
@@ -220,9 +223,10 @@ class Meeting extends Model
      */
     public function getNotesPreviewAttribute(): ?string
     {
-        if (!$this->raw_notes)
+        if (! $this->raw_notes) {
             return null;
+        }
+
         return \Illuminate\Support\Str::limit(strip_tags($this->raw_notes), 120);
     }
 }
-

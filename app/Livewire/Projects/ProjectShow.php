@@ -2,31 +2,28 @@
 
 namespace App\Livewire\Projects;
 
-use App\Models\Project;
-use App\Models\ProjectDecision;
-use App\Models\ProjectMilestone;
-use App\Models\ProjectQuestion;
-use App\Models\ProjectDocument;
-use App\Models\ProjectNote;
-use App\Models\ProjectChatMessage;
-use App\Models\ProjectEvent;
-use App\Models\ProjectPublication;
+use App\Jobs\FetchLinkContent;
+use App\Jobs\IndexDocumentContent;
+use App\Jobs\RunStyleCheck;
+use App\Jobs\SendChatMessage;
+use App\Jobs\SuggestDocumentTags;
+use App\Models\Issue;
 use App\Models\Meeting;
 use App\Models\Organization;
 use App\Models\Person;
-use App\Models\Issue;
+use App\Models\Project;
+use App\Models\ProjectChatMessage;
+use App\Models\ProjectDecision;
+use App\Models\ProjectDocument;
+use App\Models\ProjectMilestone;
+use App\Models\ProjectNote;
+use App\Models\ProjectQuestion;
 use App\Models\User;
 use App\Services\ChatService;
 use App\Services\DocumentSafety;
-use App\Jobs\SendChatMessage;
-use App\Jobs\RunStyleCheck;
-use App\Jobs\IndexDocumentContent;
-use App\Jobs\FetchLinkContent;
-use App\Jobs\SuggestDocumentTags;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -37,93 +34,136 @@ class ProjectShow extends Component
     use WithFileUploads;
 
     public Project $project;
+
     public string $activeTab = 'overview';
 
     // Editing
     public bool $editing = false;
+
     public string $name = '';
+
     public string $description = '';
+
     public string $goals = '';
+
     public ?string $start_date = null;
+
     public ?string $target_end_date = null;
+
     public string $status = 'active';
 
     // Decision form
     public bool $showDecisionForm = false;
+
     public string $decisionTitle = '';
+
     public string $decisionDescription = '';
+
     public string $decisionRationale = '';
+
     public string $decisionContext = '';
+
     public ?string $decisionDate = null;
+
     public string $decisionDecidedBy = '';
 
     // Milestone form
     public bool $showMilestoneForm = false;
+
     public string $milestoneTitle = '';
+
     public string $milestoneDescription = '';
+
     public ?string $milestoneTargetDate = null;
 
     // Question form
     public bool $showQuestionForm = false;
+
     public string $questionText = '';
+
     public string $questionContext = '';
 
     // Answer form
     public ?int $answeringQuestionId = null;
+
     public string $answerText = '';
 
     // Staff management
     public bool $showAddStaffModal = false;
+
     public string $staffSearch = '';
+
     public ?int $selectedStaffId = null;
+
     public string $staffRole = 'contributor';
 
     // Documents
     public bool $showDocumentForm = false;
+
     public string $documentType = 'link';
+
     public string $documentTitle = '';
+
     public string $documentDescription = '';
+
     public string $documentUrl = '';
+
     public $documentFile = null;
 
     // Notes
     public bool $showNoteForm = false;
+
     public string $noteContent = '';
+
     public string $noteType = 'general';
 
     // Project Chat (enhanced from workspace)
     public string $projectChatQuery = '';
+
     public array $projectChatHistory = [];
+
     public bool $isChatProcessing = false;
 
     // Document Viewer (from workspace)
     public bool $showDocumentViewer = false;
+
     public ?int $viewingDocumentId = null;
+
     public string $documentContent = '';
+
     public string $viewingDocumentTitle = '';
 
     // Style Check (from workspace)
     public bool $isStyleChecking = false;
+
     public array $styleCheckSuggestions = [];
+
     public bool $styleCheckComplete = false;
 
     // Upload / Link (from workspace)
     public $uploadFile = null;
+
     public string $uploadTitle = '';
+
     public string $linkTitle = '';
+
     public string $linkUrl = '';
 
     // Sync Preview (from workspace)
     public bool $showSyncPreviewModal = false;
+
     public array $syncPreview = ['add' => [], 'update' => [], 'missing' => []];
 
     // Tags editing (from workspace)
     public array $tagsEdit = [];
+
     public array $commonTags = [];
 
     // AI flags
     public bool $aiEnabled = true;
+
     public ?string $aiNotice = null;
+
     public ?string $styleNotice = null;
 
     protected $queryString = ['activeTab'];
@@ -216,7 +256,7 @@ class ProjectShow extends Component
     // --- Decisions ---
     public function toggleDecisionForm()
     {
-        $this->showDecisionForm = !$this->showDecisionForm;
+        $this->showDecisionForm = ! $this->showDecisionForm;
         $this->resetDecisionForm();
     }
 
@@ -263,7 +303,7 @@ class ProjectShow extends Component
     // --- Milestones ---
     public function toggleMilestoneForm()
     {
-        $this->showMilestoneForm = !$this->showMilestoneForm;
+        $this->showMilestoneForm = ! $this->showMilestoneForm;
         $this->resetMilestoneForm();
     }
 
@@ -314,7 +354,7 @@ class ProjectShow extends Component
     // --- Questions ---
     public function toggleQuestionForm()
     {
-        $this->showQuestionForm = !$this->showQuestionForm;
+        $this->showQuestionForm = ! $this->showQuestionForm;
         $this->resetQuestionForm();
     }
 
@@ -384,14 +424,18 @@ class ProjectShow extends Component
 
     // --- Organization Linking ---
     public bool $showAddOrgModal = false;
+
     public string $orgSearch = '';
+
     public ?int $selectedOrgId = null;
+
     public string $orgRole = '';
+
     public string $orgNotes = '';
 
     public function toggleAddOrgModal()
     {
-        $this->showAddOrgModal = !$this->showAddOrgModal;
+        $this->showAddOrgModal = ! $this->showAddOrgModal;
         $this->resetOrgForm();
     }
 
@@ -412,13 +456,14 @@ class ProjectShow extends Component
 
     public function linkOrganization()
     {
-        if (!$this->selectedOrgId) {
+        if (! $this->selectedOrgId) {
             return;
         }
 
         // Check if already linked
         if ($this->project->organizations()->where('organization_id', $this->selectedOrgId)->exists()) {
             $this->dispatch('notify', type: 'error', message: 'Organization already linked.');
+
             return;
         }
 
@@ -442,14 +487,18 @@ class ProjectShow extends Component
 
     // --- Person Linking ---
     public bool $showAddPersonModal = false;
+
     public string $personSearch = '';
+
     public ?int $selectedPersonId = null;
+
     public string $personRole = '';
+
     public string $personNotes = '';
 
     public function toggleAddPersonModal()
     {
-        $this->showAddPersonModal = !$this->showAddPersonModal;
+        $this->showAddPersonModal = ! $this->showAddPersonModal;
         $this->resetPersonForm();
     }
 
@@ -470,12 +519,13 @@ class ProjectShow extends Component
 
     public function linkPerson()
     {
-        if (!$this->selectedPersonId) {
+        if (! $this->selectedPersonId) {
             return;
         }
 
         if ($this->project->people()->where('person_id', $this->selectedPersonId)->exists()) {
             $this->dispatch('notify', type: 'error', message: 'Person already linked.');
+
             return;
         }
 
@@ -499,12 +549,14 @@ class ProjectShow extends Component
 
     // --- Issue Linking ---
     public bool $showAddIssueModal = false;
+
     public string $issueSearch = '';
+
     public ?int $selectedIssueId = null;
 
     public function toggleAddIssueModal()
     {
-        $this->showAddIssueModal = !$this->showAddIssueModal;
+        $this->showAddIssueModal = ! $this->showAddIssueModal;
         $this->issueSearch = '';
         $this->selectedIssueId = null;
     }
@@ -518,12 +570,13 @@ class ProjectShow extends Component
 
     public function linkIssue()
     {
-        if (!$this->selectedIssueId) {
+        if (! $this->selectedIssueId) {
             return;
         }
 
         if ($this->project->issues()->where('issue_id', $this->selectedIssueId)->exists()) {
             $this->dispatch('notify', type: 'error', message: 'Issue already linked.');
+
             return;
         }
 
@@ -543,13 +596,16 @@ class ProjectShow extends Component
 
     // --- Meeting Linking ---
     public bool $showAddMeetingModal = false;
+
     public string $meetingSearch = '';
+
     public ?int $selectedMeetingId = null;
+
     public string $meetingRelevance = '';
 
     public function toggleAddMeetingModal()
     {
-        $this->showAddMeetingModal = !$this->showAddMeetingModal;
+        $this->showAddMeetingModal = ! $this->showAddMeetingModal;
         $this->meetingSearch = '';
         $this->selectedMeetingId = null;
         $this->meetingRelevance = '';
@@ -564,12 +620,13 @@ class ProjectShow extends Component
 
     public function linkMeeting()
     {
-        if (!$this->selectedMeetingId) {
+        if (! $this->selectedMeetingId) {
             return;
         }
 
         if ($this->project->meetings()->where('meeting_id', $this->selectedMeetingId)->exists()) {
             $this->dispatch('notify', type: 'error', message: 'Meeting already linked.');
+
             return;
         }
 
@@ -592,7 +649,7 @@ class ProjectShow extends Component
     // --- Staff Management ---
     public function toggleAddStaffModal()
     {
-        $this->showAddStaffModal = !$this->showAddStaffModal;
+        $this->showAddStaffModal = ! $this->showAddStaffModal;
         $this->staffSearch = '';
         $this->selectedStaffId = null;
         $this->staffRole = 'contributor';
@@ -607,11 +664,13 @@ class ProjectShow extends Component
 
     public function addStaff()
     {
-        if (!$this->selectedStaffId)
+        if (! $this->selectedStaffId) {
             return;
+        }
 
         if ($this->project->staff()->where('user_id', $this->selectedStaffId)->exists()) {
             $this->dispatch('notify', type: 'error', message: 'This person is already on the team.');
+
             return;
         }
 
@@ -642,7 +701,7 @@ class ProjectShow extends Component
     // --- Documents ---
     public function toggleDocumentForm()
     {
-        $this->showDocumentForm = !$this->showDocumentForm;
+        $this->showDocumentForm = ! $this->showDocumentForm;
         $this->resetDocumentForm();
     }
 
@@ -711,7 +770,7 @@ class ProjectShow extends Component
     // --- Notes ---
     public function toggleNoteForm()
     {
-        $this->showNoteForm = !$this->showNoteForm;
+        $this->showNoteForm = ! $this->showNoteForm;
         $this->noteContent = '';
         $this->noteType = 'general';
     }
@@ -738,7 +797,7 @@ class ProjectShow extends Component
     public function togglePinNote(int $noteId)
     {
         $note = ProjectNote::findOrFail($noteId);
-        $note->update(['is_pinned' => !$note->is_pinned]);
+        $note->update(['is_pinned' => ! $note->is_pinned]);
         $this->project->refresh();
     }
 
@@ -756,23 +815,25 @@ class ProjectShow extends Component
             return;
         }
 
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             $this->projectChatHistory[] = [
                 'role' => 'assistant',
                 'content' => 'AI features are disabled by the administrator.',
                 'timestamp' => now()->format('g:i A'),
             ];
+
             return;
         }
 
         $chatLimit = config('ai.limits.chat', ['max' => 30, 'decay_seconds' => 60]);
-        $chatKey = 'ai-project-chat:' . Auth::id() . ':' . $this->project->id;
+        $chatKey = 'ai-project-chat:'.Auth::id().':'.$this->project->id;
         if (RateLimiter::tooManyAttempts($chatKey, $chatLimit['max'])) {
             $this->projectChatHistory[] = [
                 'role' => 'assistant',
                 'content' => 'You are sending messages too quickly. Please wait a moment.',
                 'timestamp' => now()->format('g:i A'),
             ];
+
             return;
         }
         RateLimiter::hit($chatKey, $chatLimit['decay_seconds']);
@@ -827,7 +888,7 @@ class ProjectShow extends Component
             ->orderBy('created_at')
             ->get();
 
-        $this->projectChatHistory = $messages->map(fn($m) => [
+        $this->projectChatHistory = $messages->map(fn ($m) => [
             'role' => $m->role,
             'content' => $m->content,
             'timestamp' => $m->created_at->format('g:i A'),
@@ -840,15 +901,17 @@ class ProjectShow extends Component
             return;
         }
 
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             $this->aiNotice = 'AI features are disabled by the administrator.';
+
             return;
         }
 
         $chatLimit = config('ai.limits.chat', ['max' => 30, 'decay_seconds' => 60]);
-        $chatKey = 'ai-chat:' . Auth::id() . ':' . $this->project->id;
+        $chatKey = 'ai-chat:'.Auth::id().':'.$this->project->id;
         if (RateLimiter::tooManyAttempts($chatKey, $chatLimit['max'])) {
             $this->aiNotice = 'You are sending messages too quickly. Please wait a moment.';
+
             return;
         }
         RateLimiter::hit($chatKey, $chatLimit['decay_seconds']);
@@ -880,6 +943,7 @@ class ProjectShow extends Component
     protected function getChatSystemPrompt(): string
     {
         $context = $this->buildChatContext();
+
         return <<<PROMPT
 You are an AI collaborator helping with the project "{$this->project->name}".
 
@@ -901,14 +965,14 @@ PROMPT;
     {
         $context = [];
         $context[] = "**Project Name:** {$this->project->name}";
-        $context[] = "**Description:** " . ($this->project->description ?? 'No description');
+        $context[] = '**Description:** '.($this->project->description ?? 'No description');
         $context[] = "**Status:** {$this->project->status}";
 
         if ($this->project->project_path) {
             $projectDir = base_path($this->project->project_path);
-            $readmePath = $projectDir . '/README.md';
+            $readmePath = $projectDir.'/README.md';
             if (file_exists($readmePath)) {
-                $context[] = "\n## Project README\n" . file_get_contents($readmePath);
+                $context[] = "\n## Project README\n".file_get_contents($readmePath);
             }
         }
 
@@ -925,12 +989,12 @@ PROMPT;
     public function viewDocument(int $documentId): void
     {
         $document = ProjectDocument::find($documentId);
-        if (!$document || $document->project_id !== $this->project->id) {
+        if (! $document || $document->project_id !== $this->project->id) {
             return;
         }
 
         $fullPath = base_path($document->file_path);
-        if (!file_exists($fullPath)) {
+        if (! file_exists($fullPath)) {
             return;
         }
 
@@ -955,35 +1019,37 @@ PROMPT;
     // --- Style Check Methods ---
     public function runStyleCheckQueued(): void
     {
-        if (!$this->viewingDocumentId) {
+        if (! $this->viewingDocumentId) {
             return;
         }
 
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             $this->styleNotice = 'AI features are disabled.';
+
             return;
         }
 
         $limit = config('ai.limits.style_check', ['max' => 10, 'decay_seconds' => 300]);
-        $key = 'ai-style:' . Auth::id() . ':' . $this->project->id;
+        $key = 'ai-style:'.Auth::id().':'.$this->project->id;
         if (RateLimiter::tooManyAttempts($key, $limit['max'])) {
             $this->styleNotice = 'Too many style checks. Please try again in a few minutes.';
+
             return;
         }
         RateLimiter::hit($key, $limit['decay_seconds']);
 
         $document = ProjectDocument::find($this->viewingDocumentId);
-        if (!$document || $document->project_id !== $this->project->id) {
+        if (! $document || $document->project_id !== $this->project->id) {
             return;
         }
 
         $fullPath = base_path($document->file_path);
-        if (!file_exists($fullPath) || !DocumentSafety::withinBase(base_path(), $fullPath)) {
+        if (! file_exists($fullPath) || ! DocumentSafety::withinBase(base_path(), $fullPath)) {
             return;
         }
 
         $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
-        if (!in_array($ext, ['md', 'markdown', 'txt'], true)) {
+        if (! in_array($ext, ['md', 'markdown', 'txt'], true)) {
             return;
         }
 
@@ -998,6 +1064,7 @@ PROMPT;
             $payload = json_decode(Storage::disk('local')->get($cachePath), true) ?: [];
             $this->styleCheckSuggestions = array_map(function ($s) {
                 $s['status'] = $s['status'] ?? 'pending';
+
                 return $s;
             }, $payload['suggestions'] ?? []);
             $this->styleCheckComplete = true;
@@ -1013,11 +1080,11 @@ PROMPT;
 
     public function checkStyleCheckStatus(): void
     {
-        if (!$this->viewingDocumentId || empty($this->documentContent)) {
+        if (! $this->viewingDocumentId || empty($this->documentContent)) {
             return;
         }
         $document = ProjectDocument::find($this->viewingDocumentId);
-        if (!$document || $document->project_id !== $this->project->id) {
+        if (! $document || $document->project_id !== $this->project->id) {
             return;
         }
 
@@ -1028,6 +1095,7 @@ PROMPT;
             $payload = json_decode(Storage::disk('local')->get($cachePath), true) ?: [];
             $this->styleCheckSuggestions = array_map(function ($s) {
                 $s['status'] = $s['status'] ?? 'pending';
+
                 return $s;
             }, $payload['suggestions'] ?? []);
             $this->styleCheckComplete = true;
@@ -1052,30 +1120,30 @@ PROMPT;
 
     public function applyAcceptedSuggestions(): void
     {
-        if (!$this->viewingDocumentId) {
+        if (! $this->viewingDocumentId) {
             return;
         }
 
         $document = ProjectDocument::find($this->viewingDocumentId);
-        if (!$document) {
+        if (! $document) {
             return;
         }
 
         $fullPath = base_path($document->file_path);
-        if (!file_exists($fullPath)) {
+        if (! file_exists($fullPath)) {
             return;
         }
 
         $content = $this->documentContent;
         foreach ($this->styleCheckSuggestions as $suggestion) {
-            if ($suggestion['status'] === 'accepted' && !empty($suggestion['original'])) {
+            if ($suggestion['status'] === 'accepted' && ! empty($suggestion['original'])) {
                 $content = str_replace($suggestion['original'], $suggestion['replacement'], $content);
             }
         }
 
         file_put_contents($fullPath, $content);
         $this->documentContent = $content;
-        $this->styleCheckSuggestions = array_values(array_filter($this->styleCheckSuggestions, fn($s) => $s['status'] !== 'accepted'));
+        $this->styleCheckSuggestions = array_values(array_filter($this->styleCheckSuggestions, fn ($s) => $s['status'] !== 'accepted'));
     }
 
     // --- Document Upload Methods ---
@@ -1087,8 +1155,9 @@ PROMPT;
         ]);
 
         $ext = strtolower($this->uploadFile->getClientOriginalExtension());
-        if (!DocumentSafety::isAllowedExtension($ext)) {
+        if (! DocumentSafety::isAllowedExtension($ext)) {
             $this->aiNotice = 'File type not allowed.';
+
             return;
         }
 
@@ -1096,8 +1165,8 @@ PROMPT;
             ? \Illuminate\Support\Str::slug($this->uploadTitle)
             : pathinfo($this->uploadFile->getClientOriginalName(), PATHINFO_FILENAME);
 
-        $fileName = \Illuminate\Support\Str::limit(preg_replace('/[^A-Za-z0-9\-_]+/', '-', $baseName), 120, '') . '.' . $ext;
-        $dir = 'project_uploads/' . $this->project->id;
+        $fileName = \Illuminate\Support\Str::limit(preg_replace('/[^A-Za-z0-9\-_]+/', '-', $baseName), 120, '').'.'.$ext;
+        $dir = 'project_uploads/'.$this->project->id;
         $path = $this->uploadFile->storeAs($dir, $fileName, 'public');
 
         $fullPath = Storage::disk('public')->path($path);
@@ -1161,19 +1230,19 @@ PROMPT;
     // --- Document Sync Methods ---
     public function previewSyncDocumentsFromFolder(): void
     {
-        if (!$this->project->project_path) {
+        if (! $this->project->project_path) {
             return;
         }
 
         $projectDir = base_path($this->project->project_path);
-        if (!is_dir($projectDir)) {
+        if (! is_dir($projectDir)) {
             return;
         }
 
         $files = $this->scanDirectory($projectDir, DocumentSafety::allowedExtensions());
         $onDisk = [];
         foreach ($files as $file) {
-            $relativePath = str_replace(base_path() . '/', '', $file);
+            $relativePath = str_replace(base_path().'/', '', $file);
             $onDisk[$relativePath] = [
                 'size' => @filesize($file) ?: null,
                 'hash' => DocumentSafety::hashFile($file),
@@ -1189,7 +1258,7 @@ PROMPT;
         $missing = [];
 
         foreach ($onDisk as $path => $meta) {
-            if (!$existingDocs->has($path)) {
+            if (! $existingDocs->has($path)) {
                 $add[] = ['file_path' => $path, 'title' => $meta['title'], 'file_type' => $meta['ext'], 'file_size' => $meta['size']];
             } else {
                 $doc = $existingDocs[$path];
@@ -1201,7 +1270,7 @@ PROMPT;
         }
 
         foreach ($existingDocs as $doc) {
-            if (!isset($onDisk[$doc->file_path])) {
+            if (! isset($onDisk[$doc->file_path])) {
                 $missing[] = ['file_path' => $doc->file_path, 'title' => $doc->title, 'file_size' => $doc->file_size];
             }
         }
@@ -1218,12 +1287,12 @@ PROMPT;
 
     protected function syncDocumentsFromFolder(): void
     {
-        if (!$this->project->project_path) {
+        if (! $this->project->project_path) {
             return;
         }
 
         $projectDir = base_path($this->project->project_path);
-        if (!is_dir($projectDir)) {
+        if (! is_dir($projectDir)) {
             return;
         }
 
@@ -1231,7 +1300,7 @@ PROMPT;
         $seenPaths = [];
 
         foreach ($files as $file) {
-            $relativePath = str_replace(base_path() . '/', '', $file);
+            $relativePath = str_replace(base_path().'/', '', $file);
             $seenPaths[$relativePath] = true;
             $filename = basename($file);
             $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
@@ -1253,7 +1322,7 @@ PROMPT;
                 $dirty['last_seen_at'] = now();
                 $dirty['missing_on_disk'] = false;
 
-                if (!empty($dirty)) {
+                if (! empty($dirty)) {
                     $existing->update($dirty);
                 }
 
@@ -1283,8 +1352,8 @@ PROMPT;
         foreach ($this->project->documents as $doc) {
             if ($doc->type === 'file') {
                 $isSeen = isset($seenPaths[$doc->file_path]);
-                if ($doc->missing_on_disk !== !$isSeen) {
-                    $doc->update(['missing_on_disk' => !$isSeen]);
+                if ($doc->missing_on_disk !== ! $isSeen) {
+                    $doc->update(['missing_on_disk' => ! $isSeen]);
                 }
             }
         }
@@ -1332,22 +1401,22 @@ PROMPT;
 
         // Search results for modals
         $orgResults = $this->orgSearch && strlen($this->orgSearch) >= 2
-            ? Organization::where('name', 'like', '%' . $this->orgSearch . '%')->limit(10)->get()
+            ? Organization::where('name', 'like', '%'.$this->orgSearch.'%')->limit(10)->get()
             : collect();
 
         $personResults = $this->personSearch && strlen($this->personSearch) >= 2
-            ? Person::with('organization')->where('name', 'like', '%' . $this->personSearch . '%')->limit(10)->get()
+            ? Person::with('organization')->where('name', 'like', '%'.$this->personSearch.'%')->limit(10)->get()
             : collect();
 
         $issueResults = $this->issueSearch && strlen($this->issueSearch) >= 2
-            ? Issue::where('name', 'like', '%' . $this->issueSearch . '%')->limit(10)->get()
+            ? Issue::where('name', 'like', '%'.$this->issueSearch.'%')->limit(10)->get()
             : collect();
 
         $meetingResults = $this->meetingSearch && strlen($this->meetingSearch) >= 2
             ? Meeting::with('organizations')
                 ->where(function ($q) {
-                    $q->where('title', 'like', '%' . $this->meetingSearch . '%')
-                        ->orWhere('raw_notes', 'like', '%' . $this->meetingSearch . '%');
+                    $q->where('title', 'like', '%'.$this->meetingSearch.'%')
+                        ->orWhere('raw_notes', 'like', '%'.$this->meetingSearch.'%');
                 })
                 ->orderBy('meeting_date', 'desc')
                 ->limit(10)
@@ -1356,7 +1425,7 @@ PROMPT;
 
         // Staff search - all users for now
         $staffResults = $this->staffSearch && strlen($this->staffSearch) >= 2
-            ? User::where('name', 'like', '%' . $this->staffSearch . '%')->limit(10)->get()
+            ? User::where('name', 'like', '%'.$this->staffSearch.'%')->limit(10)->get()
             : collect();
 
         return view('livewire.projects.project-show', [
@@ -1372,7 +1441,6 @@ PROMPT;
             'staffResults' => $staffResults,
             'noteTypes' => ProjectNote::NOTE_TYPES,
             'staffRoles' => ['lead' => 'Lead', 'contributor' => 'Contributor', 'observer' => 'Observer'],
-        ])->title($this->project->name . ' - Project');
+        ])->title($this->project->name.' - Project');
     }
 }
-

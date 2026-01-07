@@ -2,10 +2,10 @@
 
 namespace App\Livewire\Organizations;
 
+use App\Models\Issue;
 use App\Models\Organization;
 use App\Models\Person;
 use App\Models\ProfileAttachment;
-use App\Models\Issue;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -14,31 +14,46 @@ use Livewire\WithFileUploads;
 class OrganizationShow extends Component
 {
     use WithFileUploads;
+
     public Organization $organization;
 
     public bool $editing = false;
+
     public string $name = '';
+
     public string $abbreviation = '';
+
     public string $type = '';
+
     public string $website = '';
+
     public string $linkedin_url = '';
+
     public string $notes = '';
 
     // File upload
     public $newAttachment;
+
     public string $attachmentNotes = '';
 
     // Add person form
     public bool $showAddPersonForm = false;
+
     public string $newPersonName = '';
+
     public string $newPersonTitle = '';
+
     public string $newPersonEmail = '';
+
     public string $newPersonLinkedIn = '';
 
     // Project linking
     public bool $showAddProjectModal = false;
+
     public string $projectSearch = '';
+
     public ?int $selectedProjectId = null;
+
     public string $projectRole = '';
 
     public function mount(Organization $organization)
@@ -93,7 +108,7 @@ class OrganizationShow extends Component
         $this->editing = false;
 
         // Auto-fetch LinkedIn if URL was added/changed and no logo exists
-        if ($linkedinChanged && !$this->organization->logo_url) {
+        if ($linkedinChanged && ! $this->organization->logo_url) {
             $this->fetchFromLinkedIn();
         } else {
             $this->dispatch('notify', type: 'success', message: 'Organization updated successfully!');
@@ -104,6 +119,7 @@ class OrganizationShow extends Component
     {
         if (empty($this->organization->linkedin_url)) {
             $this->dispatch('notify', type: 'error', message: 'Please add a LinkedIn URL first.');
+
             return;
         }
 
@@ -154,7 +170,7 @@ class OrganizationShow extends Component
                     $query->whereHas('organizations', function ($q) {
                         $q->where('organizations.id', $this->organization->id);
                     });
-                }
+                },
             ])
             ->orderByDesc('meetings_count')
             ->limit(5)
@@ -182,7 +198,7 @@ class OrganizationShow extends Component
         $projects = $this->organization->projects()->orderBy('name')->get();
 
         $projectResults = $this->projectSearch && strlen($this->projectSearch) >= 2
-            ? \App\Models\Project::where('name', 'like', '%' . $this->projectSearch . '%')
+            ? \App\Models\Project::where('name', 'like', '%'.$this->projectSearch.'%')
                 ->where('status', '!=', 'archived')
                 ->limit(10)
                 ->get()
@@ -224,7 +240,7 @@ class OrganizationShow extends Component
             'pressClips' => $pressClips,
             'pitches' => $pitches,
             'mediaInquiries' => $inquiries,
-        ])->title($this->organization->name . ' - Organization');
+        ])->title($this->organization->name.' - Organization');
     }
 
     public function uploadAttachment()
@@ -262,7 +278,7 @@ class OrganizationShow extends Component
 
     public function toggleAddPersonForm()
     {
-        $this->showAddPersonForm = !$this->showAddPersonForm;
+        $this->showAddPersonForm = ! $this->showAddPersonForm;
         $this->resetPersonForm();
     }
 
@@ -308,7 +324,7 @@ class OrganizationShow extends Component
     // --- Project Linking ---
     public function toggleAddProjectModal()
     {
-        $this->showAddProjectModal = !$this->showAddProjectModal;
+        $this->showAddProjectModal = ! $this->showAddProjectModal;
         $this->projectSearch = '';
         $this->selectedProjectId = null;
         $this->projectRole = '';
@@ -323,12 +339,13 @@ class OrganizationShow extends Component
 
     public function linkProject()
     {
-        if (!$this->selectedProjectId) {
+        if (! $this->selectedProjectId) {
             return;
         }
 
         if ($this->organization->projects()->where('project_id', $this->selectedProjectId)->exists()) {
             $this->dispatch('notify', type: 'error', message: 'Project already linked.');
+
             return;
         }
 

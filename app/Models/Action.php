@@ -29,7 +29,9 @@ class Action extends Model
      * Priority constants.
      */
     public const PRIORITY_HIGH = 'high';
+
     public const PRIORITY_MEDIUM = 'medium';
+
     public const PRIORITY_LOW = 'low';
 
     public const PRIORITIES = [
@@ -42,6 +44,7 @@ class Action extends Model
      * Status constants.
      */
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_COMPLETE = 'complete';
 
     public const STATUSES = [

@@ -13,8 +13,11 @@ use Livewire\Component;
 class Metrics extends Component
 {
     public array $ai = [];
+
     public array $queues = [];
+
     public array $calendar = [];
+
     public array $documents = [];
 
     public function mount(): void
@@ -112,4 +115,3 @@ class Metrics extends Component
         return view('livewire.admin.metrics');
     }
 }
-

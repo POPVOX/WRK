@@ -20,9 +20,13 @@ class KnowledgeHub extends Component
 {
     // Search state
     public string $query = '';
+
     public bool $useAI = false;
+
     public bool $searching = false;
+
     public ?array $searchResults = null;
+
     public ?string $aiAnswer = null;
 
     protected $queryString = [
@@ -34,6 +38,7 @@ class KnowledgeHub extends Component
         if (empty(trim($this->query))) {
             $this->searchResults = null;
             $this->aiAnswer = null;
+
             return;
         }
 
@@ -51,7 +56,7 @@ class KnowledgeHub extends Component
     protected function performSearch(): void
     {
         $results = [];
-        $term = '%' . $this->query . '%';
+        $term = '%'.$this->query.'%';
 
         // Search Meetings
         $meetings = Meeting::where('title', 'like', $term)
@@ -64,7 +69,7 @@ class KnowledgeHub extends Component
         foreach ($meetings as $meeting) {
             $results[] = [
                 'source_type' => 'meeting',
-                'title' => $meeting->title ?: 'Meeting on ' . $meeting->meeting_date?->format('M j, Y'),
+                'title' => $meeting->title ?: 'Meeting on '.$meeting->meeting_date?->format('M j, Y'),
                 'snippet' => \Str::limit($meeting->raw_notes ?? $meeting->ai_summary, 150),
                 'url' => route('meetings.show', $meeting),
                 'date' => $meeting->meeting_date,
@@ -98,7 +103,7 @@ class KnowledgeHub extends Component
             $results[] = [
                 'source_type' => 'person',
                 'title' => $person->name,
-                'snippet' => $person->title . ($person->organization ? ' at ' . $person->organization->name : ''),
+                'snippet' => $person->title.($person->organization ? ' at '.$person->organization->name : ''),
                 'url' => route('contacts.show', $person),
                 'organization' => $person->organization?->name,
             ];
@@ -129,7 +134,7 @@ class KnowledgeHub extends Component
             $results[] = [
                 'source_type' => 'commitment',
                 'title' => \Str::limit($commitment->description, 80),
-                'snippet' => ($commitment->direction === 'from_us' ? 'We committed to ' : 'They committed to ') . $commitment->context_name,
+                'snippet' => ($commitment->direction === 'from_us' ? 'We committed to ' : 'They committed to ').$commitment->context_name,
                 'url' => $commitment->meeting ? route('meetings.show', $commitment->meeting) : '#',
                 'date' => $commitment->due_date,
                 'organization' => $commitment->organization?->name,
@@ -166,6 +171,7 @@ class KnowledgeHub extends Component
         if (empty($apiKey)) {
             $this->aiAnswer = 'AI features are not configured. Please set up the Anthropic API key.';
             $this->searchResults = [];
+
             return;
         }
 
@@ -175,16 +181,16 @@ class KnowledgeHub extends Component
                 'anthropic-version' => '2023-06-01',
                 'Content-Type' => 'application/json',
             ])->timeout(30)->post('https://api.anthropic.com/v1/messages', [
-                        'model' => 'claude-sonnet-4-20250514',
-                        'max_tokens' => 1500,
-                        'system' => "You are a helpful assistant for POPVOX Foundation staff. Answer questions based on the organizational knowledge provided. Be concise but thorough. If the context doesn't contain enough information, say so. Cite specific meetings, projects, or people when relevant.",
-                        'messages' => [
-                            [
-                                'role' => 'user',
-                                'content' => "Question: {$this->query}\n\nOrganizational Context:\n{$context}"
-                            ]
-                        ],
-                    ]);
+                'model' => 'claude-sonnet-4-20250514',
+                'max_tokens' => 1500,
+                'system' => "You are a helpful assistant for POPVOX Foundation staff. Answer questions based on the organizational knowledge provided. Be concise but thorough. If the context doesn't contain enough information, say so. Cite specific meetings, projects, or people when relevant.",
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => "Question: {$this->query}\n\nOrganizational Context:\n{$context}",
+                    ],
+                ],
+            ]);
 
             if ($response->successful()) {
                 $this->aiAnswer = $response->json()['content'][0]['text'] ?? 'No response generated.';
@@ -195,7 +201,7 @@ class KnowledgeHub extends Component
                 $this->searchResults = [];
             }
         } catch (\Exception $e) {
-            $this->aiAnswer = 'Error connecting to AI service: ' . $e->getMessage();
+            $this->aiAnswer = 'Error connecting to AI service: '.$e->getMessage();
             $this->searchResults = [];
         }
     }
@@ -203,7 +209,7 @@ class KnowledgeHub extends Component
     protected function buildContext(): string
     {
         $context = [];
-        $term = '%' . $this->query . '%';
+        $term = '%'.$this->query.'%';
 
         // Get relevant meetings
         $meetings = Meeting::where('title', 'like', $term)
@@ -215,7 +221,7 @@ class KnowledgeHub extends Component
 
         foreach ($meetings as $m) {
             $orgs = $m->organizations->pluck('name')->join(', ');
-            $context[] = "MEETING ({$m->meeting_date?->format('M j, Y')}) - {$m->title}\nOrganizations: {$orgs}\nNotes: " . \Str::limit($m->raw_notes, 500);
+            $context[] = "MEETING ({$m->meeting_date?->format('M j, Y')}) - {$m->title}\nOrganizations: {$orgs}\nNotes: ".\Str::limit($m->raw_notes, 500);
         }
 
         // Get relevant projects
@@ -225,7 +231,7 @@ class KnowledgeHub extends Component
             ->get();
 
         foreach ($projects as $p) {
-            $context[] = "PROJECT: {$p->name}\nStatus: {$p->status}\nDescription: " . \Str::limit($p->description, 300);
+            $context[] = "PROJECT: {$p->name}\nStatus: {$p->status}\nDescription: ".\Str::limit($p->description, 300);
         }
 
         // Get relevant commitments
@@ -300,20 +306,20 @@ class KnowledgeHub extends Component
             ->orderBy('meeting_date')
             ->limit(8)
             ->get()
-            ->groupBy(fn($m) => $m->meeting_date->format('Y-m-d'));
+            ->groupBy(fn ($m) => $m->meeting_date->format('Y-m-d'));
     }
 
     // Computed: Active Relationships
     public function getActiveRelationshipsProperty()
     {
         return Organization::withCount([
-            'meetings' => fn($q) => $q->where('meeting_date', '>=', now()->subDays(90))
+            'meetings' => fn ($q) => $q->where('meeting_date', '>=', now()->subDays(90)),
         ])
             ->withCount([
-                'commitments' => fn($q) => $q->where('status', 'open')
+                'commitments' => fn ($q) => $q->where('status', 'open'),
             ])
             ->get()
-            ->filter(fn($org) => $org->meetings_count > 0)
+            ->filter(fn ($org) => $org->meetings_count > 0)
             ->sortByDesc('meetings_count')
             ->take(5)
             ->values();
@@ -326,20 +332,20 @@ class KnowledgeHub extends Component
 
         // Topics discussed this month
         $topicCounts = Issue::withCount([
-            'meetings' => fn($q) => $q->where('meeting_date', '>=', $thirtyDaysAgo)
+            'meetings' => fn ($q) => $q->where('meeting_date', '>=', $thirtyDaysAgo),
         ])
             ->get()
-            ->filter(fn($t) => $t->meetings_count > 0)
+            ->filter(fn ($t) => $t->meetings_count > 0)
             ->sortByDesc('meetings_count')
             ->take(5)
             ->values();
 
         // Top organizations this month
         $orgCounts = Organization::withCount([
-            'meetings' => fn($q) => $q->where('meeting_date', '>=', $thirtyDaysAgo)
+            'meetings' => fn ($q) => $q->where('meeting_date', '>=', $thirtyDaysAgo),
         ])
             ->get()
-            ->filter(fn($o) => $o->meetings_count > 0)
+            ->filter(fn ($o) => $o->meetings_count > 0)
             ->sortByDesc('meetings_count')
             ->take(5)
             ->values();
@@ -378,10 +384,10 @@ class KnowledgeHub extends Component
 
         // Based on active topics
         $topTopic = Issue::withCount([
-            'meetings' => fn($q) => $q->where('meeting_date', '>=', now()->subDays(30))
+            'meetings' => fn ($q) => $q->where('meeting_date', '>=', now()->subDays(30)),
         ])
             ->get()
-            ->filter(fn($t) => $t->meetings_count > 0)
+            ->filter(fn ($t) => $t->meetings_count > 0)
             ->sortByDesc('meetings_count')
             ->first();
 
@@ -390,8 +396,8 @@ class KnowledgeHub extends Component
         }
 
         // Standard queries
-        $queries[] = "What commitments are due this week?";
-        $queries[] = "What are our current project priorities?";
+        $queries[] = 'What commitments are due this week?';
+        $queries[] = 'What are our current project priorities?';
 
         return array_slice($queries, 0, 4);
     }

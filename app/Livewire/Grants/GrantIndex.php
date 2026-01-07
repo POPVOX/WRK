@@ -17,51 +17,82 @@ class GrantIndex extends Component
     use WithPagination;
 
     public string $activeTab = 'dashboard';
+
     public string $search = '';
+
     public string $filterStatus = '';
+
     public string $filterFunder = '';
+
     public string $grantSearch = '';
+
     public string $grantStatusFilter = '';
+
     public ?int $grantFunderFilter = null;
+
     public string $reportStatusFilter = '';
+
     public ?int $reportFunderFilter = null;
 
     // Create/Edit Grant Modal
     public bool $showGrantModal = false;
+
     public ?int $editingGrantId = null;
+
     public string $grantName = '';
+
     public ?int $grantFunderId = null;
+
     public string $grantStatus = 'pending';
+
     public ?string $grantAmount = '';
+
     public ?string $grantStartDate = null;
+
     public ?string $grantEndDate = null;
+
     public string $grantDescription = '';
+
     public string $grantDeliverables = '';
+
     public string $grantVisibility = 'management';
+
     public string $grantNotes = '';
+
     public string $grantScope = 'all';
+
     public ?int $grantPrimaryProjectId = null;
 
     // Create/Edit Funder Modal
     public bool $showFunderModal = false;
+
     public ?int $editingFunderId = null;
+
     public string $funderName = '';
+
     public string $funderType = 'Funder';
+
     public string $funderWebsite = '';
+
     public string $funderLinkedIn = '';
+
     public string $funderDescription = '';
+
     public string $funderPriorities = '';
+
     public string $funderStatus = 'prospective'; // prospective, current
 
     // Organization autocomplete
     public string $orgSearch = '';
+
     public bool $showOrgSuggestions = false;
+
     public ?int $selectedOrgId = null;
 
     public function mount(): void
     {
         // Admin-only access
-        if (!Auth::user()?->isAdmin()) {
+        if (! Auth::user()?->isAdmin()) {
             abort(403, 'Access denied. Admin only.');
         }
     }
@@ -228,7 +259,7 @@ class GrantIndex extends Component
         }
 
         // Sync funderName with orgSearch when not using a selected org
-        if (!$this->selectedOrgId) {
+        if (! $this->selectedOrgId) {
             $this->funderName = $this->orgSearch;
         }
     }
@@ -239,7 +270,7 @@ class GrantIndex extends Component
             return collect();
         }
 
-        return Organization::where('name', 'like', '%' . $this->orgSearch . '%')
+        return Organization::where('name', 'like', '%'.$this->orgSearch.'%')
             ->whereNotIn('id', function ($query) {
                 // Exclude organizations that are already funders (have is_funder or have grants)
                 $query->select('organization_id')->from('grants');
@@ -318,10 +349,10 @@ class GrantIndex extends Component
         return [
             'total_funders' => Organization::where('is_funder', true)->count(),
             'current_funders' => Organization::where('is_funder', true)
-                ->whereHas('grants', fn($q) => $q->where('status', 'active'))
+                ->whereHas('grants', fn ($q) => $q->where('status', 'active'))
                 ->count(),
             'prospective_count' => Organization::where('is_funder', true)
-                ->whereDoesntHave('grants', fn($q) => $q->where('status', 'active'))
+                ->whereDoesntHave('grants', fn ($q) => $q->where('status', 'active'))
                 ->count(),
             'total_grants' => Grant::count(),
             'active_grants' => $activeGrants->count(),
@@ -359,12 +390,12 @@ class GrantIndex extends Component
         $suggestion = null;
         if ($reportsOverdue->isEmpty() && $reportsDueSoon->isEmpty()) {
             $prospectiveCount = Organization::where('is_funder', true)
-                ->whereDoesntHave('grants', fn($q) => $q->where('status', 'active'))
+                ->whereDoesntHave('grants', fn ($q) => $q->where('status', 'active'))
                 ->count();
             if ($prospectiveCount > 0) {
-                $suggestion = "You have {$prospectiveCount} prospective funder" . ($prospectiveCount > 1 ? 's' : '') . " in your pipeline. Consider scheduling outreach.";
+                $suggestion = "You have {$prospectiveCount} prospective funder".($prospectiveCount > 1 ? 's' : '').' in your pipeline. Consider scheduling outreach.';
             } else {
-                $suggestion = "All reports are on track. Consider researching new funding opportunities.";
+                $suggestion = 'All reports are on track. Consider researching new funding opportunities.';
             }
         }
 
@@ -409,7 +440,7 @@ class GrantIndex extends Component
             ->each(function ($grant) use ($deadlines) {
                 $deadlines->push([
                     'date' => $grant->end_date,
-                    'title' => $grant->name . ' ends',
+                    'title' => $grant->name.' ends',
                     'funder' => $grant->funder->name ?? 'Unknown',
                     'type' => 'Grant End',
                     'url' => route('grants.show', $grant),
@@ -425,12 +456,13 @@ class GrantIndex extends Component
     public function getFunderBreakdownProperty()
     {
         return Organization::where('is_funder', true)
-            ->withSum(['grants' => fn($q) => $q->where('status', 'active')], 'amount')
+            ->withSum(['grants' => fn ($q) => $q->where('status', 'active')], 'amount')
             ->orderByDesc('grants_sum_amount')
             ->get()
-            ->filter(fn($funder) => ($funder->grants_sum_amount ?? 0) > 0)
+            ->filter(fn ($funder) => ($funder->grants_sum_amount ?? 0) > 0)
             ->map(function ($funder) {
                 $funder->total_funding = $funder->grants_sum_amount ?? 0;
+
                 return $funder;
             });
     }
@@ -475,34 +507,35 @@ class GrantIndex extends Component
     {
         // Get funders with their grants
         $fundersQuery = Organization::where('is_funder', true)
-            ->withCount(['grants', 'grants as active_grants_count' => fn($q) => $q->where('status', 'active')])
-            ->withSum(['grants' => fn($q) => $q->where('status', 'active')], 'amount')
-            ->with(['grants' => fn($q) => $q->orderByDesc('created_at')->take(5)]);
+            ->withCount(['grants', 'grants as active_grants_count' => fn ($q) => $q->where('status', 'active')])
+            ->withSum(['grants' => fn ($q) => $q->where('status', 'active')], 'amount')
+            ->with(['grants' => fn ($q) => $q->orderByDesc('created_at')->take(5)]);
 
         if ($this->search) {
-            $fundersQuery->where('name', 'like', '%' . $this->search . '%');
+            $fundersQuery->where('name', 'like', '%'.$this->search.'%');
         }
 
         $funders = $fundersQuery->orderBy('name')->get()->map(function ($funder) {
             $funder->total_funding = $funder->grants_sum_amount ?? 0;
             // Count reports due for this funder
-            $funder->reports_due_count = ReportingRequirement::whereHas('grant', fn($q) => $q->where('organization_id', $funder->id))
+            $funder->reports_due_count = ReportingRequirement::whereHas('grant', fn ($q) => $q->where('organization_id', $funder->id))
                 ->where('status', '!=', 'submitted')
                 ->where('due_date', '<=', now()->addMonth())
                 ->count();
+
             return $funder;
         });
 
         // Separate into current (has active grants) and prospective
-        $currentFunders = $funders->filter(fn($f) => $f->active_grants_count > 0);
-        $prospectiveFunders = $funders->filter(fn($f) => $f->active_grants_count === 0);
+        $currentFunders = $funders->filter(fn ($f) => $f->active_grants_count > 0);
+        $prospectiveFunders = $funders->filter(fn ($f) => $f->active_grants_count === 0);
 
         // Grants for table view (with filters)
         $grants = Grant::with(['funder', 'reportingRequirements', 'projects'])
-            ->withCount(['reportingRequirements', 'reportingRequirements as reports_due_count' => fn($q) => $q->where('status', '!=', 'submitted')->where('due_date', '<=', now()->addMonth())])
-            ->when($this->grantSearch, fn($q) => $q->where('name', 'like', '%' . $this->grantSearch . '%'))
-            ->when($this->grantStatusFilter, fn($q) => $q->where('status', $this->grantStatusFilter))
-            ->when($this->grantFunderFilter, fn($q) => $q->where('organization_id', $this->grantFunderFilter))
+            ->withCount(['reportingRequirements', 'reportingRequirements as reports_due_count' => fn ($q) => $q->where('status', '!=', 'submitted')->where('due_date', '<=', now()->addMonth())])
+            ->when($this->grantSearch, fn ($q) => $q->where('name', 'like', '%'.$this->grantSearch.'%'))
+            ->when($this->grantStatusFilter, fn ($q) => $q->where('status', $this->grantStatusFilter))
+            ->when($this->grantFunderFilter, fn ($q) => $q->where('organization_id', $this->grantFunderFilter))
             ->orderBy('created_at', 'desc')
             ->paginate(15);
 
@@ -522,4 +555,3 @@ class GrantIndex extends Component
         ])->title('Funders & Reporting');
     }
 }
-

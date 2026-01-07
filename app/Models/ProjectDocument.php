@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 class ProjectDocument extends Model
 {
     use HasFactory;
+
     protected $fillable = [
         'project_id',
         'title',
@@ -80,7 +81,7 @@ class ProjectDocument extends Model
     // Get human-readable file size
     public function getFormattedSizeAttribute(): string
     {
-        if (!$this->file_size) {
+        if (! $this->file_size) {
             return '';
         }
 
@@ -91,21 +92,24 @@ class ProjectDocument extends Model
             $bytes /= 1024;
         }
 
-        return round($bytes, 2) . ' ' . $units[$i];
+        return round($bytes, 2).' '.$units[$i];
     }
 
     // Google Docs helper methods
     public function isGoogleDoc(): bool
     {
-        return !empty($this->google_doc_id);
+        return ! empty($this->google_doc_id);
     }
 
     public function needsSync(): bool
     {
-        if (!$this->isGoogleDoc())
+        if (! $this->isGoogleDoc()) {
             return false;
-        if (!$this->last_synced_at)
+        }
+        if (! $this->last_synced_at) {
             return true;
+        }
+
         return $this->last_synced_at->addHours(24)->isPast();
     }
 
@@ -118,6 +122,7 @@ class ProjectDocument extends Model
         if ($user->isManagement()) {
             return $query->whereIn('visibility', ['all', 'management']);
         }
+
         return $query->where('visibility', 'all');
     }
 

@@ -3,15 +3,18 @@
 namespace App\Support\AI;
 
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
 
 class AnthropicClient
 {
     public const DEFAULT_TIMEOUT = 120;
+
     public const API_URL = 'https://api.anthropic.com/v1/messages';
+
     public const API_VERSION = '2023-06-01';
+
     public const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
 
     public static function request(): PendingRequest
@@ -28,7 +31,7 @@ class AnthropicClient
     /**
      * Send a message to Anthropic with standard logging.
      *
-     * @param array{messages: array<int, array{role:string,content:string}>, system?:string, max_tokens?:int, model?:string} $payload
+     * @param  array{messages: array<int, array{role:string,content:string}>, system?:string, max_tokens?:int, model?:string}  $payload
      */
     public static function send(array $payload): array
     {
@@ -57,6 +60,7 @@ class AnthropicClient
                 Cache::put("{$baseKey}:last_success_at", now()->toIso8601String(), 3600);
                 Log::info('metric.ai_request', $log + ['outcome' => 'success']);
             }
+
             return $res->json();
         }
 

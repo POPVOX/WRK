@@ -13,7 +13,7 @@ class AdminMiddleware
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (!auth()->check() || !auth()->user()->isAdmin()) {
+        if (! auth()->check() || ! auth()->user()->isAdmin()) {
             abort(403, 'You do not have permission to access this page.');
         }
 

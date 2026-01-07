@@ -5,8 +5,8 @@ namespace App\Services;
 use App\Models\Meeting;
 use App\Models\Organization;
 use App\Models\Person;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
 
 class BulkMeetingImportService
 {
@@ -21,19 +21,19 @@ class BulkMeetingImportService
                 'anthropic-version' => '2023-06-01',
                 'Content-Type' => 'application/json',
             ])->post('https://api.anthropic.com/v1/messages', [
-                        'model' => 'claude-sonnet-4-20250514',
-                        'max_tokens' => 4000,
-                        'messages' => [
-                            [
-                                'role' => 'user',
-                                'content' => $this->buildExtractionPrompt($rawText),
-                            ]
-                        ]
-                    ]);
+                'model' => 'claude-sonnet-4-20250514',
+                'max_tokens' => 4000,
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => $this->buildExtractionPrompt($rawText),
+                    ],
+                ],
+            ]);
 
             $content = $response->json('content.0.text');
 
-            if (!$content) {
+            if (! $content) {
                 return ['error' => 'No response from AI', 'meetings' => []];
             }
 
@@ -43,8 +43,9 @@ class BulkMeetingImportService
             return ['meetings' => $meetings, 'error' => null];
 
         } catch (\Exception $e) {
-            \Log::error('BulkMeetingImportService error: ' . $e->getMessage());
-            return ['error' => 'Failed to extract meetings: ' . $e->getMessage(), 'meetings' => []];
+            \Log::error('BulkMeetingImportService error: '.$e->getMessage());
+
+            return ['error' => 'Failed to extract meetings: '.$e->getMessage(), 'meetings' => []];
         }
     }
 
@@ -99,11 +100,12 @@ PROMPT;
         $decoded = json_decode($content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
-            \Log::warning('Failed to parse AI response as JSON: ' . json_last_error_msg());
+            \Log::warning('Failed to parse AI response as JSON: '.json_last_error_msg());
+
             return [];
         }
 
-        if (!is_array($decoded)) {
+        if (! is_array($decoded)) {
             return [];
         }
 
@@ -132,7 +134,7 @@ PROMPT;
                 ]);
 
                 // Link organizations
-                if (!empty($data['organizations'])) {
+                if (! empty($data['organizations'])) {
                     foreach ($data['organizations'] as $orgName) {
                         $org = Organization::firstOrCreate(
                             ['name' => trim($orgName)],
@@ -143,7 +145,7 @@ PROMPT;
                 }
 
                 // Link people
-                if (!empty($data['people'])) {
+                if (! empty($data['people'])) {
                     foreach ($data['people'] as $personData) {
                         $personName = is_string($personData) ? $personData : ($personData['name'] ?? null);
                         $personTitle = is_array($personData) ? ($personData['title'] ?? null) : null;
@@ -164,8 +166,8 @@ PROMPT;
                 $created[] = $meeting;
 
             } catch (\Exception $e) {
-                $errors[] = "Meeting " . ($index + 1) . ": " . $e->getMessage();
-                \Log::error('Error creating meeting: ' . $e->getMessage());
+                $errors[] = 'Meeting '.($index + 1).': '.$e->getMessage();
+                \Log::error('Error creating meeting: '.$e->getMessage());
             }
         }
 

@@ -14,11 +14,15 @@ use Livewire\Component;
 class StaffManagement extends Component
 {
     public string $newName = '';
+
     public string $newEmail = '';
+
     public bool $newIsAdmin = false;
+
     public string $search = '';
 
     public bool $showAddModal = false;
+
     public ?string $tempPassword = null;
 
     protected $rules = [
@@ -63,10 +67,11 @@ class StaffManagement extends Component
         // Prevent removing admin from yourself
         if ($user->id === auth()->id() && $user->is_admin) {
             $this->dispatch('notify', type: 'error', message: 'You cannot remove admin status from yourself.');
+
             return;
         }
 
-        $user->update(['is_admin' => !$user->is_admin]);
+        $user->update(['is_admin' => ! $user->is_admin]);
         $this->dispatch('notify', type: 'success', message: 'Admin status updated.');
     }
 
@@ -77,6 +82,7 @@ class StaffManagement extends Component
         // Prevent self-deletion
         if ($user->id === auth()->id()) {
             $this->dispatch('notify', type: 'error', message: 'You cannot delete your own account.');
+
             return;
         }
 
@@ -88,8 +94,8 @@ class StaffManagement extends Component
     {
         $staff = User::query()
             ->when($this->search, function ($query) {
-                $query->where('name', 'like', '%' . $this->search . '%')
-                    ->orWhere('email', 'like', '%' . $this->search . '%');
+                $query->where('name', 'like', '%'.$this->search.'%')
+                    ->orWhere('email', 'like', '%'.$this->search.'%');
             })
             ->orderBy('name')
             ->get();

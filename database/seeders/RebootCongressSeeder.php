@@ -223,6 +223,6 @@ class RebootCongressSeeder extends Seeder
             );
         }
 
-        $this->command->info('REBOOT CONGRESS 2026 project seeded with ' . count($publications) . ' publications and ' . count($events) . ' events.');
+        $this->command->info('REBOOT CONGRESS 2026 project seeded with '.count($publications).' publications and '.count($events).' events.');
     }
 }

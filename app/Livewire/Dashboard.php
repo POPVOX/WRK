@@ -4,21 +4,20 @@ namespace App\Livewire;
 
 use App\Jobs\SyncCalendarEvents;
 use App\Models\Action;
-use App\Models\Project;
+use App\Models\Grant;
 use App\Models\Meeting;
 use App\Models\PressClip;
-use App\Models\Grant;
+use App\Models\Project;
 use App\Models\ReportingRequirement;
-use App\Services\GoogleCalendarService;
-use App\Services\ProjectStatusService;
 use App\Services\ChatService;
+use App\Services\GoogleCalendarService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
-use Carbon\Carbon;
 
 #[Layout('layouts.app')]
 #[Title('Dashboard')]
@@ -28,14 +27,20 @@ class Dashboard extends Component
 
     // Calendar sync state
     public bool $isCalendarConnected = false;
+
     public bool $isSyncing = false;
+
     public ?string $lastSyncAt = null;
 
     // Chat state
     public string $chatQuery = '';
+
     public array $chatHistory = [];
+
     public bool $isProcessing = false;
+
     public ?string $aiWarning = null;
+
     public ?string $calendarWarning = null;
 
     public function mount(GoogleCalendarService $calendarService)
@@ -43,7 +48,7 @@ class Dashboard extends Component
         $this->user = Auth::user();
 
         // Redirect to onboarding if profile not completed
-        if (!$this->user->profile_completed_at) {
+        if (! $this->user->profile_completed_at) {
             return redirect()->route('onboarding');
         }
 
@@ -52,7 +57,7 @@ class Dashboard extends Component
         $this->lastSyncAt = $this->user->calendar_import_date?->diffForHumans();
 
         // Health banners
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             $this->aiWarning = 'AI features are disabled by the administrator.';
         } else {
             $lastError = Cache::get('metrics:ai:last_error_at');
@@ -61,7 +66,7 @@ class Dashboard extends Component
             }
         }
 
-        if (!$this->isCalendarConnected) {
+        if (! $this->isCalendarConnected) {
             $this->calendarWarning = 'Calendar is not connected. Connect to keep meetings in sync.';
         } elseif ($this->user->calendar_import_date && $this->user->calendar_import_date->lt(now()->subDays(7))) {
             $this->calendarWarning = 'Calendar has not synced in over a week.';
@@ -75,10 +80,13 @@ class Dashboard extends Component
     {
         $hour = now()->hour;
 
-        if ($hour < 12)
+        if ($hour < 12) {
             return 'Good morning';
-        if ($hour < 17)
+        }
+        if ($hour < 17) {
             return 'Good afternoon';
+        }
+
         return 'Good evening';
     }
 
@@ -105,14 +113,14 @@ class Dashboard extends Component
         $meetingsToday = Meeting::whereDate('meeting_date', $today)
             ->where(function ($q) use ($userId) {
                 $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
+                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $userId));
             })
             ->count();
 
         $meetingsTomorrow = Meeting::whereDate('meeting_date', $today->copy()->addDay())
             ->where(function ($q) use ($userId) {
                 $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
+                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $userId));
             })
             ->count();
 
@@ -127,7 +135,7 @@ class Dashboard extends Component
             ->where(function ($query) use ($userId, $firstName) {
                 $query->where('created_by', $userId)
                     ->orWhere('lead', 'like', "%{$firstName}%")
-                    ->orWhereHas('staff', fn($q) => $q->where('user_id', $userId));
+                    ->orWhereHas('staff', fn ($q) => $q->where('user_id', $userId));
             })
             ->count();
 
@@ -169,7 +177,7 @@ class Dashboard extends Component
             ->whereDate('meeting_date', today())
             ->where(function ($q) use ($userId) {
                 $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
+                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $userId));
             })
             ->orderBy('meeting_date')
             ->get();
@@ -185,7 +193,7 @@ class Dashboard extends Component
         return Meeting::whereDate('meeting_date', today()->addDay())
             ->where(function ($q) use ($userId) {
                 $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
+                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $userId));
             })
             ->count();
     }
@@ -202,7 +210,7 @@ class Dashboard extends Component
             ->where('meeting_date', '<=', today()->addWeek())
             ->where(function ($q) use ($userId) {
                 $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
+                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $userId));
             })
             ->orderBy('meeting_date')
             ->limit(10)
@@ -223,6 +231,7 @@ class Dashboard extends Component
             ->get()
             ->map(function ($action) {
                 $action->is_overdue = $action->due_date && $action->due_date < today();
+
                 return $action;
             });
     }
@@ -239,11 +248,11 @@ class Dashboard extends Component
             ->where(function ($query) use ($userId, $firstName) {
                 $query->where('created_by', $userId)
                     ->orWhere('lead', 'like', "%{$firstName}%")
-                    ->orWhereHas('staff', fn($q) => $q->where('user_id', $userId));
+                    ->orWhereHas('staff', fn ($q) => $q->where('user_id', $userId));
             })
             ->withCount([
                 'milestones as milestones_total_count',
-                'milestones as milestones_completed_count' => fn($q) => $q->where('status', 'completed'),
+                'milestones as milestones_completed_count' => fn ($q) => $q->where('status', 'completed'),
                 'openQuestions',
             ])
             ->orderBy('updated_at', 'desc')
@@ -255,6 +264,7 @@ class Dashboard extends Component
                     ? round(($completed / $total) * 100)
                     : 0;
                 $project->pending_milestones_count = $total - $completed;
+
                 return $project;
             });
     }
@@ -277,8 +287,8 @@ class Dashboard extends Component
         if ($overdueActions->isNotEmpty()) {
             $items->push([
                 'severity' => 'overdue',
-                'title' => $overdueActions->count() . ' task' . ($overdueActions->count() > 1 ? 's' : '') . ' overdue',
-                'items' => $overdueActions->map(fn($a) => [
+                'title' => $overdueActions->count().' task'.($overdueActions->count() > 1 ? 's' : '').' overdue',
+                'items' => $overdueActions->map(fn ($a) => [
                     'label' => $a->description,
                     'url' => $a->meeting ? route('meetings.show', $a->meeting) : '#',
                 ]),
@@ -297,9 +307,9 @@ class Dashboard extends Component
         if ($needsNotes->isNotEmpty()) {
             $items->push([
                 'severity' => 'urgent',
-                'title' => $needsNotes->count() . ' meeting' . ($needsNotes->count() > 1 ? 's' : '') . ' need notes',
-                'items' => $needsNotes->map(fn($m) => [
-                    'label' => ($m->title ?: $m->organizations->pluck('name')->first() ?: 'Meeting') . ' (' . $m->meeting_date->format('M j') . ')',
+                'title' => $needsNotes->count().' meeting'.($needsNotes->count() > 1 ? 's' : '').' need notes',
+                'items' => $needsNotes->map(fn ($m) => [
+                    'label' => ($m->title ?: $m->organizations->pluck('name')->first() ?: 'Meeting').' ('.$m->meeting_date->format('M j').')',
                     'url' => route('meetings.show', $m),
                 ]),
             ]);
@@ -314,9 +324,9 @@ class Dashboard extends Component
             if ($overdueReports->isNotEmpty()) {
                 $items->push([
                     'severity' => 'overdue',
-                    'title' => $overdueReports->count() . ' report' . ($overdueReports->count() > 1 ? 's' : '') . ' overdue',
-                    'items' => $overdueReports->map(fn($r) => [
-                        'label' => $r->name . ' (' . ($r->grant->funder->name ?? 'Unknown') . ')',
+                    'title' => $overdueReports->count().' report'.($overdueReports->count() > 1 ? 's' : '').' overdue',
+                    'items' => $overdueReports->map(fn ($r) => [
+                        'label' => $r->name.' ('.($r->grant->funder->name ?? 'Unknown').')',
                         'url' => route('grants.show', $r->grant),
                     ]),
                 ]);
@@ -332,16 +342,16 @@ class Dashboard extends Component
             if ($grantsEnding->isNotEmpty()) {
                 $items->push([
                     'severity' => 'info',
-                    'title' => $grantsEnding->count() . ' grant' . ($grantsEnding->count() > 1 ? 's' : '') . ' ending soon',
-                    'items' => $grantsEnding->map(fn($g) => [
-                        'label' => $g->name . ' (' . $g->end_date->format('M j') . ')',
+                    'title' => $grantsEnding->count().' grant'.($grantsEnding->count() > 1 ? 's' : '').' ending soon',
+                    'items' => $grantsEnding->map(fn ($g) => [
+                        'label' => $g->name.' ('.$g->end_date->format('M j').')',
                         'url' => route('grants.show', $g),
                     ]),
                 ]);
             }
         }
 
-        return $items->sortBy(fn($i) => $i['severity'] === 'overdue' ? 0 : ($i['severity'] === 'urgent' ? 1 : 2));
+        return $items->sortBy(fn ($i) => $i['severity'] === 'overdue' ? 0 : ($i['severity'] === 'urgent' ? 1 : 2));
     }
 
     /**
@@ -349,7 +359,7 @@ class Dashboard extends Component
      */
     public function getFundingAlertsProperty()
     {
-        if (!$this->user->isAdmin()) {
+        if (! $this->user->isAdmin()) {
             return collect();
         }
 
@@ -412,7 +422,7 @@ class Dashboard extends Component
      */
     public function syncCalendar()
     {
-        if (!$this->isCalendarConnected) {
+        if (! $this->isCalendarConnected) {
             return;
         }
 
@@ -437,23 +447,25 @@ class Dashboard extends Component
             return;
         }
 
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             $this->chatHistory[] = [
                 'role' => 'assistant',
                 'content' => 'AI features are disabled by the administrator.',
                 'timestamp' => now()->format('g:i A'),
             ];
+
             return;
         }
 
         $chatLimit = config('ai.limits.chat', ['max' => 30, 'decay_seconds' => 60]);
-        $chatKey = 'ai-dashboard-chat:' . ($this->user?->id ?? 'guest');
+        $chatKey = 'ai-dashboard-chat:'.($this->user?->id ?? 'guest');
         if (RateLimiter::tooManyAttempts($chatKey, $chatLimit['max'])) {
             $this->chatHistory[] = [
                 'role' => 'assistant',
                 'content' => 'You are sending messages too quickly. Please wait a moment.',
                 'timestamp' => now()->format('g:i A'),
             ];
+
             return;
         }
         RateLimiter::hit($chatKey, $chatLimit['decay_seconds']);

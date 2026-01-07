@@ -9,19 +9,19 @@ class LinkedInScraperService
 {
     /**
      * Extract Open Graph metadata from a LinkedIn page.
-     * 
+     *
      * LinkedIn exposes og:image and og:description meta tags on public pages.
      * This attempts to fetch that data without requiring API access.
-     * 
-     * @param string $linkedinUrl
+     *
      * @return array{logo_url: ?string, description: ?string, title: ?string, job_title: ?string, company: ?string}
      */
     public function extractCompanyData(string $linkedinUrl): array
     {
         try {
             // Validate it's a LinkedIn URL
-            if (!$this->isValidLinkedInUrl($linkedinUrl)) {
+            if (! $this->isValidLinkedInUrl($linkedinUrl)) {
                 Log::warning("Invalid LinkedIn URL: {$linkedinUrl}");
+
                 return $this->getEmptyResult();
             }
 
@@ -34,8 +34,9 @@ class LinkedInScraperService
                 ])
                 ->get($linkedinUrl);
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 Log::warning("Failed to fetch LinkedIn page: HTTP {$response->status()}");
+
                 return $this->getEmptyResult();
             }
 
@@ -54,7 +55,8 @@ class LinkedInScraperService
                 'company' => $personData['company'],
             ];
         } catch (\Exception $e) {
-            Log::error("LinkedIn scraping error: " . $e->getMessage());
+            Log::error('LinkedIn scraping error: '.$e->getMessage());
+
             return $this->getEmptyResult();
         }
     }
@@ -65,15 +67,14 @@ class LinkedInScraperService
      * - "Name - Title at Company | LinkedIn"
      * - "Name - Title | LinkedIn"
      * - "Name | LinkedIn"
-     * 
-     * @param string|null $ogTitle
+     *
      * @return array{job_title: ?string, company: ?string}
      */
     protected function parsePersonTitle(?string $ogTitle): array
     {
         $result = ['job_title' => null, 'company' => null];
 
-        if (!$ogTitle) {
+        if (! $ogTitle) {
             return $result;
         }
 
@@ -103,7 +104,7 @@ class LinkedInScraperService
     protected function isValidLinkedInUrl(string $url): bool
     {
         $parsed = parse_url($url);
-        if (!$parsed || !isset($parsed['host'])) {
+        if (! $parsed || ! isset($parsed['host'])) {
             return false;
         }
 
@@ -116,19 +117,19 @@ class LinkedInScraperService
     protected function extractMetaTag(string $html, string $property): ?string
     {
         // Try og:property format
-        $pattern = '/<meta[^>]*property=["\']' . preg_quote($property, '/') . '["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i';
+        $pattern = '/<meta[^>]*property=["\']'.preg_quote($property, '/').'["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i';
         if (preg_match($pattern, $html, $matches)) {
             return html_entity_decode($matches[1], ENT_QUOTES | ENT_HTML5);
         }
 
         // Try content before property format
-        $pattern = '/<meta[^>]*content=["\']([^"\']+)["\'][^>]*property=["\']' . preg_quote($property, '/') . '["\'][^>]*>/i';
+        $pattern = '/<meta[^>]*content=["\']([^"\']+)["\'][^>]*property=["\']'.preg_quote($property, '/').'["\'][^>]*>/i';
         if (preg_match($pattern, $html, $matches)) {
             return html_entity_decode($matches[1], ENT_QUOTES | ENT_HTML5);
         }
 
         // Try name attribute instead of property
-        $pattern = '/<meta[^>]*name=["\']' . preg_quote($property, '/') . '["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i';
+        $pattern = '/<meta[^>]*name=["\']'.preg_quote($property, '/').'["\'][^>]*content=["\']([^"\']+)["\'][^>]*>/i';
         if (preg_match($pattern, $html, $matches)) {
             return html_entity_decode($matches[1], ENT_QUOTES | ENT_HTML5);
         }

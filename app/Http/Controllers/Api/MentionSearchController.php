@@ -31,7 +31,7 @@ class MentionSearchController extends Controller
                 ->orderBy('name')
                 ->limit(5)
                 ->get()
-                ->map(fn($p) => [
+                ->map(fn ($p) => [
                     'id' => $p->id,
                     'name' => $p->name,
                     'type' => 'person',
@@ -48,7 +48,7 @@ class MentionSearchController extends Controller
                 ->orderBy('name')
                 ->limit(5)
                 ->get()
-                ->map(fn($o) => [
+                ->map(fn ($o) => [
                     'id' => $o->id,
                     'name' => $o->abbreviation ? "{$o->name} ({$o->abbreviation})" : $o->name,
                     'type' => 'organization',
@@ -64,7 +64,7 @@ class MentionSearchController extends Controller
                 ->orderBy('name')
                 ->limit(5)
                 ->get()
-                ->map(fn($u) => [
+                ->map(fn ($u) => [
                     'id' => $u->id,
                     'name' => $u->name,
                     'type' => 'staff',
@@ -93,7 +93,7 @@ class MentionSearchController extends Controller
             ->orderBy('name')
             ->limit(10)
             ->get()
-            ->map(fn($o) => [
+            ->map(fn ($o) => [
                 'id' => $o->id,
                 'name' => $o->name,
                 'subtitle' => $o->abbreviation ?? $o->type ?? '',
@@ -116,7 +116,7 @@ class MentionSearchController extends Controller
             ->orderBy('name')
             ->limit(10)
             ->get()
-            ->map(fn($p) => [
+            ->map(fn ($p) => [
                 'id' => $p->id,
                 'name' => $p->name,
                 'subtitle' => $p->title ?? ($p->organization?->name ?? ''),
@@ -138,7 +138,7 @@ class MentionSearchController extends Controller
             ->orderBy('name')
             ->limit(10)
             ->get()
-            ->map(fn($i) => [
+            ->map(fn ($i) => [
                 'id' => $i->id,
                 'name' => $i->name,
                 'subtitle' => '',
@@ -160,7 +160,7 @@ class MentionSearchController extends Controller
             ->orderBy('name')
             ->limit(10)
             ->get()
-            ->map(fn($u) => [
+            ->map(fn ($u) => [
                 'id' => $u->id,
                 'name' => $u->name,
                 'subtitle' => $u->is_admin ? 'Admin' : 'Staff',

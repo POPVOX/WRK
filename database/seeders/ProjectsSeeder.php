@@ -273,6 +273,6 @@ class ProjectsSeeder extends Seeder
             );
         }
 
-        $this->command->info('Imported ' . count($projects) . ' projects.');
+        $this->command->info('Imported '.count($projects).' projects.');
     }
 }

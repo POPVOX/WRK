@@ -6,7 +6,6 @@ use App\Models\Meeting;
 use App\Models\User;
 use Google\Client as GoogleClient;
 use Google\Service\Calendar as GoogleCalendar;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 
 class GoogleCalendarService
@@ -15,7 +14,7 @@ class GoogleCalendarService
 
     public function __construct()
     {
-        $this->client = new GoogleClient();
+        $this->client = new GoogleClient;
         $this->client->setClientId(config('services.google.client_id'));
         $this->client->setClientSecret(config('services.google.client_secret'));
         $this->client->setRedirectUri(config('services.google.redirect_uri'));
@@ -62,10 +61,10 @@ class GoogleCalendarService
                 'error' => $token['error'],
                 'error_description' => $token['error_description'] ?? 'No description',
             ]);
-            throw new \Exception('Google OAuth error: ' . ($token['error_description'] ?? $token['error']));
+            throw new \Exception('Google OAuth error: '.($token['error_description'] ?? $token['error']));
         }
 
-        if (!isset($token['access_token'])) {
+        if (! isset($token['access_token'])) {
             \Log::error('Google OAuth missing access_token', ['response' => $token]);
             throw new \Exception('No access token received from Google');
         }
@@ -94,7 +93,7 @@ class GoogleCalendarService
      */
     public function isConnected(User $user): bool
     {
-        return !empty($user->google_access_token);
+        return ! empty($user->google_access_token);
     }
 
     /**
@@ -102,7 +101,7 @@ class GoogleCalendarService
      */
     public function getCalendarService(User $user): ?GoogleCalendar
     {
-        if (!$this->isConnected($user)) {
+        if (! $this->isConnected($user)) {
             return null;
         }
 
@@ -121,7 +120,7 @@ class GoogleCalendarService
      */
     protected function refreshToken(User $user): void
     {
-        if (!$user->google_refresh_token) {
+        if (! $user->google_refresh_token) {
             return;
         }
 
@@ -140,7 +139,7 @@ class GoogleCalendarService
     public function getEvents(User $user, $startDate = null, $endDate = null): array
     {
         $service = $this->getCalendarService($user);
-        if (!$service) {
+        if (! $service) {
             return [];
         }
 
@@ -164,9 +163,11 @@ class GoogleCalendarService
 
         try {
             $results = $service->events->listEvents($calendarId, $optParams);
+
             return $results->getItems();
         } catch (\Exception $e) {
-            \Log::error('Google Calendar Error: ' . $e->getMessage());
+            \Log::error('Google Calendar Error: '.$e->getMessage());
+
             return [];
         }
     }
@@ -185,6 +186,7 @@ class GoogleCalendarService
             // Skip if already imported
             if (Meeting::where('google_event_id', $eventId)->exists()) {
                 $skipped[] = $event->getSummary();
+
                 continue;
             }
 
@@ -204,7 +206,7 @@ class GoogleCalendarService
 
             // Set meeting title/summary from event
             if ($event->getSummary()) {
-                $meeting->update(['raw_notes' => "**{$event->getSummary()}**\n\n" . ($event->getDescription() ?? '')]);
+                $meeting->update(['raw_notes' => "**{$event->getSummary()}**\n\n".($event->getDescription() ?? '')]);
             }
 
             $imported[] = $event->getSummary() ?? 'Untitled event';

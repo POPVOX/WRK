@@ -9,9 +9,13 @@ use Livewire\Component;
 class CalendarSync extends Component
 {
     public bool $isConnected = false;
+
     public array $events = [];
+
     public array $importResult = [];
+
     public bool $showImportModal = false;
+
     public string $syncMessage = '';
 
     protected GoogleCalendarService $calendarService;
@@ -28,7 +32,7 @@ class CalendarSync extends Component
 
     public function fetchEvents()
     {
-        if (!$this->isConnected) {
+        if (! $this->isConnected) {
             return;
         }
 

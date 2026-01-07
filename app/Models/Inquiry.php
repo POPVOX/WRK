@@ -178,16 +178,22 @@ class Inquiry extends Model
 
     public function getDeadlineStatusAttribute(): string
     {
-        if (!$this->deadline)
+        if (! $this->deadline) {
             return 'none';
-        if ($this->deadline < now())
+        }
+        if ($this->deadline < now()) {
             return 'overdue';
-        if ($this->deadline->isToday())
+        }
+        if ($this->deadline->isToday()) {
             return 'today';
-        if ($this->deadline->isTomorrow())
+        }
+        if ($this->deadline->isTomorrow()) {
             return 'tomorrow';
-        if ($this->deadline <= now()->addWeek())
+        }
+        if ($this->deadline <= now()->addWeek()) {
             return 'this_week';
+        }
+
         return 'future';
     }
 

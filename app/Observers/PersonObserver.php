@@ -10,8 +10,7 @@ class PersonObserver
 {
     public function __construct(
         protected LinkedInScraperService $linkedInService
-    ) {
-    }
+    ) {}
 
     /**
      * Handle the Person "created" event.
@@ -49,27 +48,27 @@ class PersonObserver
             $updates = [];
 
             // Update photo if not already set
-            if (empty($person->photo_url) && !empty($data['logo_url'])) {
+            if (empty($person->photo_url) && ! empty($data['logo_url'])) {
                 $updates['photo_url'] = $data['logo_url'];
             }
 
             // Update title if not already set
-            if (empty($person->title) && !empty($data['job_title'])) {
+            if (empty($person->title) && ! empty($data['job_title'])) {
                 $updates['title'] = $data['job_title'];
             }
 
             // Update bio if not already set
-            if (empty($person->bio) && !empty($data['description'])) {
+            if (empty($person->bio) && ! empty($data['description'])) {
                 $updates['bio'] = $data['description'];
             }
 
-            if (!empty($updates)) {
+            if (! empty($updates)) {
                 // Use query builder to avoid triggering observer again
                 Person::where('id', $person->id)->update($updates);
-                Log::info("LinkedIn sync updated Person {$person->id}: " . json_encode($updates));
+                Log::info("LinkedIn sync updated Person {$person->id}: ".json_encode($updates));
             }
         } catch (\Exception $e) {
-            Log::error("LinkedIn sync failed for Person {$person->id}: " . $e->getMessage());
+            Log::error("LinkedIn sync failed for Person {$person->id}: ".$e->getMessage());
         }
     }
 }

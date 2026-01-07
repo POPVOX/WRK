@@ -67,6 +67,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/staff', \App\Livewire\Admin\StaffManagement::class)->name('admin.staff');
         Route::get('/metrics', \App\Livewire\Admin\Metrics::class)->name('admin.metrics');
         Route::get('/permissions', \App\Livewire\Admin\Permissions::class)->name('admin.permissions');
+        Route::get('/feedback', \App\Livewire\Admin\FeedbackManagement::class)->name('admin.feedback');
     });
 
     // Funders & Grants (Admin only - access check in component)
@@ -85,5 +86,4 @@ Route::view('profile', 'profile')
     ->middleware(['auth'])
     ->name('profile');
 
-require __DIR__ . '/auth.php';
-
+require __DIR__.'/auth.php';

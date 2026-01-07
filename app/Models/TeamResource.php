@@ -59,6 +59,7 @@ class TeamResource extends Model
         if ($user->isManagement()) {
             return $query->whereIn('audience', ['all', 'staff', 'management']);
         }
+
         return $query->whereIn('audience', ['all', 'staff']);
     }
 
@@ -69,9 +70,10 @@ class TeamResource extends Model
 
     public function needsReview(): bool
     {
-        if (!$this->review_frequency_days || !$this->last_reviewed) {
+        if (! $this->review_frequency_days || ! $this->last_reviewed) {
             return false;
         }
+
         return $this->last_reviewed->addDays($this->review_frequency_days)->isPast();
     }
 }

@@ -10,8 +10,7 @@ class OrganizationObserver
 {
     public function __construct(
         protected LinkedInScraperService $linkedInService
-    ) {
-    }
+    ) {}
 
     /**
      * Handle the Organization "created" event.
@@ -49,22 +48,22 @@ class OrganizationObserver
             $updates = [];
 
             // Update logo if not already set
-            if (empty($organization->logo_url) && !empty($data['logo_url'])) {
+            if (empty($organization->logo_url) && ! empty($data['logo_url'])) {
                 $updates['logo_url'] = $data['logo_url'];
             }
 
             // Update description if not already set
-            if (empty($organization->description) && !empty($data['description'])) {
+            if (empty($organization->description) && ! empty($data['description'])) {
                 $updates['description'] = $data['description'];
             }
 
-            if (!empty($updates)) {
+            if (! empty($updates)) {
                 // Use query builder to avoid triggering observer again
                 Organization::where('id', $organization->id)->update($updates);
-                Log::info("LinkedIn sync updated Organization {$organization->id}: " . json_encode($updates));
+                Log::info("LinkedIn sync updated Organization {$organization->id}: ".json_encode($updates));
             }
         } catch (\Exception $e) {
-            Log::error("LinkedIn sync failed for Organization {$organization->id}: " . $e->getMessage());
+            Log::error("LinkedIn sync failed for Organization {$organization->id}: ".$e->getMessage());
         }
     }
 }

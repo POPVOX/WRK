@@ -79,6 +79,6 @@ class ProjectPublication extends Model
     {
         return $this->target_date &&
             $this->target_date->isPast() &&
-            !in_array($this->status, ['ready', 'published']);
+            ! in_array($this->status, ['ready', 'published']);
     }
 }

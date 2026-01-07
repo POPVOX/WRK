@@ -13,38 +13,53 @@ use Livewire\WithPagination;
 #[Title('Organizations')]
 class OrganizationIndex extends Component
 {
-    use WithPagination, WithFileUploads;
+    use WithFileUploads, WithPagination;
 
     public string $search = '';
+
     public string $filterType = '';
+
     public string $viewMode = 'card'; // 'card' or 'table'
 
     // Add Organization Modal
     public bool $showAddModal = false;
+
     public string $addMode = 'single'; // 'single', 'bulk', 'csv'
 
     // Single org form
     public string $orgName = '';
+
     public string $orgAbbreviation = '';
+
     public string $orgType = '';
+
     public string $orgWebsite = '';
+
     public string $orgLinkedIn = '';
+
     public string $orgDescription = '';
 
     // Bulk text input
     public string $bulkText = '';
+
     public string $bulkType = '';
+
     public bool $useAiExtraction = false;
+
     public array $extractedOrgs = [];
+
     public bool $isExtracting = false;
 
     // CSV upload
     public $csvFile = null;
+
     public array $csvPreview = [];
+
     public bool $csvHasHeader = true;
 
     // Import results
     public int $importedCount = 0;
+
     public array $importErrors = [];
 
     public function updatingSearch()
@@ -104,7 +119,7 @@ class OrganizationIndex extends Component
         $this->validate([
             'orgName' => 'required|min:2|max:255',
             'orgAbbreviation' => 'nullable|max:20',
-            'orgType' => 'nullable|in:' . implode(',', Organization::TYPES),
+            'orgType' => 'nullable|in:'.implode(',', Organization::TYPES),
             'orgWebsite' => 'nullable|url|max:500',
             'orgLinkedIn' => 'nullable|url|max:500',
             'orgDescription' => 'nullable|max:2000',
@@ -135,12 +150,14 @@ class OrganizationIndex extends Component
 
         foreach ($lines as $line) {
             $line = trim($line);
-            if (empty($line))
+            if (empty($line)) {
                 continue;
+            }
 
             // Check for duplicate
             if (Organization::where('name', $line)->exists()) {
                 $errors[] = "'{$line}' already exists.";
+
                 continue;
             }
 
@@ -174,23 +191,23 @@ class OrganizationIndex extends Component
 
         try {
             $response = \Illuminate\Support\Facades\Http::withHeaders([
-                'Authorization' => 'Bearer ' . config('services.openai.key'),
+                'Authorization' => 'Bearer '.config('services.openai.key'),
                 'Content-Type' => 'application/json',
             ])->post('https://api.openai.com/v1/chat/completions', [
-                        'model' => 'gpt-4o-mini',
-                        'messages' => [
-                            [
-                                'role' => 'system',
-                                'content' => 'You are an expert at extracting organization names from unstructured text. Extract all distinct organization, company, foundation, nonprofit, government agency, and institution names. Return ONLY a JSON array of strings with the organization names. Do not include any explanation, just the JSON array. Remove duplicates. If you cannot find any organizations, return an empty array [].'
-                            ],
-                            [
-                                'role' => 'user',
-                                'content' => "Extract all organization names from this text:\n\n" . $this->bulkText
-                            ]
-                        ],
-                        'temperature' => 0.3,
-                        'max_tokens' => 2000,
-                    ]);
+                'model' => 'gpt-4o-mini',
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'You are an expert at extracting organization names from unstructured text. Extract all distinct organization, company, foundation, nonprofit, government agency, and institution names. Return ONLY a JSON array of strings with the organization names. Do not include any explanation, just the JSON array. Remove duplicates. If you cannot find any organizations, return an empty array [].',
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => "Extract all organization names from this text:\n\n".$this->bulkText,
+                    ],
+                ],
+                'temperature' => 0.3,
+                'max_tokens' => 2000,
+            ]);
 
             if ($response->successful()) {
                 $content = $response->json()['choices'][0]['message']['content'] ?? '[]';
@@ -200,10 +217,10 @@ class OrganizationIndex extends Component
 
                 $orgs = json_decode($content, true);
                 if (is_array($orgs)) {
-                    $this->extractedOrgs = array_map(fn($name) => [
+                    $this->extractedOrgs = array_map(fn ($name) => [
                         'name' => trim($name),
                         'selected' => true,
-                        'exists' => Organization::where('name', trim($name))->exists()
+                        'exists' => Organization::where('name', trim($name))->exists(),
                     ], $orgs);
                 } else {
                     $this->importErrors = ['Could not parse AI response.'];
@@ -221,7 +238,7 @@ class OrganizationIndex extends Component
     public function toggleExtractedOrg(int $index): void
     {
         if (isset($this->extractedOrgs[$index])) {
-            $this->extractedOrgs[$index]['selected'] = !$this->extractedOrgs[$index]['selected'];
+            $this->extractedOrgs[$index]['selected'] = ! $this->extractedOrgs[$index]['selected'];
         }
     }
 
@@ -231,10 +248,12 @@ class OrganizationIndex extends Component
         $errors = [];
 
         foreach ($this->extractedOrgs as $org) {
-            if (!$org['selected'])
+            if (! $org['selected']) {
                 continue;
+            }
             if ($org['exists']) {
                 $errors[] = "'{$org['name']}' already exists.";
+
                 continue;
             }
 
@@ -268,8 +287,9 @@ class OrganizationIndex extends Component
     {
         $this->csvPreview = [];
 
-        if (!$this->csvFile)
+        if (! $this->csvFile) {
             return;
+        }
 
         $path = $this->csvFile->getRealPath();
         $handle = fopen($path, 'r');
@@ -293,8 +313,9 @@ class OrganizationIndex extends Component
         $path = $this->csvFile->getRealPath();
         $handle = fopen($path, 'r');
 
-        if (!$handle) {
+        if (! $handle) {
             $this->importErrors = ['Could not read CSV file.'];
+
             return;
         }
 
@@ -306,16 +327,19 @@ class OrganizationIndex extends Component
             $row++;
 
             // Skip header row if enabled
-            if ($this->csvHasHeader && $row === 1)
+            if ($this->csvHasHeader && $row === 1) {
                 continue;
+            }
 
             $name = trim($data[0] ?? '');
-            if (empty($name))
+            if (empty($name)) {
                 continue;
+            }
 
             // Check for duplicate
             if (Organization::where('name', $name)->exists()) {
                 $errors[] = "Row {$row}: '{$name}' already exists.";
+
                 continue;
             }
 
@@ -348,7 +372,7 @@ class OrganizationIndex extends Component
         $query = Organization::query()
             ->withCount(['meetings', 'people'])
             ->when($this->search, function ($q) {
-                $q->where('name', 'like', '%' . $this->search . '%');
+                $q->where('name', 'like', '%'.$this->search.'%');
             })
             ->when($this->filterType, function ($q) {
                 $q->where('type', $this->filterType);

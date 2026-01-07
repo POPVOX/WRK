@@ -22,7 +22,7 @@ class EnrichPressClips extends Command
         $query = PressClip::query();
 
         // By default, only process clips that need enrichment
-        if (!$this->option('all')) {
+        if (! $this->option('all')) {
             $query->where(function ($q) {
                 $q->whereNull('image_url')
                     ->orWhere('title', 'like', '%coverage by%')
@@ -35,6 +35,7 @@ class EnrichPressClips extends Command
 
         if ($clips->isEmpty()) {
             $this->info('No clips need enrichment. Use --all to process all clips.');
+
             return 0;
         }
 
@@ -52,8 +53,9 @@ class EnrichPressClips extends Command
             $bar->advance();
 
             // Skip invalid URLs
-            if (empty($clip->url) || !filter_var($clip->url, FILTER_VALIDATE_URL)) {
+            if (empty($clip->url) || ! filter_var($clip->url, FILTER_VALIDATE_URL)) {
                 $skipped++;
+
                 continue;
             }
 
@@ -62,6 +64,7 @@ class EnrichPressClips extends Command
             $host = parse_url($clip->url, PHP_URL_HOST);
             if (in_array($host, $blockedDomains)) {
                 $skipped++;
+
                 continue;
             }
 
@@ -72,16 +75,17 @@ class EnrichPressClips extends Command
                     $this->newLine();
                     $this->line("  📰 {$clip->outlet_name}");
                     $this->line("     URL: {$clip->url}");
-                    $this->line("     Title: " . ($metadata['title'] ?? '(none)'));
-                    $this->line("     Author: " . ($metadata['author'] ?? '(none)'));
-                    $this->line("     Image: " . ($metadata['image'] ? 'Yes' : 'No'));
+                    $this->line('     Title: '.($metadata['title'] ?? '(none)'));
+                    $this->line('     Author: '.($metadata['author'] ?? '(none)'));
+                    $this->line('     Image: '.($metadata['image'] ? 'Yes' : 'No'));
+
                     continue;
                 }
 
                 $updateData = [];
 
                 // Update title if we got a better one
-                if (!empty($metadata['title'])) {
+                if (! empty($metadata['title'])) {
                     $currentTitle = $clip->title;
                     // Only update if current title looks auto-generated
                     if (
@@ -93,28 +97,28 @@ class EnrichPressClips extends Command
                 }
 
                 // Update image if missing
-                if (empty($clip->image_url) && !empty($metadata['image'])) {
+                if (empty($clip->image_url) && ! empty($metadata['image'])) {
                     $updateData['image_url'] = $metadata['image'];
                 }
 
                 // Update journalist name if missing or generic
-                if (empty($clip->journalist_name) && !empty($metadata['author'])) {
+                if (empty($clip->journalist_name) && ! empty($metadata['author'])) {
                     $updateData['journalist_name'] = $this->cleanAuthor($metadata['author']);
                 }
 
                 // Update summary if missing or very short
-                if ((empty($clip->summary) || strlen($clip->summary) < 50) && !empty($metadata['description'])) {
+                if ((empty($clip->summary) || strlen($clip->summary) < 50) && ! empty($metadata['description'])) {
                     $updateData['summary'] = substr($metadata['description'], 0, 500);
                 }
 
-                if (!empty($updateData)) {
+                if (! empty($updateData)) {
                     $clip->update($updateData);
                     $updated++;
                 }
 
             } catch (\Exception $e) {
                 $errors++;
-                $this->error("Error processing {$clip->url}: " . $e->getMessage());
+                $this->error("Error processing {$clip->url}: ".$e->getMessage());
             }
 
             // Small delay to be respectful
@@ -124,7 +128,7 @@ class EnrichPressClips extends Command
         $bar->finish();
         $this->newLine(2);
 
-        $this->info("✅ Enrichment complete!");
+        $this->info('✅ Enrichment complete!');
         $this->table(
             ['Metric', 'Count'],
             [

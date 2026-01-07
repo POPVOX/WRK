@@ -2,22 +2,22 @@
 
 namespace App\Services;
 
+use App\Models\Issue;
 use App\Models\Meeting;
-use App\Models\Project;
 use App\Models\Organization;
 use App\Models\Person;
+use App\Models\Project;
 use App\Models\ProjectDecision;
-use App\Models\Issue;
 use App\Support\AI\AnthropicClient;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ChatService
 {
     public function query(string $query, array $conversationHistory = []): string
     {
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             return 'AI features are disabled by the administrator.';
         }
 
@@ -26,7 +26,7 @@ class ChatService
 
         // Step 2: Build prompt with context
         $prompt = $this->buildPrompt($query, $context, $conversationHistory);
-        $cacheKey = 'ai:chat:' . md5($prompt);
+        $cacheKey = 'ai:chat:'.md5($prompt);
 
         try {
             $response = AnthropicClient::send([
@@ -35,7 +35,7 @@ class ChatService
                     [
                         'role' => 'user',
                         'content' => $prompt,
-                    ]
+                    ],
                 ],
                 'max_tokens' => 1000,
             ]);
@@ -43,18 +43,21 @@ class ChatService
             $text = $response['content'][0]['text'] ?? null;
             if ($text) {
                 Cache::put($cacheKey, $text, now()->addMinutes(30));
+
                 return $text;
             }
 
             $cached = Cache::get($cacheKey);
+
             return $cached
-                ? $cached . "\n\n(Served from cache while AI response was empty.)"
+                ? $cached."\n\n(Served from cache while AI response was empty.)"
                 : 'Sorry, I encountered an error processing your request.';
         } catch (\Exception $e) {
-            \Log::error('ChatService error: ' . $e->getMessage());
+            \Log::error('ChatService error: '.$e->getMessage());
             $cached = Cache::get($cacheKey);
+
             return $cached
-                ? $cached . "\n\n(Served from cache because AI is unavailable.)"
+                ? $cached."\n\n(Served from cache because AI is unavailable.)"
                 : 'Sorry, I encountered an error processing your request. Please try again.';
         }
     }
@@ -86,7 +89,7 @@ class ChatService
             ->get();
 
         if ($meetings->isNotEmpty()) {
-            $context['meetings'] = $meetings->map(fn($m) => [
+            $context['meetings'] = $meetings->map(fn ($m) => [
                 'date' => $m->meeting_date?->format('M j, Y'),
                 'organizations' => $m->organizations->pluck('name')->join(', '),
                 'people' => $m->people->pluck('name')->join(', '),
@@ -113,7 +116,7 @@ class ChatService
             ->get();
 
         if ($projects->isNotEmpty()) {
-            $context['projects'] = $projects->map(fn($p) => [
+            $context['projects'] = $projects->map(fn ($p) => [
                 'name' => $p->name,
                 'status' => $p->status,
                 'description' => Str::limit($p->description, 300),
@@ -143,7 +146,7 @@ class ChatService
             ->get();
 
         if ($decisions->isNotEmpty()) {
-            $context['decisions'] = $decisions->map(fn($d) => [
+            $context['decisions'] = $decisions->map(fn ($d) => [
                 'title' => $d->title,
                 'project' => $d->project?->name,
                 'date' => $d->decision_date?->format('M j, Y'),
@@ -168,11 +171,11 @@ class ChatService
             ->get();
 
         if ($organizations->isNotEmpty()) {
-            $context['organizations'] = $organizations->map(fn($o) => [
+            $context['organizations'] = $organizations->map(fn ($o) => [
                 'name' => $o->name,
                 'type' => $o->type,
                 'meetings_count' => $o->meetings_count,
-                'people' => $o->people->map(fn($p) => $p->name . ($p->title ? " ({$p->title})" : ''))->join(', '),
+                'people' => $o->people->map(fn ($p) => $p->name.($p->title ? " ({$p->title})" : ''))->join(', '),
                 'notes' => Str::limit($o->notes, 200),
             ])->toArray();
         }
@@ -194,7 +197,7 @@ class ChatService
             ->get();
 
         if ($people->isNotEmpty()) {
-            $context['people'] = $people->map(fn($p) => [
+            $context['people'] = $people->map(fn ($p) => [
                 'name' => $p->name,
                 'title' => $p->title,
                 'organization' => $p->organization?->name,
@@ -211,7 +214,7 @@ class ChatService
             ->get();
 
         if ($issues->isNotEmpty()) {
-            $context['issues'] = $issues->map(fn($i) => [
+            $context['issues'] = $issues->map(fn ($i) => [
                 'name' => $i->name,
                 'meetings_count' => $i->meetings_count,
             ])->toArray();
@@ -228,8 +231,8 @@ class ChatService
                     [$query]
                 );
 
-                if (!empty($kbMatches)) {
-                    $context['kb_matches'] = collect($kbMatches)->map(fn($row) => [
+                if (! empty($kbMatches)) {
+                    $context['kb_matches'] = collect($kbMatches)->map(fn ($row) => [
                         'doc_id' => $row->doc_id,
                         'title' => $row->title,
                         'snippet' => $row->snippet,
@@ -247,7 +250,7 @@ class ChatService
                 ->limit(10)
                 ->get();
 
-            $context['recent_meetings'] = $recentMeetings->map(fn($m) => [
+            $context['recent_meetings'] = $recentMeetings->map(fn ($m) => [
                 'date' => $m->meeting_date?->format('M j, Y'),
                 'organizations' => $m->organizations->pluck('name')->join(', '),
                 'projects' => $m->projects->pluck('name')->join(', '),
@@ -263,7 +266,7 @@ class ChatService
                 ->limit(10)
                 ->get();
 
-            $context['pending_actions'] = $pendingActions->map(fn($a) => [
+            $context['pending_actions'] = $pendingActions->map(fn ($a) => [
                 'description' => $a->description,
                 'due_date' => $a->due_date?->format('M j, Y'),
                 'priority' => $a->priority,
@@ -277,7 +280,7 @@ class ChatService
                 ->with('project')
                 ->get();
 
-            $context['overdue_milestones'] = $overdueMilestones->map(fn($m) => [
+            $context['overdue_milestones'] = $overdueMilestones->map(fn ($m) => [
                 'title' => $m->title,
                 'project' => $m->project?->name,
                 'target_date' => $m->target_date?->format('M j, Y'),
@@ -305,8 +308,7 @@ class ChatService
         $words = preg_split('/\s+/', strtolower($query));
         $terms = array_filter(
             $words,
-            fn($word) =>
-            strlen($word) > 2 && !in_array($word, $stopWords)
+            fn ($word) => strlen($word) > 2 && ! in_array($word, $stopWords)
         );
 
         return array_values($terms);
@@ -314,7 +316,7 @@ class ChatService
 
     protected function getSystemPrompt(): string
     {
-        return <<<PROMPT
+        return <<<'PROMPT'
 You are an AI assistant for the POPVOX Foundation Meetings Intel tool. You help users understand their meetings, projects, relationships, and decisions.
 
 Your knowledge base includes:
@@ -342,7 +344,7 @@ PROMPT;
 
         // Include recent conversation for continuity
         $recentHistory = '';
-        if (!empty($conversationHistory)) {
+        if (! empty($conversationHistory)) {
             $recent = array_slice($conversationHistory, -4); // Last 2 exchanges
             foreach ($recent as $msg) {
                 $role = $msg['role'] === 'user' ? 'User' : 'Assistant';
@@ -367,7 +369,7 @@ PROMPT;
      */
     public function askAboutProject(Project $project, string $query): string
     {
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             return 'AI features are disabled by the administrator.';
         }
 
@@ -397,49 +399,49 @@ PROMPT;
                 'target_end_date' => $project->target_end_date?->format('M j, Y'),
                 'ai_status_summary' => $project->ai_status_summary,
             ],
-            'team' => $project->staff->map(fn($s) => [
+            'team' => $project->staff->map(fn ($s) => [
                 'name' => $s->name,
                 'role' => $s->pivot->role,
             ])->toArray(),
-            'meetings' => $project->meetings->map(fn($m) => [
+            'meetings' => $project->meetings->map(fn ($m) => [
                 'date' => $m->meeting_date?->format('M j, Y'),
                 'organizations' => $m->organizations->pluck('name')->join(', '),
                 'people' => $m->people->pluck('name')->join(', '),
                 'summary' => Str::limit($m->ai_summary ?? $m->raw_notes, 400),
                 'key_ask' => $m->key_ask,
             ])->toArray(),
-            'organizations' => $project->organizations->map(fn($o) => [
+            'organizations' => $project->organizations->map(fn ($o) => [
                 'name' => $o->name,
                 'role' => $o->pivot->role,
             ])->toArray(),
-            'external_collaborators' => $project->people->map(fn($p) => [
+            'external_collaborators' => $project->people->map(fn ($p) => [
                 'name' => $p->name,
                 'title' => $p->title,
                 'organization' => $p->organization?->name,
             ])->toArray(),
-            'decisions' => $project->decisions->map(fn($d) => [
+            'decisions' => $project->decisions->map(fn ($d) => [
                 'title' => $d->title,
                 'date' => $d->decision_date?->format('M j, Y'),
                 'description' => $d->description,
                 'rationale' => $d->rationale,
             ])->toArray(),
-            'milestones' => $project->milestones->map(fn($m) => [
+            'milestones' => $project->milestones->map(fn ($m) => [
                 'title' => $m->title,
                 'status' => $m->status,
                 'target_date' => $m->target_date?->format('M j, Y'),
             ])->toArray(),
-            'open_questions' => $project->questions->where('status', 'open')->map(fn($q) => [
+            'open_questions' => $project->questions->where('status', 'open')->map(fn ($q) => [
                 'question' => $q->question,
                 'context' => $q->context,
             ])->values()->toArray(),
-            'notes' => $project->notes->take(20)->map(fn($n) => [
+            'notes' => $project->notes->take(20)->map(fn ($n) => [
                 'type' => $n->note_type,
                 'content' => Str::limit($n->content, 300),
                 'author' => $n->user?->name,
                 'date' => $n->created_at->format('M j, Y'),
                 'pinned' => $n->is_pinned,
             ])->toArray(),
-            'documents' => $project->documents->map(fn($d) => [
+            'documents' => $project->documents->map(fn ($d) => [
                 'title' => $d->title,
                 'type' => $d->type,
                 'description' => $d->description,
@@ -472,7 +474,7 @@ When answering:
 5. Help the user understand the current state of the project
 PROMPT;
 
-        $cacheKey = 'ai:project_chat:' . $project->id . ':' . md5($query);
+        $cacheKey = 'ai:project_chat:'.$project->id.':'.md5($query);
 
         try {
             $response = AnthropicClient::send([
@@ -481,7 +483,7 @@ PROMPT;
                     [
                         'role' => 'user',
                         'content' => "PROJECT CONTEXT:\n{$contextJson}\n\nQUESTION: {$query}",
-                    ]
+                    ],
                 ],
                 'max_tokens' => 1500,
             ]);
@@ -489,18 +491,21 @@ PROMPT;
             $text = $response['content'][0]['text'] ?? null;
             if ($text) {
                 Cache::put($cacheKey, $text, now()->addMinutes(30));
+
                 return $text;
             }
 
             $cached = Cache::get($cacheKey);
+
             return $cached
-                ? $cached . "\n\n(Served from cache while AI response was empty.)"
+                ? $cached."\n\n(Served from cache while AI response was empty.)"
                 : 'Sorry, I encountered an error processing your request.';
         } catch (\Exception $e) {
-            \Log::error('ChatService askAboutProject error: ' . $e->getMessage());
+            \Log::error('ChatService askAboutProject error: '.$e->getMessage());
             $cached = Cache::get($cacheKey);
+
             return $cached
-                ? $cached . "\n\n(Served from cache because AI is unavailable.)"
+                ? $cached."\n\n(Served from cache because AI is unavailable.)"
                 : 'Sorry, I encountered an error processing your request. Please try again.';
         }
     }

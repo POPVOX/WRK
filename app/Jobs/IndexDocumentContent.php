@@ -9,9 +9,9 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\DB;
 
 class IndexDocumentContent implements ShouldQueue
 {
@@ -29,7 +29,7 @@ class IndexDocumentContent implements ShouldQueue
     public function handle(): void
     {
         $doc = ProjectDocument::find($this->documentId);
-        if (!$doc) {
+        if (! $doc) {
             return;
         }
 
@@ -78,10 +78,11 @@ class IndexDocumentContent implements ShouldQueue
             // Prepare tags blob to make tags searchable via FTS
             $tags = is_array($doc->tags ?? null) ? $doc->tags : [];
             $tagsBlob = '';
-            if (!empty($tags)) {
-                $tagsBlob = "\n" . implode(' ', array_map(function ($t) {
+            if (! empty($tags)) {
+                $tagsBlob = "\n".implode(' ', array_map(function ($t) {
                     $t = trim((string) $t);
-                    return '#' . str_replace(' ', '_', $t);
+
+                    return '#'.str_replace(' ', '_', $t);
                 }, $tags));
             }
 
@@ -92,7 +93,7 @@ class IndexDocumentContent implements ShouldQueue
                     $doc->id,
                     $doc->project_id,
                     (string) ($doc->title ?? ''),
-                    (string) ($content . $tagsBlob),
+                    (string) ($content.$tagsBlob),
                 ]);
             } catch (\Throwable $e) {
                 Log::warning('IndexDocumentContent: FTS5 index update failed', [

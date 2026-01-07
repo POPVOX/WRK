@@ -23,22 +23,36 @@ class Onboarding extends Component
 
     // Profile fields
     public string $bio = '';
+
     public string $title = '';
+
     public string $linkedin = '';
+
     public string $timezone = '';
+
     public $photo;
 
     // Calendar import fields
     public bool $isCalendarConnected = false;
+
     public string $importRange = '3_months'; // How far back to import
+
     public array $calendarEvents = [];
+
     public array $selectedEvents = [];
+
     public array $extractedPeople = [];
+
     public array $selectedPeople = [];
+
     public array $extractedOrgs = [];
+
     public array $selectedOrgs = [];
+
     public bool $isLoadingEvents = false;
+
     public bool $isImporting = false;
+
     public string $importMessage = '';
 
     protected GoogleCalendarService $calendarService;
@@ -70,6 +84,7 @@ class Onboarding extends Component
             $this->isCalendarConnected = $this->calendarService->isConnected($user);
             $this->step = 2;
             session(['onboarding_step' => 2]);
+
             return;
         }
 
@@ -117,7 +132,7 @@ class Onboarding extends Component
         // Handle photo upload
         if ($this->photo) {
             $path = $this->photo->store('profile-photos', 'public');
-            $updateData['photo_url'] = '/storage/' . $path;
+            $updateData['photo_url'] = '/storage/'.$path;
         }
 
         $user->update($updateData);
@@ -142,7 +157,7 @@ class Onboarding extends Component
 
     public function fetchCalendarEvents()
     {
-        if (!$this->isCalendarConnected) {
+        if (! $this->isCalendarConnected) {
             return;
         }
 
@@ -189,7 +204,7 @@ class Onboarding extends Component
                 ];
 
                 // Extract unique people
-                if (!isset($peopleEmails[$email])) {
+                if (! isset($peopleEmails[$email])) {
                     $peopleEmails[$email] = [
                         'email' => $email,
                         'name' => $name,
@@ -201,8 +216,8 @@ class Onboarding extends Component
 
                 // Extract organizations from email domains
                 $domain = explode('@', $email)[1] ?? null;
-                if ($domain && !in_array($domain, ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com'])) {
-                    if (!isset($orgDomains[$domain])) {
+                if ($domain && ! in_array($domain, ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com'])) {
+                    if (! isset($orgDomains[$domain])) {
                         $orgDomains[$domain] = [
                             'domain' => $domain,
                             'name' => $this->formatOrgName($domain),
@@ -247,6 +262,7 @@ class Onboarding extends Component
     {
         // Remove common TLDs and format nicely
         $name = explode('.', $domain)[0];
+
         return ucwords(str_replace(['-', '_'], ' ', $name));
     }
 
@@ -256,7 +272,7 @@ class Onboarding extends Component
     protected function generateMeetingTitle(?string $rawTitle, string $description, array $attendees, \Carbon\Carbon $date): string
     {
         // If we have a good summary that's not just a date or generic, use it
-        if ($rawTitle && !preg_match('/^\d{1,2}\/\d{1,2}|^\w+day|^meeting$|^untitled/i', $rawTitle)) {
+        if ($rawTitle && ! preg_match('/^\d{1,2}\/\d{1,2}|^\w+day|^meeting$|^untitled/i', $rawTitle)) {
             return $rawTitle;
         }
 
@@ -278,23 +294,24 @@ class Onboarding extends Component
         }
 
         // Build title from attendee names
-        if (!empty($attendees)) {
+        if (! empty($attendees)) {
             $names = array_slice(array_column($attendees, 'name'), 0, 3);
             $nameList = implode(', ', $names);
             if (count($attendees) > 3) {
-                $nameList .= ' +' . (count($attendees) - 3);
+                $nameList .= ' +'.(count($attendees) - 3);
             }
+
             return "Meeting with {$nameList}";
         }
 
         // Fall back to date-based title
-        return "Meeting: " . $date->format('M j, Y');
+        return 'Meeting: '.$date->format('M j, Y');
     }
 
     public function toggleEvent(string $eventId)
     {
         if (in_array($eventId, $this->selectedEvents)) {
-            $this->selectedEvents = array_filter($this->selectedEvents, fn($id) => $id !== $eventId);
+            $this->selectedEvents = array_filter($this->selectedEvents, fn ($id) => $id !== $eventId);
         } else {
             $this->selectedEvents[] = $eventId;
         }
@@ -303,7 +320,7 @@ class Onboarding extends Component
     public function togglePerson(string $email)
     {
         if (in_array($email, $this->selectedPeople)) {
-            $this->selectedPeople = array_filter($this->selectedPeople, fn($e) => $e !== $email);
+            $this->selectedPeople = array_filter($this->selectedPeople, fn ($e) => $e !== $email);
         } else {
             $this->selectedPeople[] = $email;
         }
@@ -312,7 +329,7 @@ class Onboarding extends Component
     public function toggleOrg(string $domain)
     {
         if (in_array($domain, $this->selectedOrgs)) {
-            $this->selectedOrgs = array_filter($this->selectedOrgs, fn($d) => $d !== $domain);
+            $this->selectedOrgs = array_filter($this->selectedOrgs, fn ($d) => $d !== $domain);
         } else {
             $this->selectedOrgs[] = $domain;
         }
@@ -361,11 +378,11 @@ class Onboarding extends Component
         $orgMap = []; // domain => org_id
         foreach ($this->extractedOrgs as $org) {
             if (in_array($org['domain'], $this->selectedOrgs)) {
-                $existing = Organization::where('website', 'like', '%' . $org['domain'] . '%')->first();
-                if (!$existing) {
+                $existing = Organization::where('website', 'like', '%'.$org['domain'].'%')->first();
+                if (! $existing) {
                     $newOrg = Organization::create([
                         'name' => $org['name'],
-                        'website' => 'https://' . $org['domain'],
+                        'website' => 'https://'.$org['domain'],
                     ]);
                     $orgMap[$org['domain']] = $newOrg->id;
                     $importedOrgs++;
@@ -379,7 +396,7 @@ class Onboarding extends Component
         foreach ($this->extractedPeople as $person) {
             if (in_array($person['email'], $this->selectedPeople)) {
                 $existing = Person::where('email', $person['email'])->first();
-                if (!$existing) {
+                if (! $existing) {
                     $domain = explode('@', $person['email'])[1] ?? null;
                     $orgId = $domain ? ($orgMap[$domain] ?? null) : null;
 
@@ -448,6 +465,7 @@ class Onboarding extends Component
     {
         Auth::user()->update(['profile_completed_at' => now()]);
         session()->forget('onboarding_step');
+
         return redirect()->route('dashboard');
     }
 

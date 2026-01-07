@@ -41,4 +41,25 @@ class UserFactory extends Factory
             'email_verified_at' => null,
         ]);
     }
+
+    /**
+     * Indicate that the user has completed their profile (bypasses onboarding).
+     */
+    public function profileCompleted(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'profile_completed_at' => now(),
+        ]);
+    }
+
+    /**
+     * Indicate that the user is an admin.
+     */
+    public function admin(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_admin' => true,
+            'access_level' => 'admin',
+        ]);
+    }
 }

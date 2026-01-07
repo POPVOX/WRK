@@ -45,23 +45,32 @@ class MeetingCapture extends Component
     public $newIssue = '';
 
     public array $selectedOrganizations = [];
+
     public array $selectedPeople = [];
+
     public array $selectedIssues = [];
+
     public array $selectedTeamMembers = [];
 
     // Audio recording/upload properties
     public $audioFile = null;
+
     public $recordedAudioData = null; // Base64 audio from browser recording
+
     public $audioPath = null;
 
     // AI extraction state
     public bool $isProcessing = false;
+
     public bool $isExtracting = false;
+
     public ?string $transcript = null;
 
     // AI-extracted fields (for review before saving)
     public ?string $aiSummary = null;
+
     public ?string $keyAsk = null;
+
     public ?string $commitmentsMade = null;
 
     // Editing mode
@@ -94,11 +103,12 @@ class MeetingCapture extends Component
 
     public function addOrganization()
     {
-        if (empty($this->newOrganization))
+        if (empty($this->newOrganization)) {
             return;
+        }
 
         $org = Organization::firstOrCreate(['name' => $this->newOrganization]);
-        if (!in_array($org->id, $this->selectedOrganizations)) {
+        if (! in_array($org->id, $this->selectedOrganizations)) {
             $this->selectedOrganizations[] = $org->id;
         }
         $this->newOrganization = '';
@@ -108,17 +118,18 @@ class MeetingCapture extends Component
     {
         $this->selectedOrganizations = array_values(array_filter(
             $this->selectedOrganizations,
-            fn($orgId) => $orgId != $id
+            fn ($orgId) => $orgId != $id
         ));
     }
 
     public function addPerson()
     {
-        if (empty($this->newPerson))
+        if (empty($this->newPerson)) {
             return;
+        }
 
         $person = Person::firstOrCreate(['name' => $this->newPerson]);
-        if (!in_array($person->id, $this->selectedPeople)) {
+        if (! in_array($person->id, $this->selectedPeople)) {
             $this->selectedPeople[] = $person->id;
         }
         $this->newPerson = '';
@@ -128,17 +139,18 @@ class MeetingCapture extends Component
     {
         $this->selectedPeople = array_values(array_filter(
             $this->selectedPeople,
-            fn($personId) => $personId != $id
+            fn ($personId) => $personId != $id
         ));
     }
 
     public function addIssue()
     {
-        if (empty($this->newIssue))
+        if (empty($this->newIssue)) {
             return;
+        }
 
         $issue = Issue::firstOrCreate(['name' => $this->newIssue]);
-        if (!in_array($issue->id, $this->selectedIssues)) {
+        if (! in_array($issue->id, $this->selectedIssues)) {
             $this->selectedIssues[] = $issue->id;
         }
         $this->newIssue = '';
@@ -148,13 +160,13 @@ class MeetingCapture extends Component
     {
         $this->selectedIssues = array_values(array_filter(
             $this->selectedIssues,
-            fn($issueId) => $issueId != $id
+            fn ($issueId) => $issueId != $id
         ));
     }
 
     public function addTeamMember($id)
     {
-        if (!in_array($id, $this->selectedTeamMembers)) {
+        if (! in_array($id, $this->selectedTeamMembers)) {
             $this->selectedTeamMembers[] = $id;
         }
     }
@@ -163,7 +175,7 @@ class MeetingCapture extends Component
     {
         $this->selectedTeamMembers = array_values(array_filter(
             $this->selectedTeamMembers,
-            fn($memberId) => $memberId != $id
+            fn ($memberId) => $memberId != $id
         ));
     }
 
@@ -190,8 +202,8 @@ class MeetingCapture extends Component
 
         // Decode base64 and save to temp file
         $audioData = base64_decode(preg_replace('/^data:audio\/\w+;base64,/', '', $base64Data));
-        $filename = 'recording_' . time() . '.webm';
-        $path = 'meetings/temp/' . $filename;
+        $filename = 'recording_'.time().'.webm';
+        $path = 'meetings/temp/'.$filename;
 
         Storage::disk('public')->put($path, $audioData);
         $this->audioPath = $path;
@@ -220,9 +232,10 @@ class MeetingCapture extends Component
                 $audioPath = $this->audioPath;
             }
 
-            if (!$audioPath) {
+            if (! $audioPath) {
                 $this->dispatch('notify', type: 'error', message: 'No audio file to transcribe.');
                 $this->isProcessing = false;
+
                 return;
             }
 
@@ -232,7 +245,7 @@ class MeetingCapture extends Component
                 $this->transcript = $transcript;
                 // Append transcript to raw notes
                 if ($this->raw_notes) {
-                    $this->raw_notes .= "\n\n--- Transcription ---\n" . $transcript;
+                    $this->raw_notes .= "\n\n--- Transcription ---\n".$transcript;
                 } else {
                     $this->raw_notes = $transcript;
                 }
@@ -241,8 +254,8 @@ class MeetingCapture extends Component
                 $this->dispatch('notify', type: 'error', message: 'Failed to transcribe audio.');
             }
         } catch (\Exception $e) {
-            \Log::error('Transcription error: ' . $e->getMessage());
-            $this->dispatch('notify', type: 'error', message: 'Error transcribing audio: ' . $e->getMessage());
+            \Log::error('Transcription error: '.$e->getMessage());
+            $this->dispatch('notify', type: 'error', message: 'Error transcribing audio: '.$e->getMessage());
         }
 
         $this->isProcessing = false;
@@ -255,6 +268,7 @@ class MeetingCapture extends Component
     {
         if (empty($this->raw_notes)) {
             $this->dispatch('notify', type: 'error', message: 'Please enter meeting notes first.');
+
             return;
         }
 
@@ -265,19 +279,19 @@ class MeetingCapture extends Component
             $extractedData = $aiService->extractMeetingData($this->raw_notes);
 
             // Auto-fill title if empty
-            if (empty($this->title) && !empty($extractedData['suggested_title'])) {
+            if (empty($this->title) && ! empty($extractedData['suggested_title'])) {
                 $this->title = $extractedData['suggested_title'];
             }
 
             // Auto-fill date if suggested
-            if (!empty($extractedData['suggested_date'])) {
+            if (! empty($extractedData['suggested_date'])) {
                 $this->meeting_date = $extractedData['suggested_date'];
             }
 
             // Auto-fill organizations
             foreach ($extractedData['organizations'] ?? [] as $name) {
                 $org = Organization::firstOrCreate(['name' => $name]);
-                if (!in_array($org->id, $this->selectedOrganizations)) {
+                if (! in_array($org->id, $this->selectedOrganizations)) {
                     $this->selectedOrganizations[] = $org->id;
                 }
             }
@@ -285,7 +299,7 @@ class MeetingCapture extends Component
             // Auto-fill people
             foreach ($extractedData['people'] ?? [] as $name) {
                 $person = Person::firstOrCreate(['name' => $name]);
-                if (!in_array($person->id, $this->selectedPeople)) {
+                if (! in_array($person->id, $this->selectedPeople)) {
                     $this->selectedPeople[] = $person->id;
                 }
             }
@@ -293,7 +307,7 @@ class MeetingCapture extends Component
             // Auto-fill issues
             foreach ($extractedData['issues'] ?? [] as $name) {
                 $issue = Issue::firstOrCreate(['name' => $name]);
-                if (!in_array($issue->id, $this->selectedIssues)) {
+                if (! in_array($issue->id, $this->selectedIssues)) {
                     $this->selectedIssues[] = $issue->id;
                 }
             }
@@ -305,8 +319,8 @@ class MeetingCapture extends Component
 
             $this->dispatch('notify', type: 'success', message: 'Fields populated from AI extraction. Review and edit as needed.');
         } catch (\Exception $e) {
-            \Log::error('AI extraction error: ' . $e->getMessage());
-            $this->dispatch('notify', type: 'error', message: 'Error extracting data: ' . $e->getMessage());
+            \Log::error('AI extraction error: '.$e->getMessage());
+            $this->dispatch('notify', type: 'error', message: 'Error extracting data: '.$e->getMessage());
         }
 
         $this->isExtracting = false;
@@ -319,7 +333,7 @@ class MeetingCapture extends Component
         // Move audio to permanent location if exists and it's a temp path
         $permanentAudioPath = $this->editingMeeting?->audio_path;
         if ($this->audioPath && Storage::disk('public')->exists($this->audioPath) && str_starts_with($this->audioPath, 'livewire-tmp/')) {
-            $newPath = 'meetings/' . Auth::id() . '/' . basename($this->audioPath);
+            $newPath = 'meetings/'.Auth::id().'/'.basename($this->audioPath);
             Storage::disk('public')->move($this->audioPath, $newPath);
             $permanentAudioPath = $newPath;
         }

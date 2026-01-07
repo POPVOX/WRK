@@ -26,14 +26,14 @@ class ProjectFactory extends Factory
 
     public function initiative(): static
     {
-        return $this->state(fn(array $attributes) => [
+        return $this->state(fn (array $attributes) => [
             'is_initiative' => true,
         ]);
     }
 
     public function active(): static
     {
-        return $this->state(fn(array $attributes) => [
+        return $this->state(fn (array $attributes) => [
             'status' => 'active',
         ]);
     }

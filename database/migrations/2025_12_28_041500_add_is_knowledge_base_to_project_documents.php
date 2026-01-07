@@ -5,12 +5,13 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         if (Schema::hasTable('project_documents')) {
             Schema::table('project_documents', function (Blueprint $table) {
-                if (!Schema::hasColumn('project_documents', 'is_knowledge_base')) {
+                if (! Schema::hasColumn('project_documents', 'is_knowledge_base')) {
                     $table->boolean('is_knowledge_base')->default(true)->after('missing_on_disk');
                 }
                 $table->index(['is_knowledge_base']);

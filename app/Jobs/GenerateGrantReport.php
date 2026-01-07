@@ -3,7 +3,6 @@
 namespace App\Jobs;
 
 use App\Models\Grant;
-use App\Models\Meeting;
 use App\Models\Project;
 use App\Models\ProjectDocument;
 use Illuminate\Bus\Queueable;
@@ -22,13 +21,12 @@ class GenerateGrantReport implements ShouldQueue
     public function __construct(
         public int $grantId,
         public string $reportType = 'progress'
-    ) {
-    }
+    ) {}
 
     public function handle(): void
     {
         $grant = Grant::with(['funder', 'projects', 'reportingRequirements'])->find($this->grantId);
-        if (!$grant) {
+        if (! $grant) {
             return;
         }
 
@@ -38,7 +36,8 @@ class GenerateGrantReport implements ShouldQueue
         $apiKey = config('services.anthropic.api_key');
         if (empty($apiKey)) {
             Log::warning('GenerateGrantReport: No Anthropic API key configured. Set ANTHROPIC_API_KEY in .env');
-            $this->saveReport($grant->id, "AI features are disabled. Please configure the Anthropic API key.");
+            $this->saveReport($grant->id, 'AI features are disabled. Please configure the Anthropic API key.');
+
             return;
         }
 
@@ -48,24 +47,24 @@ class GenerateGrantReport implements ShouldQueue
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->timeout(180)->post('https://api.anthropic.com/v1/messages', [
-                        'model' => config('ai.model', 'claude-sonnet-4-20250514'),
-                        'max_tokens' => 8000,
-                        'messages' => [
-                            ['role' => 'user', 'content' => $prompt],
-                        ],
-                    ]);
+                'model' => config('ai.model', 'claude-sonnet-4-20250514'),
+                'max_tokens' => 8000,
+                'messages' => [
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+            ]);
 
             if ($response->successful()) {
                 $report = $response->json('content.0.text', '');
                 $this->saveReport($grant->id, $report);
                 Log::info("GenerateGrantReport: Successfully generated report for grant {$grant->id}");
             } else {
-                Log::error('GenerateGrantReport: API error - ' . $response->body());
-                $this->saveReport($grant->id, "Error generating report. Please try again.");
+                Log::error('GenerateGrantReport: API error - '.$response->body());
+                $this->saveReport($grant->id, 'Error generating report. Please try again.');
             }
         } catch (\Exception $e) {
-            Log::error('GenerateGrantReport: ' . $e->getMessage());
-            $this->saveReport($grant->id, "Error: " . $e->getMessage());
+            Log::error('GenerateGrantReport: '.$e->getMessage());
+            $this->saveReport($grant->id, 'Error: '.$e->getMessage());
         }
     }
 

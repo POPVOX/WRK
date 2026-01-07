@@ -8,20 +8,32 @@ use Livewire\Component;
 class TeamMemberProfile extends Component
 {
     public User $member;
+
     public bool $editing = false;
 
     // Edit form fields
     public string $name = '';
+
     public string $title = '';
+
     public string $location = '';
+
     public string $timezone = '';
+
     public string $bio = '';
+
     public string $bio_short = '';
+
     public string $bio_medium = '';
+
     public string $phone = '';
+
     public string $linkedin = '';
+
     public string $photo_url = '';
+
     public array $publications = [];
+
     public string $newPublication = '';
 
     protected $rules = [
@@ -103,7 +115,8 @@ class TeamMemberProfile extends Component
         ]);
 
         session()->flash('message', 'Profile updated successfully.');
-        return $this->redirect(route('team.hub') . '?tab=team', navigate: true);
+
+        return $this->redirect(route('team.hub').'?tab=team', navigate: true);
     }
 
     public function getLocalTimeProperty()
@@ -111,6 +124,7 @@ class TeamMemberProfile extends Component
         try {
             $tz = new \DateTimeZone($this->member->timezone ?? 'America/New_York');
             $now = new \DateTime('now', $tz);
+
             return $now->format('g:i A');
         } catch (\Exception $e) {
             return null;

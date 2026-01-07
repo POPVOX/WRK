@@ -21,45 +21,68 @@ class MeetingDetail extends Component
 
     // Editing mode - default to true for inline editing
     public bool $editing = true;
+
     public string $title = '';
+
     public string $meeting_date = '';
+
     public string $prep_notes = '';  // Before meeting prep
+
     public string $raw_notes = '';   // During meeting notes
+
     public string $aiSummary = '';
+
     public string $keyAsk = '';
+
     public string $commitmentsMade = '';
+
     public ?int $leadContactId = null;
 
     // Relationship selections
     public array $selectedOrganizations = [];
+
     public array $selectedPeople = [];
+
     public array $selectedIssues = [];
 
     // Action form fields
     public string $newActionDescription = '';
+
     public ?string $newActionDueDate = null;
+
     public string $newActionPriority = 'medium';
 
     // New person/organization inline add
     public bool $showAddPersonForm = false;
+
     public string $newPersonName = '';
+
     public string $newPersonEmail = '';
+
     public string $newPersonTitle = '';
+
     public ?int $newPersonOrganizationId = null;
 
     public bool $showAddOrganizationForm = false;
+
     public string $newOrganizationName = '';
+
     public string $newOrganizationType = 'other';
 
     // Meeting Prep Modal
     public bool $showPrepModal = false;
+
     public string $prepInputText = '';
+
     public bool $isPrepAnalyzing = false;
+
     public ?array $prepAnalysis = null;
 
     // Voice Dictation & AI Summarization
     public bool $isRecording = false;
+
     public bool $isSummarizing = false;
+
     public string $notesSummary = '';
 
     public function mount(Meeting $meeting)
@@ -266,7 +289,7 @@ class MeetingDetail extends Component
         // Add to raw_notes with timestamp separator
         $timestamp = now()->format('g:i A');
         $separator = empty($this->raw_notes) ? '' : "\n\n";
-        $this->raw_notes .= $separator . "[{$timestamp}] " . trim($text);
+        $this->raw_notes .= $separator."[{$timestamp}] ".trim($text);
 
         $this->dispatch('notify', type: 'success', message: 'Voice note added');
     }
@@ -278,6 +301,7 @@ class MeetingDetail extends Component
     {
         if (empty(trim($this->raw_notes))) {
             $this->dispatch('notify', type: 'error', message: 'No notes to summarize');
+
             return;
         }
 
@@ -288,17 +312,17 @@ class MeetingDetail extends Component
             $extraction = $aiService->extractMeetingData($this->raw_notes);
 
             // Update the AI summary
-            if (!empty($extraction['ai_summary'])) {
+            if (! empty($extraction['ai_summary'])) {
                 $this->aiSummary = $extraction['ai_summary'];
             }
 
             // Update key ask if extracted
-            if (!empty($extraction['key_ask'])) {
+            if (! empty($extraction['key_ask'])) {
                 $this->keyAsk = $extraction['key_ask'];
             }
 
             // Update commitments if extracted
-            if (!empty($extraction['commitments_made'])) {
+            if (! empty($extraction['commitments_made'])) {
                 $this->commitmentsMade = $extraction['commitments_made'];
             }
 
@@ -314,7 +338,7 @@ class MeetingDetail extends Component
 
             $this->dispatch('notify', type: 'success', message: 'Notes summarized with AI!');
         } catch (\Exception $e) {
-            $this->dispatch('notify', type: 'error', message: 'Failed to summarize: ' . $e->getMessage());
+            $this->dispatch('notify', type: 'error', message: 'Failed to summarize: '.$e->getMessage());
         } finally {
             $this->isSummarizing = false;
         }
@@ -325,7 +349,7 @@ class MeetingDetail extends Component
      */
     public function toggleRecording(): void
     {
-        $this->isRecording = !$this->isRecording;
+        $this->isRecording = ! $this->isRecording;
     }
 
     // Meeting Prep Methods
@@ -349,6 +373,7 @@ class MeetingDetail extends Component
         if (empty($apiKey)) {
             $this->prepAnalysis = ['error' => 'AI features are not configured.'];
             $this->isPrepAnalyzing = false;
+
             return;
         }
 
@@ -361,28 +386,28 @@ class MeetingDetail extends Component
                 'anthropic-version' => '2023-06-01',
                 'Content-Type' => 'application/json',
             ])->timeout(60)->post('https://api.anthropic.com/v1/messages', [
-                        'model' => 'claude-sonnet-4-20250514',
-                        'max_tokens' => 2000,
-                        'system' => "You are an executive assistant helping prepare for a meeting. Analyze the provided material and context to create a comprehensive meeting prep brief. Return a JSON object with the following structure:
+                'model' => 'claude-sonnet-4-20250514',
+                'max_tokens' => 2000,
+                'system' => 'You are an executive assistant helping prepare for a meeting. Analyze the provided material and context to create a comprehensive meeting prep brief. Return a JSON object with the following structure:
 {
-    \"attendee_analysis\": {
-        \"key_people\": [\"Name - Role/Context\"],
-        \"organization_context\": \"Brief on the organizations involved\"
+    "attendee_analysis": {
+        "key_people": ["Name - Role/Context"],
+        "organization_context": "Brief on the organizations involved"
     },
-    \"suggested_topics\": [\"Topic 1\", \"Topic 2\"],
-    \"relevant_history\": \"Summary of past interactions if any\",
-    \"relevant_projects\": [\"Project names that may be discussed\"],
-    \"key_questions\": [\"Questions to ask\"],
-    \"preparation_notes\": \"Any specific preparation recommendations\",
-    \"potential_asks\": [\"Things they might ask for\", \"Things we might ask for\"]
-}",
-                        'messages' => [
-                            [
-                                'role' => 'user',
-                                'content' => "Meeting Context:\n{$meetingContext}\n\nAdditional Material:\n{$this->prepInputText}\n\nPlease analyze this and provide a meeting prep brief as JSON."
-                            ]
-                        ],
-                    ]);
+    "suggested_topics": ["Topic 1", "Topic 2"],
+    "relevant_history": "Summary of past interactions if any",
+    "relevant_projects": ["Project names that may be discussed"],
+    "key_questions": ["Questions to ask"],
+    "preparation_notes": "Any specific preparation recommendations",
+    "potential_asks": ["Things they might ask for", "Things we might ask for"]
+}',
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => "Meeting Context:\n{$meetingContext}\n\nAdditional Material:\n{$this->prepInputText}\n\nPlease analyze this and provide a meeting prep brief as JSON.",
+                    ],
+                ],
+            ]);
 
             if ($response->successful()) {
                 $content = $response->json()['content'][0]['text'] ?? '';
@@ -396,7 +421,7 @@ class MeetingDetail extends Component
                 $this->prepAnalysis = ['error' => 'Failed to analyze. Try again.'];
             }
         } catch (\Exception $e) {
-            $this->prepAnalysis = ['error' => 'Error: ' . $e->getMessage()];
+            $this->prepAnalysis = ['error' => 'Error: '.$e->getMessage()];
         }
 
         $this->isPrepAnalyzing = false;
@@ -406,22 +431,21 @@ class MeetingDetail extends Component
     {
         $context = [];
 
-        $context[] = "Meeting Title: " . ($this->meeting->title ?: 'Untitled');
-        $context[] = "Date: " . ($this->meeting->meeting_date?->format('F j, Y') ?: 'TBD');
+        $context[] = 'Meeting Title: '.($this->meeting->title ?: 'Untitled');
+        $context[] = 'Date: '.($this->meeting->meeting_date?->format('F j, Y') ?: 'TBD');
 
         // Attendees
         if ($this->meeting->people->count() > 0) {
             $attendees = $this->meeting->people->map(
-                fn($p) =>
-                $p->name . ($p->title ? " ({$p->title})" : '') . ($p->organization ? " at {$p->organization->name}" : '')
+                fn ($p) => $p->name.($p->title ? " ({$p->title})" : '').($p->organization ? " at {$p->organization->name}" : '')
             )->join(', ');
-            $context[] = "Attendees: " . $attendees;
+            $context[] = 'Attendees: '.$attendees;
         }
 
         // Organizations
         if ($this->meeting->organizations->count() > 0) {
             $orgs = $this->meeting->organizations->pluck('name')->join(', ');
-            $context[] = "Organizations: " . $orgs;
+            $context[] = 'Organizations: '.$orgs;
 
             // Get past meetings with these organizations
             $pastMeetings = \App\Models\Meeting::whereHas('organizations', function ($q) {
@@ -436,9 +460,9 @@ class MeetingDetail extends Component
             if ($pastMeetings->count() > 0) {
                 $context[] = "\nPast meetings with these organizations:";
                 foreach ($pastMeetings as $pm) {
-                    $context[] = "- {$pm->meeting_date->format('M j, Y')}: " . ($pm->title ?: 'Untitled');
+                    $context[] = "- {$pm->meeting_date->format('M j, Y')}: ".($pm->title ?: 'Untitled');
                     if ($pm->ai_summary) {
-                        $context[] = "  Summary: " . \Str::limit($pm->ai_summary, 200);
+                        $context[] = '  Summary: '.\Str::limit($pm->ai_summary, 200);
                     }
                 }
             }
@@ -447,7 +471,7 @@ class MeetingDetail extends Component
         // Issues/Topics
         if ($this->meeting->issues->count() > 0) {
             $issues = $this->meeting->issues->pluck('name')->join(', ');
-            $context[] = "Topics: " . $issues;
+            $context[] = 'Topics: '.$issues;
         }
 
         // Relevant Projects
@@ -461,7 +485,7 @@ class MeetingDetail extends Component
         if ($projects->count() > 0) {
             $context[] = "\nRelevant Projects:";
             foreach ($projects as $proj) {
-                $context[] = "- {$proj->name}" . ($proj->description ? ": " . \Str::limit($proj->description, 100) : '');
+                $context[] = "- {$proj->name}".($proj->description ? ': '.\Str::limit($proj->description, 100) : '');
             }
         }
 
@@ -473,21 +497,21 @@ class MeetingDetail extends Component
         $prepText = "# AI Meeting Prep\n\n";
 
         // Add attendee analysis
-        if (!empty($this->prepAnalysis['attendee_analysis'])) {
+        if (! empty($this->prepAnalysis['attendee_analysis'])) {
             $prepText .= "## Who You're Meeting With\n";
-            if (!empty($this->prepAnalysis['attendee_analysis']['key_people'])) {
+            if (! empty($this->prepAnalysis['attendee_analysis']['key_people'])) {
                 foreach ($this->prepAnalysis['attendee_analysis']['key_people'] as $person) {
                     $prepText .= "- {$person}\n";
                 }
             }
-            if (!empty($this->prepAnalysis['attendee_analysis']['organization_context'])) {
-                $prepText .= "\n" . $this->prepAnalysis['attendee_analysis']['organization_context'] . "\n";
+            if (! empty($this->prepAnalysis['attendee_analysis']['organization_context'])) {
+                $prepText .= "\n".$this->prepAnalysis['attendee_analysis']['organization_context']."\n";
             }
             $prepText .= "\n";
         }
 
         // Add suggested topics
-        if (!empty($this->prepAnalysis['suggested_topics'])) {
+        if (! empty($this->prepAnalysis['suggested_topics'])) {
             $prepText .= "## Suggested Topics\n";
             foreach ($this->prepAnalysis['suggested_topics'] as $topic) {
                 $prepText .= "- {$topic}\n";
@@ -496,7 +520,7 @@ class MeetingDetail extends Component
         }
 
         // Add key questions
-        if (!empty($this->prepAnalysis['key_questions'])) {
+        if (! empty($this->prepAnalysis['key_questions'])) {
             $prepText .= "## Key Questions\n";
             foreach ($this->prepAnalysis['key_questions'] as $question) {
                 $prepText .= "- {$question}\n";
@@ -505,7 +529,7 @@ class MeetingDetail extends Component
         }
 
         // Add potential asks
-        if (!empty($this->prepAnalysis['potential_asks'])) {
+        if (! empty($this->prepAnalysis['potential_asks'])) {
             $prepText .= "## Potential Asks\n";
             foreach ($this->prepAnalysis['potential_asks'] as $ask) {
                 $prepText .= "- {$ask}\n";
@@ -514,19 +538,19 @@ class MeetingDetail extends Component
         }
 
         // Add preparation notes
-        if (!empty($this->prepAnalysis['preparation_notes'])) {
+        if (! empty($this->prepAnalysis['preparation_notes'])) {
             $prepText .= "## Preparation Notes\n";
-            $prepText .= $this->prepAnalysis['preparation_notes'] . "\n";
+            $prepText .= $this->prepAnalysis['preparation_notes']."\n";
         }
 
         // Add relevant history
-        if (!empty($this->prepAnalysis['relevant_history'])) {
+        if (! empty($this->prepAnalysis['relevant_history'])) {
             $prepText .= "\n## Relevant History\n";
-            $prepText .= $this->prepAnalysis['relevant_history'] . "\n";
+            $prepText .= $this->prepAnalysis['relevant_history']."\n";
         }
 
         // Update prep_notes field (append to existing)
-        $this->prep_notes = trim($prepText . "\n\n" . $this->prep_notes);
+        $this->prep_notes = trim($prepText."\n\n".$this->prep_notes);
 
         // Also save the structured analysis for future reference
         $this->meeting->update([

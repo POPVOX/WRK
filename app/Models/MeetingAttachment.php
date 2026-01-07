@@ -22,7 +22,9 @@ class MeetingAttachment extends Model
      * File type constants.
      */
     public const TYPE_IMAGE = 'image';
+
     public const TYPE_PDF = 'pdf';
+
     public const TYPE_DOCUMENT = 'document';
 
     public const TYPES = [

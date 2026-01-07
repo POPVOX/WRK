@@ -2,11 +2,11 @@
 
 namespace App\Livewire\People;
 
-use App\Models\Person;
-use App\Models\Organization;
-use App\Models\ProfileAttachment;
 use App\Models\Issue;
+use App\Models\Organization;
+use App\Models\Person;
 use App\Models\PersonInteraction;
+use App\Models\ProfileAttachment;
 use App\Models\User;
 use App\Services\LinkedInScraperService;
 use Livewire\Attributes\Layout;
@@ -17,40 +17,61 @@ use Livewire\WithFileUploads;
 class PersonShow extends Component
 {
     use WithFileUploads;
+
     public Person $person;
 
     public bool $editing = false;
+
     public string $name = '';
+
     public ?int $organization_id = null;
+
     public string $title = '';
+
     public string $email = '';
+
     public string $phone = '';
+
     public string $linkedin_url = '';
+
     public string $notes = '';
 
     // CRM fields
     public ?string $status = null;
+
     public ?int $owner_id = null;
+
     public ?string $source = null;
+
     public string $tagsInput = '';
+
     public ?string $next_action_at = null;
+
     public string $next_action_note = '';
 
     // Interaction form
     public string $interaction_type = 'note'; // call,email,meeting,note
+
     public ?string $interaction_date = null;
+
     public string $interaction_summary = '';
+
     public ?string $interaction_next_at = null;
+
     public string $interaction_next_note = '';
 
     // File upload
     public $newAttachment;
+
     public string $attachmentNotes = '';
 
     // Project linking
     public bool $showAddProjectModal = false;
+
     public string $projectSearch = '';
+
     public ?int $selectedProjectId = null;
+
     public string $projectRole = '';
 
     public function mount(Person $person)
@@ -116,7 +137,7 @@ class PersonShow extends Component
         $this->editing = false;
 
         // Auto-fetch LinkedIn if URL was added/changed and no photo exists
-        if ($linkedinChanged && !$this->person->photo_url) {
+        if ($linkedinChanged && ! $this->person->photo_url) {
             $this->fetchFromLinkedIn();
         } else {
             $this->dispatch('notify', type: 'success', message: 'Person updated successfully!');
@@ -127,6 +148,7 @@ class PersonShow extends Component
     {
         if (empty($this->person->linkedin_url)) {
             $this->dispatch('notify', type: 'error', message: 'Please add a LinkedIn URL first.');
+
             return;
         }
 
@@ -149,13 +171,13 @@ class PersonShow extends Component
         }
 
         // Job title parsed from og:title
-        if ($data['job_title'] && !$this->person->title) {
+        if ($data['job_title'] && ! $this->person->title) {
             $updates['title'] = $data['job_title'];
             $fieldsUpdated[] = 'title';
         }
 
         // Organization parsed from og:title
-        if ($data['company'] && !$this->person->organization_id) {
+        if ($data['company'] && ! $this->person->organization_id) {
             // Try to find or create the organization
             $org = Organization::firstOrCreate(
                 ['name' => $data['company']],
@@ -165,11 +187,11 @@ class PersonShow extends Component
             $fieldsUpdated[] = 'organization';
         }
 
-        if (!empty($updates)) {
+        if (! empty($updates)) {
             $this->person->update($updates);
             $this->person->refresh();
             $this->loadPersonData();
-            $this->dispatch('notify', type: 'success', message: 'LinkedIn data fetched: ' . implode(', ', $fieldsUpdated) . ' updated!');
+            $this->dispatch('notify', type: 'success', message: 'LinkedIn data fetched: '.implode(', ', $fieldsUpdated).' updated!');
         } else {
             $this->dispatch('notify', type: 'warning', message: 'Could not extract data from LinkedIn. Personal profiles often require login.');
         }
@@ -195,7 +217,7 @@ class PersonShow extends Component
                     $query->whereHas('people', function ($q) {
                         $q->where('people.id', $this->person->id);
                     });
-                }
+                },
             ])
             ->orderByDesc('meetings_count')
             ->limit(5)
@@ -205,7 +227,7 @@ class PersonShow extends Component
     // --- Project Linking ---
     public function toggleAddProjectModal()
     {
-        $this->showAddProjectModal = !$this->showAddProjectModal;
+        $this->showAddProjectModal = ! $this->showAddProjectModal;
         $this->projectSearch = '';
         $this->selectedProjectId = null;
         $this->projectRole = '';
@@ -220,12 +242,13 @@ class PersonShow extends Component
 
     public function linkProject()
     {
-        if (!$this->selectedProjectId) {
+        if (! $this->selectedProjectId) {
             return;
         }
 
         if ($this->person->projects()->where('project_id', $this->selectedProjectId)->exists()) {
             $this->dispatch('notify', type: 'error', message: 'Project already linked.');
+
             return;
         }
 
@@ -250,7 +273,7 @@ class PersonShow extends Component
     {
         // Validate limited fields
         $this->validate([
-            'status' => 'nullable|string|in:' . implode(',', array_keys(Person::STATUSES)),
+            'status' => 'nullable|string|in:'.implode(',', array_keys(Person::STATUSES)),
             'owner_id' => 'nullable|exists:users,id',
             'next_action_at' => 'nullable|date',
             'next_action_note' => 'nullable|string|max:500',
@@ -258,7 +281,7 @@ class PersonShow extends Component
         ]);
 
         $tags = collect(explode(',', (string) $this->tagsInput))
-            ->map(fn($t) => trim($t))
+            ->map(fn ($t) => trim($t))
             ->filter()
             ->unique()
             ->values()
@@ -279,7 +302,7 @@ class PersonShow extends Component
 
     public function addTag(string $tag): void
     {
-        $tags = collect($this->person->tags ?? [])->merge([$tag])->map(fn($t) => trim($t))->filter()->unique()->values()->all();
+        $tags = collect($this->person->tags ?? [])->merge([$tag])->map(fn ($t) => trim($t))->filter()->unique()->values()->all();
         $this->person->tags = $tags;
         $this->person->save();
         $this->tagsInput = implode(', ', $tags);
@@ -287,7 +310,7 @@ class PersonShow extends Component
 
     public function removeTag(string $tag): void
     {
-        $tags = collect($this->person->tags ?? [])->reject(fn($t) => trim($t) === $tag)->values()->all();
+        $tags = collect($this->person->tags ?? [])->reject(fn ($t) => trim($t) === $tag)->values()->all();
         $this->person->tags = $tags;
         $this->person->save();
         $this->tagsInput = implode(', ', $tags);
@@ -357,7 +380,7 @@ class PersonShow extends Component
         $projects = $this->person->projects()->orderBy('name')->get();
 
         $projectResults = $this->projectSearch && strlen($this->projectSearch) >= 2
-            ? \App\Models\Project::where('name', 'like', '%' . $this->projectSearch . '%')
+            ? \App\Models\Project::where('name', 'like', '%'.$this->projectSearch.'%')
                 ->where('status', '!=', 'archived')
                 ->limit(10)
                 ->get()
@@ -377,7 +400,7 @@ class PersonShow extends Component
             'interactions' => $interactions,
             'owners' => $owners,
             'statuses' => $statuses,
-        ])->title($this->person->name . ' - Contact');
+        ])->title($this->person->name.' - Contact');
     }
 
     public function uploadAttachment()

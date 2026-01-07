@@ -90,6 +90,7 @@ class Grant extends Model
         if ($user->access_level === 'management') {
             return $query->whereIn('visibility', ['all', 'management']);
         }
+
         return $query->where('visibility', 'all');
     }
 }
