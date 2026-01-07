@@ -1,7 +1,7 @@
 # WRK - Intelligent Workspace for Nonprofit Teams
 
 <p align="center">
-  <img src="public/images/wrk_favicon.png" width="80" alt="WRK Logo">
+  <img src="public/favicon.png" width="80" alt="WRK Logo">
 </p>
 
 **WRK** is a comprehensive workspace management platform designed for nonprofit organizations. It streamlines project management, meeting intelligence, funder relations, and team collaboration with AI-powered insights.
@@ -288,10 +288,6 @@ php artisan queue:work
 - [ ] Embedding-based search for higher-recall RAG
 - [ ] Alerting hooks (Slack/Email) on AI/queue/calendar faults
 - [ ] Feedback analytics dashboard with trends over time
-
----
-
-
 
 ---
 
