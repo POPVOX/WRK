@@ -62,7 +62,7 @@
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                 <div class="border-b border-gray-200 dark:border-gray-700">
                     <nav class="flex -mb-px overflow-x-auto">
-                        @foreach(['overview' => 'Overview', 'contacts' => 'Contacts', 'documents' => 'Documents', 'requirements' => 'Requirements', 'reports' => '✨ AI Reports'] as $tab => $label)
+                        @foreach(['overview' => 'Overview', 'contacts' => 'Contacts', 'documents' => 'Documents', 'requirements' => 'Requirements', 'reports' => '✨ AI Reports', 'automated' => '📊 Automated Reports'] as $tab => $label)
                             <button wire:click="setTab('{{ $tab }}')"
                                 class="px-6 py-3 text-sm font-medium border-b-2 whitespace-nowrap {{ $activeTab === $tab ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700' }}">
                                 {{ $label }}
@@ -830,6 +830,11 @@
                                 </div>
                             @endif
                         </div>
+                    @endif
+
+                    {{-- Automated Reports Tab --}}
+                    @if($activeTab === 'automated')
+                        <livewire:grants.automated-reports :grant="$grant" :key="'automated-reports-'.$grant->id" />
                     @endif
                 </div>
             </div>

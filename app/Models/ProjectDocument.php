@@ -36,6 +36,9 @@ class ProjectDocument extends Model
         'last_synced_at',
         'cached_content',
         'visibility',
+        'grant_associations',
+        'metric_tags',
+        'document_type',
     ];
 
     protected $casts = [
@@ -47,6 +50,22 @@ class ProjectDocument extends Model
         'tags' => 'array',
         'suggested_tags' => 'array',
         'last_synced_at' => 'datetime',
+        'grant_associations' => 'array',
+        'metric_tags' => 'array',
+    ];
+
+    public const DOCUMENT_TYPES = [
+        'policy_brief' => 'Policy Brief',
+        'testimony' => 'Testimony',
+        'model_legislation' => 'Model Legislation',
+        'report' => 'Report',
+        'analysis' => 'Analysis',
+        'factsheet' => 'Fact Sheet',
+        'presentation' => 'Presentation',
+        'publication' => 'Publication',
+        'blog_post' => 'Blog Post',
+        'op_ed' => 'Op-Ed',
+        'other' => 'Other',
     ];
 
     public const TYPES = [
