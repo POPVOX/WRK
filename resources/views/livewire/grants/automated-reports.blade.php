@@ -35,8 +35,8 @@
         @endif
     </div>
 
-    {{-- No Schema State --}}
-    @if(!$this->hasSchema)
+    {{-- No Schema State (only show if not in chatbot mode) --}}
+    @if(!$this->hasSchema && !$showChatbot)
         <div class="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800 p-8 text-center">
             <div class="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg class="w-8 h-8 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -48,12 +48,17 @@
                 I'll analyze your grant documents and help you create a custom reporting schema. 
                 Track metrics automatically and generate reports with ease.
             </p>
-            <button wire:click="startSetup"
+            <button wire:click="startSetup" wire:loading.attr="disabled" wire:loading.class="opacity-50 cursor-wait"
                 class="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg wire:loading.remove wire:target="startSetup" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                Start AI Setup
+                <svg wire:loading wire:target="startSetup" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                <span wire:loading.remove wire:target="startSetup">Start AI Setup</span>
+                <span wire:loading wire:target="startSetup">Starting...</span>
             </button>
         </div>
     @endif

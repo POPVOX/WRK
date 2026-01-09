@@ -128,10 +128,7 @@ class AutomatedReports extends Component
 
     public function startSetup(): void
     {
-        // Dispatch AI job to analyze grant and create draft schema
-        AnalyzeGrantForAutomation::dispatch($this->grant->id, Auth::id());
-
-        // Start chatbot conversation
+        // Start chatbot conversation immediately
         $this->showChatbot = true;
         $this->activeConversation = SchemaChatbotConversation::create([
             'grant_id' => $this->grant->id,
@@ -145,9 +142,19 @@ class AutomatedReports extends Component
         $this->chatHistory = [];
         $this->addSystemMessage("I'm analyzing your grant documents to suggest an automated reporting structure. This may take a moment...");
 
-        // In a real implementation, you'd poll for the schema or use websockets
-        // For now, we'll trigger the analysis inline
-        $this->analyzeAndSuggestSchema();
+        // Try to analyze and suggest schema (with error handling)
+        try {
+            $this->analyzeAndSuggestSchema();
+        } catch (\Exception $e) {
+            Log::error('AutomatedReports startSetup error: '.$e->getMessage());
+            $this->addSystemMessage(
+                "I encountered an issue analyzing the documents automatically, but we can still set up your reporting schema together!\n\n".
+                "Tell me about your grant's reporting requirements:\n".
+                "- What metrics do you need to track?\n".
+                "- How often do you report (quarterly, annually)?\n".
+                "- What outcomes or goals are you measuring?"
+            );
+        }
     }
 
     public function openRefineChat(): void
@@ -225,6 +232,20 @@ class AutomatedReports extends Component
 
     protected function analyzeAndSuggestSchema(): void
     {
+        // Check if AI is configured
+        $apiKey = config('services.anthropic.api_key');
+        if (empty($apiKey)) {
+            $this->addSystemMessage(
+                "AI analysis is not available (API key not configured).\n\n".
+                "However, we can still set up your reporting schema manually! Tell me about:\n".
+                "- What metrics do you need to track?\n".
+                "- How often do you report?\n".
+                "- What outcomes or goals are you measuring?"
+            );
+
+            return;
+        }
+
         // Run the analysis job synchronously for immediate feedback
         $job = new AnalyzeGrantForAutomation($this->grant->id, Auth::id());
         $schema = $job->handle();
@@ -250,12 +271,28 @@ class AutomatedReports extends Component
                 ['action' => 'schema_created']
             );
         } else {
-            $this->addSystemMessage(
-                "I wasn't able to automatically generate a schema. This might happen if:\n".
-                "- No grant documents have been uploaded yet\n".
-                "- The documents haven't been analyzed yet\n\n".
-                "Would you like to describe your reporting requirements and I'll help you set up the schema manually?"
-            );
+            // Check if there are any grant documents
+            $docCount = $this->grant->documents()->count();
+
+            if ($docCount === 0) {
+                $this->addSystemMessage(
+                    "I don't see any grant documents uploaded yet. To get the best automated reporting suggestions, ".
+                    "please upload your grant agreement, proposal, or reporting requirements document first.\n\n".
+                    "Alternatively, tell me about your reporting requirements and I'll help you set up the schema manually:\n".
+                    "- What metrics do you need to track?\n".
+                    "- How often do you report (quarterly, annually)?\n".
+                    "- What outcomes or goals are you measuring?"
+                );
+            } else {
+                $this->addSystemMessage(
+                    "I found {$docCount} document(s) but couldn't extract a reporting schema automatically. ".
+                    "This can happen if the documents don't contain specific reporting requirements.\n\n".
+                    "Let's set this up together! Tell me:\n".
+                    "- What metrics do you need to track for this grant?\n".
+                    "- How often do you report?\n".
+                    "- What outcomes or goals are you measuring?"
+                );
+            }
         }
     }
 
