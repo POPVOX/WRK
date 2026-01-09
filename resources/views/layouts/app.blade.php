@@ -6,8 +6,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>{{ config('app.name', 'WRK') }}</title>
-    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
+    <title>{{ $title ?? config('app.name', 'WRK') }} - {{ config('app.name', 'WRK') }}</title>
+    <meta name="description" content="WRK - Workspace Management for POPVOX Foundation. Track projects, meetings, contacts, and grant reporting.">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/wrk favicon.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('images/wrk favicon.png') }}">
+    <link rel="apple-touch-icon" href="{{ asset('images/wrk favicon.png') }}">
+    
+    <!-- Open Graph / Social -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="{{ $title ?? config('app.name', 'WRK') }}">
+    <meta property="og:description" content="WRK - Workspace Management for POPVOX Foundation">
+    <meta property="og:image" content="{{ asset('images/logo.png') }}">
+    
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#4f46e5">
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.bunny.net">

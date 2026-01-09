@@ -11,13 +11,35 @@ class Action extends Model
     use HasFactory;
 
     protected $fillable = [
+        'title',
         'meeting_id',
+        'project_id',
         'description',
+        'notes',
         'due_date',
         'priority',
         'status',
+        'source',
         'assigned_to',
         'completed_at',
+    ];
+
+    /**
+     * Source constants.
+     */
+    public const SOURCE_MANUAL = 'manual';
+
+    public const SOURCE_MEETING = 'meeting';
+
+    public const SOURCE_AI_SUGGESTED = 'ai_suggested';
+
+    public const SOURCE_CALENDAR = 'calendar';
+
+    public const SOURCES = [
+        self::SOURCE_MANUAL,
+        self::SOURCE_MEETING,
+        self::SOURCE_AI_SUGGESTED,
+        self::SOURCE_CALENDAR,
     ];
 
     protected $casts = [
@@ -61,11 +83,51 @@ class Action extends Model
     }
 
     /**
+     * Get the project this action belongs to.
+     */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
+
+    /**
      * Get the user this action is assigned to.
      */
     public function assignedTo(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    /**
+     * Check if this is a standalone task (not from a meeting).
+     */
+    public function isStandalone(): bool
+    {
+        return is_null($this->meeting_id);
+    }
+
+    /**
+     * Get display title (title or description).
+     */
+    public function getDisplayTitleAttribute(): string
+    {
+        return $this->title ?: $this->description;
+    }
+
+    /**
+     * Scope for standalone tasks.
+     */
+    public function scopeStandalone($query)
+    {
+        return $query->whereNull('meeting_id');
+    }
+
+    /**
+     * Scope for AI suggested tasks.
+     */
+    public function scopeAiSuggested($query)
+    {
+        return $query->where('source', self::SOURCE_AI_SUGGESTED);
     }
 
     /**
