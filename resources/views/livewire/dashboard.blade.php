@@ -789,6 +789,56 @@
                 @endif
             </div>
 
+            {{-- ============================================== --}}
+            {{-- MY WINS WIDGET --}}
+            {{-- ============================================== --}}
+            <div class="grid lg:grid-cols-3 gap-6 mb-6">
+                <div class="lg:col-span-1">
+                    <livewire:accomplishments.my-wins-widget />
+                </div>
+                
+                {{-- Quick Links for Management (Admin only) --}}
+                @if(auth()->user()->isAdmin())
+                    <div class="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+                        <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                            📊 Team Management
+                        </h2>
+                        <div class="grid sm:grid-cols-3 gap-4">
+                            <a href="{{ route('accomplishments.team') }}" wire:navigate
+                                class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                                <div class="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/40 rounded-lg flex items-center justify-center text-lg">
+                                    📊
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-900 dark:text-white">Team Dashboard</div>
+                                    <div class="text-xs text-gray-500">View team accomplishments</div>
+                                </div>
+                            </a>
+                            <a href="{{ route('admin.staff') }}" wire:navigate
+                                class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                                <div class="w-10 h-10 bg-blue-100 dark:bg-blue-900/40 rounded-lg flex items-center justify-center text-lg">
+                                    👥
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-900 dark:text-white">Staff Management</div>
+                                    <div class="text-xs text-gray-500">Manage team members</div>
+                                </div>
+                            </a>
+                            <a href="{{ route('admin.feedback') }}" wire:navigate
+                                class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                                <div class="w-10 h-10 bg-purple-100 dark:bg-purple-900/40 rounded-lg flex items-center justify-center text-lg">
+                                    💬
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-900 dark:text-white">Feedback</div>
+                                    <div class="text-xs text-gray-500">View user feedback</div>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                @endif
+            </div>
+
         </div>
     </div>
 </div>

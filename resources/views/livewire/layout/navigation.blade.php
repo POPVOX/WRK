@@ -81,6 +81,18 @@ new class extends Component {
                             {{ __('Profile') }}
                         </x-dropdown-link>
 
+                        <x-dropdown-link :href="route('accomplishments.index')" wire:navigate>
+                            🏆 {{ __('My Accomplishments') }}
+                        </x-dropdown-link>
+
+                        @if(auth()->user()->isAdmin())
+                            <x-dropdown-link :href="route('accomplishments.team')" wire:navigate>
+                                📊 {{ __('Team Dashboard') }}
+                            </x-dropdown-link>
+                        @endif
+
+                        <div class="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+
                         <!-- Authentication -->
                         <button wire:click="logout" class="w-full text-start">
                             <x-dropdown-link>
