@@ -45,4 +45,10 @@ return [
         'api_key' => env('ANTHROPIC_API_KEY'),
     ],
 
+    'github' => [
+        'token' => env('GITHUB_TOKEN'),
+        'repo' => env('GITHUB_REPO', 'POPVOX/WRK'),
+        'auto_create_issues' => env('GITHUB_AUTO_CREATE_ISSUES', false),
+    ],
+
 ];
