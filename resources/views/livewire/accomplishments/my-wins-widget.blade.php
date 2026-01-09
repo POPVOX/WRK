@@ -10,6 +10,12 @@
         </a>
     </div>
 
+    @if($hasError)
+        <div class="text-center py-4 text-gray-500 dark:text-gray-400">
+            <p class="text-sm">Unable to load stats</p>
+        </div>
+    @else
+
     {{-- Quick Stats --}}
     @if($weekStats)
         <div class="grid grid-cols-4 gap-3 mb-4">
@@ -87,5 +93,6 @@
             Add Accomplishment
         </a>
     </div>
+    @endif
 </div>
 
