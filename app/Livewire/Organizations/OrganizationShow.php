@@ -7,6 +7,7 @@ use App\Models\Organization;
 use App\Models\Person;
 use App\Models\ProfileAttachment;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -56,6 +57,13 @@ class OrganizationShow extends Component
 
     public string $projectRole = '';
 
+    // Geographic tags
+    public array $selectedRegions = [];
+
+    public array $selectedCountries = [];
+
+    public array $selectedUsStates = [];
+
     public function mount(Organization $organization)
     {
         $this->organization = $organization;
@@ -70,6 +78,19 @@ class OrganizationShow extends Component
         $this->website = $this->organization->website ?? '';
         $this->linkedin_url = $this->organization->linkedin_url ?? '';
         $this->notes = $this->organization->notes ?? '';
+
+        // Geographic tags
+        $this->selectedRegions = $this->organization->geographicTags()->where('geographic_type', 'region')->pluck('geographic_id')->toArray();
+        $this->selectedCountries = $this->organization->geographicTags()->where('geographic_type', 'country')->pluck('geographic_id')->toArray();
+        $this->selectedUsStates = $this->organization->geographicTags()->where('geographic_type', 'us_state')->pluck('geographic_id')->toArray();
+    }
+
+    #[On('geographic-tags-updated')]
+    public function updateGeographicTags(array $data): void
+    {
+        $this->selectedRegions = $data['regions'] ?? [];
+        $this->selectedCountries = $data['countries'] ?? [];
+        $this->selectedUsStates = $data['usStates'] ?? [];
     }
 
     public function startEditing()
@@ -105,6 +126,14 @@ class OrganizationShow extends Component
             'notes' => $this->notes ?: null,
         ]);
 
+        // Sync geographic tags
+        $this->organization->syncGeographicTags(
+            $this->selectedRegions,
+            $this->selectedCountries,
+            $this->selectedUsStates
+        );
+
+        $this->organization->refresh();
         $this->editing = false;
 
         // Auto-fetch LinkedIn if URL was added/changed and no logo exists

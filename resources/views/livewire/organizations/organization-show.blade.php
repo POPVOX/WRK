@@ -65,6 +65,16 @@
                             <textarea wire:model="notes" rows="3"
                                 class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
                         </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Geographic Focus</label>
+                            <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                                <livewire:components.geographic-tag-selector
+                                    :selectedRegions="$selectedRegions"
+                                    :selectedCountries="$selectedCountries"
+                                    :selectedUsStates="$selectedUsStates"
+                                />
+                            </div>
+                        </div>
                         <div class="flex gap-2">
                             <button type="submit"
                                 class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700">
@@ -106,6 +116,22 @@
                                             {{ $organization->type }}
                                         </span>
                                     @endif
+                                    {{-- Geographic Tags --}}
+                                    @foreach($organization->regions as $region)
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
+                                            🌍 {{ $region->name }}
+                                        </span>
+                                    @endforeach
+                                    @foreach($organization->countries as $country)
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">
+                                            🏳️ {{ $country->name }}
+                                        </span>
+                                    @endforeach
+                                    @foreach($organization->usStates as $state)
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                                            🇺🇸 {{ $state->abbreviation }}
+                                        </span>
+                                    @endforeach
                                 </div>
                                 @if($organization->description)
                                     <p class="mt-1 text-sm text-gray-600 dark:text-gray-400 max-w-2xl">

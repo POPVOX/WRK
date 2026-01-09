@@ -10,6 +10,7 @@ use App\Models\ProfileAttachment;
 use App\Models\User;
 use App\Services\LinkedInScraperService;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -74,6 +75,13 @@ class PersonShow extends Component
 
     public string $projectRole = '';
 
+    // Geographic tags
+    public array $selectedRegions = [];
+
+    public array $selectedCountries = [];
+
+    public array $selectedUsStates = [];
+
     public function mount(Person $person)
     {
         $this->person = $person;
@@ -97,6 +105,19 @@ class PersonShow extends Component
         $this->tagsInput = implode(', ', (array) ($this->person->tags ?? []));
         $this->next_action_at = optional($this->person->next_action_at)->format('Y-m-d\TH:i') ?? null;
         $this->next_action_note = $this->person->next_action_note ?? '';
+
+        // Geographic tags
+        $this->selectedRegions = $this->person->geographicTags()->where('geographic_type', 'region')->pluck('geographic_id')->toArray();
+        $this->selectedCountries = $this->person->geographicTags()->where('geographic_type', 'country')->pluck('geographic_id')->toArray();
+        $this->selectedUsStates = $this->person->geographicTags()->where('geographic_type', 'us_state')->pluck('geographic_id')->toArray();
+    }
+
+    #[On('geographic-tags-updated')]
+    public function updateGeographicTags(array $data): void
+    {
+        $this->selectedRegions = $data['regions'] ?? [];
+        $this->selectedCountries = $data['countries'] ?? [];
+        $this->selectedUsStates = $data['usStates'] ?? [];
     }
 
     public function startEditing()
@@ -134,6 +155,14 @@ class PersonShow extends Component
             'notes' => $this->notes ?: null,
         ]);
 
+        // Sync geographic tags
+        $this->person->syncGeographicTags(
+            $this->selectedRegions,
+            $this->selectedCountries,
+            $this->selectedUsStates
+        );
+
+        $this->person->refresh();
         $this->editing = false;
 
         // Auto-fetch LinkedIn if URL was added/changed and no photo exists

@@ -49,6 +49,24 @@
                                 {{ $project->lead }}
                             </span>
                         @endif
+                        {{-- Geographic Tags --}}
+                        @if($project->geographicTags->isNotEmpty())
+                            @foreach($project->regions as $region)
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
+                                    🌍 {{ $region->name }}
+                                </span>
+                            @endforeach
+                            @foreach($project->countries as $country)
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">
+                                    🏳️ {{ $country->name }}
+                                </span>
+                            @endforeach
+                            @foreach($project->usStates as $state)
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                                    🇺🇸 {{ $state->abbreviation }}
+                                </span>
+                            @endforeach
+                        @endif
                     </div>
                 </div>
             </div>
@@ -120,6 +138,16 @@
                                             <option value="{{ $value }}">{{ $label }}</option>
                                         @endforeach
                                     </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Geographic Focus</label>
+                                    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-3 max-h-[300px] overflow-y-auto">
+                                        <livewire:components.geographic-tag-selector
+                                            :selectedRegions="$selectedRegions"
+                                            :selectedCountries="$selectedCountries"
+                                            :selectedUsStates="$selectedUsStates"
+                                        />
+                                    </div>
                                 </div>
                                 <div class="flex justify-end gap-3 pt-4">
                                     <button type="button" wire:click="cancelEditing"
