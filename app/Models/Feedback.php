@@ -33,6 +33,8 @@ class Feedback extends Model
         'ai_recommendations',
         'ai_tags',
         'ai_analyzed_at',
+        'github_issue_url',
+        'github_issue_number',
     ];
 
     protected function casts(): array
@@ -139,4 +141,3 @@ class Feedback extends Model
         };
     }
 }
-

@@ -6,7 +6,9 @@ use App\Jobs\AnalyzeFeedback;
 use App\Models\Feedback;
 use App\Models\User;
 use App\Support\AI\AnthropicClient;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -291,6 +293,151 @@ PROMPT;
     }
 
     /**
+     * Create a GitHub issue from feedback (manual trigger).
+     */
+    public function createGitHubIssue(int $id): void
+    {
+        $feedback = Feedback::with('user')->find($id);
+        if (! $feedback) {
+            $this->dispatch('notify', type: 'error', message: 'Feedback not found.');
+
+            return;
+        }
+
+        if ($feedback->github_issue_url) {
+            $this->dispatch('notify', type: 'info', message: 'GitHub issue already exists.');
+
+            return;
+        }
+
+        $token = config('services.github.token');
+        $repo = config('services.github.repo');
+
+        if (empty($token) || empty($repo)) {
+            $this->dispatch('notify', type: 'error', message: 'GitHub integration not configured. Set GITHUB_TOKEN and GITHUB_REPO in .env');
+
+            return;
+        }
+
+        try {
+            $typeLabel = match ($feedback->feedback_type) {
+                'bug' => '[Bug]',
+                'suggestion' => '[Feature]',
+                default => '[Feedback]',
+            };
+
+            $title = $typeLabel.' '.Str::limit($feedback->message, 60);
+
+            $body = $this->formatGitHubIssueBody($feedback);
+
+            $labels = ['from-feedback'];
+            if ($feedback->feedback_type === 'bug') {
+                $labels[] = 'bug';
+            } elseif ($feedback->feedback_type === 'suggestion') {
+                $labels[] = 'enhancement';
+            }
+
+            if ($feedback->priority === 'critical') {
+                $labels[] = 'priority:critical';
+            } elseif ($feedback->priority === 'high') {
+                $labels[] = 'priority:high';
+            }
+
+            $response = Http::withToken($token)
+                ->post("https://api.github.com/repos/{$repo}/issues", [
+                    'title' => $title,
+                    'body' => $body,
+                    'labels' => $labels,
+                ]);
+
+            if ($response->successful()) {
+                $issueData = $response->json();
+                $feedback->update([
+                    'github_issue_url' => $issueData['html_url'] ?? null,
+                    'github_issue_number' => $issueData['number'] ?? null,
+                ]);
+
+                $this->dispatch('notify', type: 'success', message: "GitHub issue #{$issueData['number']} created!");
+
+                // Refresh the viewing feedback if modal is open
+                if ($this->viewingFeedback && $this->viewingFeedback->id === $id) {
+                    $this->viewingFeedback->refresh();
+                }
+            } else {
+                $this->dispatch('notify', type: 'error', message: 'GitHub API error: '.$response->json('message', 'Unknown error'));
+            }
+        } catch (\Exception $e) {
+            $this->dispatch('notify', type: 'error', message: 'Error: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Format the GitHub issue body.
+     */
+    protected function formatGitHubIssueBody(Feedback $feedback): string
+    {
+        $priorityBadge = match ($feedback->priority) {
+            'critical' => '🔴 Critical',
+            'high' => '🟠 High',
+            'medium' => '🟡 Medium',
+            'low' => '🟢 Low',
+            default => '⚪ Not Set',
+        };
+
+        $screenshotSection = '';
+        if ($feedback->screenshot_path) {
+            $screenshotUrl = url('storage/'.$feedback->screenshot_path);
+            $screenshotSection = "\n## Screenshot\n![Screenshot]({$screenshotUrl})\n";
+        }
+
+        $aiSection = '';
+        if ($feedback->ai_summary) {
+            $aiSection = "\n## AI Analysis\n**Summary:** {$feedback->ai_summary}\n";
+            if ($feedback->ai_recommendations) {
+                $aiSection .= "**Recommendations:** {$feedback->ai_recommendations}\n";
+            }
+        }
+
+        $reportedAt = $feedback->created_at->format('Y-m-d H:i');
+        $userName = $feedback->user?->name ?? 'Unknown';
+        $userEmail = $feedback->user?->email ?? 'unknown';
+
+        return <<<BODY
+## Feedback Report
+
+**Feedback ID:** #{$feedback->id}
+**Type:** {$feedback->feedback_type}
+**Priority:** {$priorityBadge}
+**Category:** {$feedback->category}
+
+## Description
+{$feedback->message}
+{$aiSection}
+## Context
+| Field | Value |
+|-------|-------|
+| **Page URL** | `{$feedback->page_url}` |
+| **Route** | `{$feedback->page_route}` |
+| **Browser** | {$feedback->browser} |
+| **Device** | {$feedback->device_type} |
+| **Screen Size** | {$feedback->screen_resolution} |
+| **Reported By** | {$userName} ({$userEmail}) |
+| **Reported At** | {$reportedAt} |
+{$screenshotSection}
+---
+*This issue was created from the WRK feedback system.*
+BODY;
+    }
+
+    /**
+     * Check if GitHub integration is configured.
+     */
+    public function getGitHubConfiguredProperty(): bool
+    {
+        return ! empty(config('services.github.token')) && ! empty(config('services.github.repo'));
+    }
+
+    /**
      * Export all feedback as JSON for sharing with developers.
      */
     public function exportJson()
@@ -490,7 +637,7 @@ PROMPT;
             'types' => Feedback::TYPES,
             'priorities' => Feedback::PRIORITIES,
             'staffMembers' => User::orderBy('name')->get(['id', 'name']),
+            'githubConfigured' => $this->githubConfigured,
         ]);
     }
 }
-

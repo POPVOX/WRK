@@ -9,7 +9,9 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class AnalyzeFeedback implements ShouldQueue
 {
@@ -25,7 +27,7 @@ class AnalyzeFeedback implements ShouldQueue
 
     public function handle(): void
     {
-        $feedback = Feedback::find($this->feedbackId);
+        $feedback = Feedback::with('user')->find($this->feedbackId);
         if (! $feedback) {
             return;
         }
@@ -67,12 +69,129 @@ class AnalyzeFeedback implements ShouldQueue
                     'priority' => $analysis['suggested_priority'] ?? null,
                     'ai_analyzed_at' => now(),
                 ]);
+
+                // Auto-create GitHub issue for bugs (if enabled)
+                if ($feedback->feedback_type === 'bug' && config('services.github.auto_create_issues')) {
+                    $this->createGitHubIssue($feedback, $analysis);
+                }
             }
         } catch (\Exception $e) {
             Log::error('Feedback AI analysis failed: '.$e->getMessage(), [
                 'feedback_id' => $this->feedbackId,
             ]);
         }
+    }
+
+    /**
+     * Create a GitHub issue from the feedback
+     */
+    protected function createGitHubIssue(Feedback $feedback, array $analysis): void
+    {
+        $token = config('services.github.token');
+        $repo = config('services.github.repo');
+
+        if (empty($token) || empty($repo)) {
+            Log::info('GitHub issue creation skipped: missing token or repo config');
+
+            return;
+        }
+
+        try {
+            $title = '[Bug] '.Str::limit($feedback->message, 60);
+
+            $body = $this->formatGitHubIssueBody($feedback, $analysis);
+
+            $labels = ['bug', 'from-feedback'];
+            if (($analysis['suggested_priority'] ?? '') === 'critical') {
+                $labels[] = 'priority:critical';
+            } elseif (($analysis['suggested_priority'] ?? '') === 'high') {
+                $labels[] = 'priority:high';
+            }
+
+            $response = Http::withToken($token)
+                ->post("https://api.github.com/repos/{$repo}/issues", [
+                    'title' => $title,
+                    'body' => $body,
+                    'labels' => $labels,
+                ]);
+
+            if ($response->successful()) {
+                $issueData = $response->json();
+                $feedback->update([
+                    'github_issue_url' => $issueData['html_url'] ?? null,
+                    'github_issue_number' => $issueData['number'] ?? null,
+                ]);
+
+                Log::info("GitHub issue created for feedback #{$feedback->id}: {$issueData['html_url']}");
+            } else {
+                Log::error('GitHub issue creation failed: '.$response->body());
+            }
+        } catch (\Exception $e) {
+            Log::error('GitHub issue creation exception: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Format the GitHub issue body
+     */
+    protected function formatGitHubIssueBody(Feedback $feedback, array $analysis): string
+    {
+        $screenshotSection = '';
+        if ($feedback->screenshot_path) {
+            $screenshotSection = "\n## Screenshot\n![Screenshot]({$feedback->screenshot_path})\n";
+        }
+
+        $priorityBadge = match ($analysis['suggested_priority'] ?? 'medium') {
+            'critical' => '🔴 Critical',
+            'high' => '🟠 High',
+            'medium' => '🟡 Medium',
+            'low' => '🟢 Low',
+            default => '⚪ Unknown',
+        };
+
+        $affectedArea = $analysis['affected_area'] ?? 'Unknown';
+        $effortEstimate = $analysis['effort_estimate'] ?? 'Unknown';
+        $aiSummary = $analysis['summary'] ?? 'No summary available';
+        $aiRecommendations = $analysis['recommendations'] ?? 'No recommendations available';
+        $tags = implode('`, `', $analysis['tags'] ?? []);
+        $reportedAt = $feedback->created_at->format('Y-m-d H:i');
+        $userName = $feedback->user?->name ?? 'Unknown';
+        $userEmail = $feedback->user?->email ?? 'unknown';
+
+        return <<<BODY
+## Bug Report (from User Feedback)
+
+**Feedback ID:** #{$feedback->id}
+**Priority:** {$priorityBadge}
+**Affected Area:** {$affectedArea}
+**Effort Estimate:** {$effortEstimate}
+
+## Description
+{$feedback->message}
+
+## AI Analysis
+{$aiSummary}
+
+## Recommendations
+{$aiRecommendations}
+
+## Context
+| Field | Value |
+|-------|-------|
+| **Page URL** | `{$feedback->page_url}` |
+| **Route** | `{$feedback->page_route}` |
+| **Browser** | {$feedback->browser} |
+| **Device** | {$feedback->device_type} |
+| **Screen Size** | {$feedback->screen_resolution} |
+| **Reported By** | {$userName} ({$userEmail}) |
+| **Reported At** | {$reportedAt} |
+{$screenshotSection}
+## Tags
+`{$tags}`
+
+---
+*This issue was automatically created from user feedback.*
+BODY;
     }
 
     protected function buildPrompt(Feedback $feedback): string
@@ -112,4 +231,3 @@ Provide analysis in this exact JSON format:
 PROMPT;
     }
 }
-
