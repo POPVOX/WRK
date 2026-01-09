@@ -43,6 +43,26 @@ class Dashboard extends Component
 
     public ?string $calendarWarning = null;
 
+    // Task creation state
+    public bool $showAddTask = false;
+
+    public string $newTaskTitle = '';
+
+    public string $newTaskDescription = '';
+
+    public ?string $newTaskDueDate = null;
+
+    public string $newTaskPriority = 'medium';
+
+    public ?int $newTaskProjectId = null;
+
+    // AI Task Suggestions
+    public bool $showAiSuggestions = false;
+
+    public array $aiSuggestedTasks = [];
+
+    public bool $isLoadingSuggestions = false;
+
     public function mount(GoogleCalendarService $calendarService)
     {
         $this->user = Auth::user();
@@ -502,6 +522,225 @@ class Dashboard extends Component
         $this->chatHistory = [];
     }
 
+    // === Task Management ===
+
+    public function toggleAddTask(): void
+    {
+        $this->showAddTask = ! $this->showAddTask;
+        if (! $this->showAddTask) {
+            $this->resetTaskForm();
+        }
+    }
+
+    public function resetTaskForm(): void
+    {
+        $this->newTaskTitle = '';
+        $this->newTaskDescription = '';
+        $this->newTaskDueDate = null;
+        $this->newTaskPriority = 'medium';
+        $this->newTaskProjectId = null;
+    }
+
+    public function createTask(): void
+    {
+        $this->validate([
+            'newTaskTitle' => 'required|string|max:255',
+            'newTaskDescription' => 'nullable|string|max:1000',
+            'newTaskDueDate' => 'nullable|date',
+            'newTaskPriority' => 'required|in:high,medium,low',
+            'newTaskProjectId' => 'nullable|exists:projects,id',
+        ]);
+
+        Action::create([
+            'title' => $this->newTaskTitle,
+            'description' => $this->newTaskDescription ?: $this->newTaskTitle,
+            'due_date' => $this->newTaskDueDate,
+            'priority' => $this->newTaskPriority,
+            'status' => 'pending',
+            'source' => 'manual',
+            'assigned_to' => $this->user->id,
+            'project_id' => $this->newTaskProjectId,
+        ]);
+
+        $this->resetTaskForm();
+        $this->showAddTask = false;
+        $this->dispatch('notify', type: 'success', message: 'Task created successfully!');
+    }
+
+    public function toggleAiSuggestions(): void
+    {
+        $this->showAiSuggestions = ! $this->showAiSuggestions;
+
+        if ($this->showAiSuggestions && empty($this->aiSuggestedTasks)) {
+            $this->loadAiSuggestions();
+        }
+    }
+
+    public function loadAiSuggestions(): void
+    {
+        if (! config('ai.enabled')) {
+            $this->aiSuggestedTasks = [];
+
+            return;
+        }
+
+        $this->isLoadingSuggestions = true;
+
+        try {
+            // Gather context from user's projects, meetings, and calendar
+            $context = $this->gatherTaskSuggestionContext();
+
+            // Use AI to suggest tasks
+            $apiKey = config('services.anthropic.api_key');
+            if (empty($apiKey)) {
+                $this->aiSuggestedTasks = [];
+                $this->isLoadingSuggestions = false;
+
+                return;
+            }
+
+            $client = new \App\Support\AI\AnthropicClient($apiKey);
+            $response = $client->message(
+                system: 'You are a productivity assistant helping a nonprofit professional manage their tasks. Based on the context provided, suggest 3-5 actionable tasks they should work on. Respond with a JSON array of tasks, each with: title, description, priority (high/medium/low), suggested_due_date (YYYY-MM-DD format or null), and reason (why this task is important now). Only suggest concrete, actionable tasks.',
+                messages: [
+                    ['role' => 'user', 'content' => "Based on my current work context, suggest tasks I should add to my to-do list:\n\n{$context}"],
+                ],
+                maxTokens: 1500
+            );
+
+            $content = $response['content'][0]['text'] ?? '';
+
+            // Parse JSON from response
+            if (preg_match('/\[.*\]/s', $content, $matches)) {
+                $this->aiSuggestedTasks = json_decode($matches[0], true) ?? [];
+            } else {
+                $this->aiSuggestedTasks = [];
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('AI Task Suggestions Error: '.$e->getMessage());
+            $this->aiSuggestedTasks = [];
+        }
+
+        $this->isLoadingSuggestions = false;
+    }
+
+    protected function gatherTaskSuggestionContext(): string
+    {
+        $context = [];
+
+        // Current user's projects
+        $projects = $this->myProjects;
+        if ($projects->isNotEmpty()) {
+            $context[] = "## My Active Projects:\n";
+            foreach ($projects->take(5) as $project) {
+                $context[] = "- {$project->name} (Progress: {$project->progress_percent}%, {$project->pending_milestones_count} milestones pending)";
+            }
+        }
+
+        // Upcoming meetings this week
+        $meetings = Meeting::with('organizations')
+            ->whereBetween('meeting_date', [now(), now()->addWeek()])
+            ->where(function ($q) {
+                $q->where('user_id', $this->user->id)
+                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $this->user->id));
+            })
+            ->limit(5)
+            ->get();
+
+        if ($meetings->isNotEmpty()) {
+            $context[] = "\n## Upcoming Meetings This Week:\n";
+            foreach ($meetings as $meeting) {
+                $title = $meeting->title ?: $meeting->organizations->pluck('name')->first() ?: 'Meeting';
+                $context[] = "- {$title} on {$meeting->meeting_date->format('M j')}";
+            }
+        }
+
+        // Recent items needing attention
+        $needsAttention = $this->needsAttention;
+        if ($needsAttention->isNotEmpty()) {
+            $context[] = "\n## Items Needing Attention:\n";
+            foreach ($needsAttention as $item) {
+                $context[] = "- {$item['title']}";
+            }
+        }
+
+        // Overdue tasks
+        $overdueCount = Action::where('assigned_to', $this->user->id)
+            ->pending()
+            ->where('due_date', '<', today())
+            ->count();
+
+        if ($overdueCount > 0) {
+            $context[] = "\n## Warning: {$overdueCount} overdue tasks!";
+        }
+
+        // Admin: Grant reporting
+        if ($this->user->isAdmin()) {
+            $upcomingReports = ReportingRequirement::with('grant')
+                ->upcoming()
+                ->limit(3)
+                ->get();
+
+            if ($upcomingReports->isNotEmpty()) {
+                $context[] = "\n## Upcoming Grant Reports:\n";
+                foreach ($upcomingReports as $report) {
+                    $context[] = "- {$report->name} for {$report->grant->name} (Due: {$report->due_date->format('M j')})";
+                }
+            }
+        }
+
+        return implode("\n", $context);
+    }
+
+    public function addSuggestedTask(int $index): void
+    {
+        if (! isset($this->aiSuggestedTasks[$index])) {
+            return;
+        }
+
+        $suggestion = $this->aiSuggestedTasks[$index];
+
+        Action::create([
+            'title' => $suggestion['title'],
+            'description' => $suggestion['description'] ?? $suggestion['title'],
+            'due_date' => $suggestion['suggested_due_date'] ?? null,
+            'priority' => $suggestion['priority'] ?? 'medium',
+            'status' => 'pending',
+            'source' => 'ai_suggested',
+            'assigned_to' => $this->user->id,
+        ]);
+
+        // Remove from suggestions
+        unset($this->aiSuggestedTasks[$index]);
+        $this->aiSuggestedTasks = array_values($this->aiSuggestedTasks);
+
+        $this->dispatch('notify', type: 'success', message: 'Task added from AI suggestion!');
+    }
+
+    public function dismissSuggestion(int $index): void
+    {
+        unset($this->aiSuggestedTasks[$index]);
+        $this->aiSuggestedTasks = array_values($this->aiSuggestedTasks);
+    }
+
+    /**
+     * Get user's available projects for task assignment
+     */
+    public function getAvailableProjectsProperty()
+    {
+        $userId = $this->user->id;
+        $firstName = explode(' ', $this->user->name)[0];
+
+        return Project::whereIn('status', ['active', 'planning'])
+            ->where(function ($query) use ($userId, $firstName) {
+                $query->where('created_by', $userId)
+                    ->orWhere('lead', 'like', "%{$firstName}%")
+                    ->orWhereHas('staff', fn ($q) => $q->where('user_id', $userId));
+            })
+            ->orderBy('name')
+            ->get(['id', 'name']);
+    }
+
     public function render()
     {
         return view('livewire.dashboard', [
@@ -516,6 +755,7 @@ class Dashboard extends Component
             'needsAttention' => $this->needsAttention,
             'fundingAlerts' => $this->fundingAlerts,
             'recentCoverage' => $this->recentCoverage,
+            'availableProjects' => $this->availableProjects,
         ]);
     }
 }
