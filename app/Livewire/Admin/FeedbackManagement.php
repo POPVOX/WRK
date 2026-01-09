@@ -290,6 +290,183 @@ PROMPT;
         $this->aiInsights = [];
     }
 
+    /**
+     * Export all feedback as JSON for sharing with developers.
+     */
+    public function exportJson()
+    {
+        $feedback = Feedback::with(['user', 'assignee'])
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($f) {
+                return [
+                    'id' => $f->id,
+                    'date' => $f->created_at->toIso8601String(),
+                    'type' => $f->feedback_type,
+                    'status' => $f->status,
+                    'priority' => $f->priority,
+                    'message' => $f->message,
+                    'page_url' => $f->page_url,
+                    'page_route' => $f->page_route,
+                    'browser' => $f->browser,
+                    'device' => $f->device,
+                    'screen_size' => $f->screen_size,
+                    'user' => $f->user ? [
+                        'id' => $f->user->id,
+                        'name' => $f->user->name,
+                        'email' => $f->user->email,
+                    ] : null,
+                    'assigned_to' => $f->assignee?->name,
+                    'admin_notes' => $f->admin_notes,
+                    'ai_analysis' => $f->ai_analysis,
+                    'ai_tags' => $f->ai_tags,
+                    'screenshot_path' => $f->screenshot_path ? url('storage/'.$f->screenshot_path) : null,
+                ];
+            });
+
+        $exportData = [
+            'exported_at' => now()->toIso8601String(),
+            'total_count' => $feedback->count(),
+            'summary' => [
+                'by_type' => $feedback->groupBy('type')->map->count(),
+                'by_status' => $feedback->groupBy('status')->map->count(),
+                'by_priority' => $feedback->groupBy('priority')->map->count(),
+            ],
+            'feedback' => $feedback->toArray(),
+        ];
+
+        $filename = 'feedback-export-'.now()->format('Y-m-d-His').'.json';
+        $content = json_encode($exportData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+        return response()->streamDownload(function () use ($content) {
+            echo $content;
+        }, $filename, [
+            'Content-Type' => 'application/json',
+        ]);
+    }
+
+    /**
+     * Export all feedback as CSV.
+     */
+    public function exportCsv()
+    {
+        $feedback = Feedback::with(['user', 'assignee'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $filename = 'feedback-export-'.now()->format('Y-m-d-His').'.csv';
+
+        return response()->streamDownload(function () use ($feedback) {
+            $handle = fopen('php://output', 'w');
+
+            // Header row
+            fputcsv($handle, [
+                'ID',
+                'Date',
+                'Type',
+                'Status',
+                'Priority',
+                'Message',
+                'Page URL',
+                'Page Route',
+                'User Name',
+                'User Email',
+                'Browser',
+                'Device',
+                'Assigned To',
+                'Admin Notes',
+                'AI Tags',
+            ]);
+
+            // Data rows
+            foreach ($feedback as $f) {
+                fputcsv($handle, [
+                    $f->id,
+                    $f->created_at->format('Y-m-d H:i:s'),
+                    $f->feedback_type,
+                    $f->status,
+                    $f->priority,
+                    $f->message,
+                    $f->page_url,
+                    $f->page_route,
+                    $f->user?->name,
+                    $f->user?->email,
+                    $f->browser,
+                    $f->device,
+                    $f->assignee?->name,
+                    $f->admin_notes,
+                    is_array($f->ai_tags) ? implode(', ', $f->ai_tags) : $f->ai_tags,
+                ]);
+            }
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
+        ]);
+    }
+
+    /**
+     * Export filtered feedback based on current filters.
+     */
+    public function exportFilteredJson()
+    {
+        $feedback = Feedback::query()
+            ->with(['user', 'assignee'])
+            ->when($this->search, function ($q) {
+                $q->where(function ($q) {
+                    $q->where('message', 'like', '%'.$this->search.'%')
+                        ->orWhere('page_url', 'like', '%'.$this->search.'%');
+                });
+            })
+            ->when($this->filterStatus, fn ($q) => $q->where('status', $this->filterStatus))
+            ->when($this->filterType, fn ($q) => $q->where('feedback_type', $this->filterType))
+            ->when($this->filterPriority, fn ($q) => $q->where('priority', $this->filterPriority))
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($f) {
+                return [
+                    'id' => $f->id,
+                    'date' => $f->created_at->toIso8601String(),
+                    'type' => $f->feedback_type,
+                    'status' => $f->status,
+                    'priority' => $f->priority,
+                    'message' => $f->message,
+                    'page_url' => $f->page_url,
+                    'page_route' => $f->page_route,
+                    'browser' => $f->browser,
+                    'device' => $f->device,
+                    'user' => $f->user?->name,
+                    'user_email' => $f->user?->email,
+                    'admin_notes' => $f->admin_notes,
+                    'ai_analysis' => $f->ai_analysis,
+                    'ai_tags' => $f->ai_tags,
+                ];
+            });
+
+        $filters = array_filter([
+            'status' => $this->filterStatus,
+            'type' => $this->filterType,
+            'priority' => $this->filterPriority,
+            'search' => $this->search,
+        ]);
+
+        $exportData = [
+            'exported_at' => now()->toIso8601String(),
+            'filters_applied' => $filters ?: 'none',
+            'total_count' => $feedback->count(),
+            'feedback' => $feedback->toArray(),
+        ];
+
+        $filename = 'feedback-filtered-'.now()->format('Y-m-d-His').'.json';
+        $content = json_encode($exportData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+        return response()->streamDownload(function () use ($content) {
+            echo $content;
+        }, $filename, [
+            'Content-Type' => 'application/json',
+        ]);
+    }
+
     public function render()
     {
         $query = Feedback::query()
