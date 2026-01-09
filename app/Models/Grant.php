@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Grant extends Model
 {
@@ -92,5 +93,71 @@ class Grant extends Model
         }
 
         return $query->where('visibility', 'all');
+    }
+
+    // === Automated Reporting Relationships ===
+
+    /**
+     * Get all reporting schemas for this grant.
+     */
+    public function reportingSchemas(): HasMany
+    {
+        return $this->hasMany(GrantReportingSchema::class);
+    }
+
+    /**
+     * Get the active reporting schema for this grant.
+     */
+    public function activeReportingSchema(): HasOne
+    {
+        return $this->hasOne(GrantReportingSchema::class)->where('status', 'active');
+    }
+
+    /**
+     * Get the draft reporting schema (if any).
+     */
+    public function draftReportingSchema(): HasOne
+    {
+        return $this->hasOne(GrantReportingSchema::class)->where('status', 'draft');
+    }
+
+    /**
+     * Get all metric calculations for this grant.
+     */
+    public function metricCalculations(): HasMany
+    {
+        return $this->hasMany(MetricCalculation::class);
+    }
+
+    /**
+     * Get chatbot conversations for this grant.
+     */
+    public function schemaChatbotConversations(): HasMany
+    {
+        return $this->hasMany(SchemaChatbotConversation::class);
+    }
+
+    /**
+     * Check if grant has automated reporting set up.
+     */
+    public function hasAutomatedReporting(): bool
+    {
+        return $this->activeReportingSchema()->exists();
+    }
+
+    /**
+     * Check if grant has a draft schema in progress.
+     */
+    public function hasSchemaInProgress(): bool
+    {
+        return $this->draftReportingSchema()->exists();
+    }
+
+    /**
+     * Get the current reporting schema (active, or draft if no active).
+     */
+    public function getCurrentSchema(): ?GrantReportingSchema
+    {
+        return $this->activeReportingSchema ?? $this->draftReportingSchema;
     }
 }

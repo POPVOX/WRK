@@ -38,6 +38,9 @@ class Person extends Model
         'beat',
         'media_notes',
         'responsiveness',
+        // Grant reporting fields
+        'contact_type',
+        'political_affiliation',
     ];
 
     protected $casts = [
@@ -46,6 +49,27 @@ class Person extends Model
         'next_action_at' => 'datetime',
         'score' => 'integer',
         'is_journalist' => 'boolean',
+    ];
+
+    public const CONTACT_TYPES = [
+        'government_official' => 'Government Official',
+        'funder' => 'Funder',
+        'grantee' => 'Grantee',
+        'partner' => 'Partner',
+        'media' => 'Media',
+        'academic' => 'Academic',
+        'stakeholder' => 'Stakeholder',
+        'other' => 'Other',
+    ];
+
+    public const POLITICAL_AFFILIATIONS = [
+        'bipartisan' => 'Bipartisan',
+        'progressive' => 'Progressive',
+        'conservative' => 'Conservative',
+        'nonpartisan' => 'Nonpartisan',
+        'democratic' => 'Democratic',
+        'republican' => 'Republican',
+        'independent' => 'Independent',
     ];
 
     public const STATUSES = [

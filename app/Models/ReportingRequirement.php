@@ -20,11 +20,14 @@ class ReportingRequirement extends Model
         'submitted_at',
         'notes',
         'source_quote',
+        'metric_id',
+        'auto_calculated',
     ];
 
     protected $casts = [
         'due_date' => 'date',
         'submitted_at' => 'date',
+        'auto_calculated' => 'boolean',
     ];
 
     public function grant(): BelongsTo

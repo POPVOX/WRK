@@ -33,6 +33,8 @@ class Project extends Model
         'parent_project_id',
         'project_type',
         'sort_order',
+        'grant_associations',
+        'metric_tags',
     ];
 
     protected $casts = [
@@ -43,6 +45,8 @@ class Project extends Model
         'tags' => 'array',
         'is_initiative' => 'boolean',
         'success_metrics' => 'array',
+        'grant_associations' => 'array',
+        'metric_tags' => 'array',
     ];
 
     public const STATUSES = [

@@ -31,11 +31,17 @@ class Meeting extends Model
         'commitments_made',
         'status',
         'google_event_id',
+        'grant_associations',
+        'metric_tags',
+        'external_organizations_count',
     ];
 
     protected $casts = [
         'meeting_date' => 'date',
         'prep_analysis' => 'array',
+        'grant_associations' => 'array',
+        'metric_tags' => 'array',
+        'external_organizations_count' => 'integer',
     ];
 
     /**
