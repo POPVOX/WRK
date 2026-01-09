@@ -62,6 +62,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Media & Press
     Route::get('/media', \App\Livewire\Media\MediaIndex::class)->name('media.index');
 
+    // Accomplishments & Wins
+    Route::get('/accomplishments', \App\Livewire\Accomplishments\AccomplishmentsIndex::class)->name('accomplishments.index');
+    Route::get('/accomplishments/team', \App\Livewire\Accomplishments\ManagementDashboard::class)->name('accomplishments.team');
+    Route::get('/accomplishments/user/{userId}', \App\Livewire\Accomplishments\AccomplishmentsIndex::class)->name('accomplishments.user');
+
     // Admin routes
     Route::middleware(['admin'])->prefix('admin')->group(function () {
         Route::get('/staff', \App\Livewire\Admin\StaffManagement::class)->name('admin.staff');
