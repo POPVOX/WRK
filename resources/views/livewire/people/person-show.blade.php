@@ -190,6 +190,43 @@
                                 <p class="text-gray-900 dark:text-white">{{ $person->notes ?: '—' }}</p>
                             @endif
                         </div>
+
+                        <!-- Geographic Focus -->
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Geographic Focus</label>
+                            @if($editing)
+                                <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                                    <livewire:components.geographic-tag-selector
+                                        :selectedRegions="$selectedRegions"
+                                        :selectedCountries="$selectedCountries"
+                                        :selectedUsStates="$selectedUsStates"
+                                    />
+                                </div>
+                            @else
+                                <div class="flex flex-wrap gap-2">
+                                    @forelse($person->geographicTags as $tag)
+                                        @php $geo = $tag->geographic; @endphp
+                                        @if($geo)
+                                            @if($tag->geographic_type === 'region')
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
+                                                    🌍 {{ $geo->name }}
+                                                </span>
+                                            @elseif($tag->geographic_type === 'country')
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">
+                                                    🏳️ {{ $geo->name }}
+                                                </span>
+                                            @elseif($tag->geographic_type === 'us_state')
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                                                    🇺🇸 {{ $geo->abbreviation }}
+                                                </span>
+                                            @endif
+                                        @endif
+                                    @empty
+                                        <span class="text-gray-400 dark:text-gray-500 italic">No geographic focus set</span>
+                                    @endforelse
+                                </div>
+                            @endif
+                        </div>
                     </div>
                 </form>
 

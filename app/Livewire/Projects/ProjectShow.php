@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -149,6 +150,13 @@ class ProjectShow extends Component
 
     public string $linkUrl = '';
 
+    // Geographic tags
+    public array $selectedRegions = [];
+
+    public array $selectedCountries = [];
+
+    public array $selectedUsStates = [];
+
     // Sync Preview (from workspace)
     public bool $showSyncPreviewModal = false;
 
@@ -210,6 +218,19 @@ class ProjectShow extends Component
         $this->start_date = $this->project->start_date?->format('Y-m-d');
         $this->target_end_date = $this->project->target_end_date?->format('Y-m-d');
         $this->status = $this->project->status;
+
+        // Load geographic tags
+        $this->selectedRegions = $this->project->geographicTags()->where('geographic_type', 'region')->pluck('geographic_id')->toArray();
+        $this->selectedCountries = $this->project->geographicTags()->where('geographic_type', 'country')->pluck('geographic_id')->toArray();
+        $this->selectedUsStates = $this->project->geographicTags()->where('geographic_type', 'us_state')->pluck('geographic_id')->toArray();
+    }
+
+    #[On('geographic-tags-updated')]
+    public function updateGeographicTags(array $data): void
+    {
+        $this->selectedRegions = $data['regions'] ?? [];
+        $this->selectedCountries = $data['countries'] ?? [];
+        $this->selectedUsStates = $data['usStates'] ?? [];
     }
 
     public function setTab(string $tab)
@@ -249,6 +270,14 @@ class ProjectShow extends Component
             'status' => $this->status,
         ]);
 
+        // Sync geographic tags
+        $this->project->syncGeographicTags(
+            $this->selectedRegions,
+            $this->selectedCountries,
+            $this->selectedUsStates
+        );
+
+        $this->project->refresh();
         $this->editing = false;
         $this->dispatch('notify', type: 'success', message: 'Project updated successfully!');
     }

@@ -5,6 +5,7 @@ namespace App\Livewire\Projects;
 use App\Models\Project;
 use Illuminate\Support\Facades\Http;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
@@ -37,6 +38,13 @@ class ProjectCreate extends Component
     public ?int $parent_project_id = null;
 
     public string $project_type = 'initiative';
+
+    // Geographic tags
+    public array $selectedRegions = [];
+
+    public array $selectedCountries = [];
+
+    public array $selectedUsStates = [];
 
     // AI Extraction
     public bool $showAiExtract = false;
@@ -77,6 +85,11 @@ class ProjectCreate extends Component
             if ($project->tags && is_array($project->tags)) {
                 $this->tagsInput = implode(', ', $project->tags);
             }
+
+            // Copy geographic tags
+            $this->selectedRegions = $project->geographicTags()->where('geographic_type', 'region')->pluck('geographic_id')->toArray();
+            $this->selectedCountries = $project->geographicTags()->where('geographic_type', 'country')->pluck('geographic_id')->toArray();
+            $this->selectedUsStates = $project->geographicTags()->where('geographic_type', 'us_state')->pluck('geographic_id')->toArray();
         }
     }
 
@@ -94,6 +107,14 @@ class ProjectCreate extends Component
         'parent_project_id' => 'nullable|exists:projects,id',
         'project_type' => 'required|string|in:initiative,publication,event,chapter,newsletter,tool,research,outreach,component',
     ];
+
+    #[On('geographic-tags-updated')]
+    public function updateGeographicTags(array $data): void
+    {
+        $this->selectedRegions = $data['regions'] ?? [];
+        $this->selectedCountries = $data['countries'] ?? [];
+        $this->selectedUsStates = $data['usStates'] ?? [];
+    }
 
     public function toggleAiExtract()
     {
@@ -273,6 +294,13 @@ PROMPT;
             'parent_project_id' => $this->parent_project_id,
             'project_type' => $this->project_type,
         ]);
+
+        // Sync geographic tags
+        $project->syncGeographicTags(
+            $this->selectedRegions,
+            $this->selectedCountries,
+            $this->selectedUsStates
+        );
 
         $this->dispatch('notify', type: 'success', message: 'Project created successfully!');
 

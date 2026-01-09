@@ -257,6 +257,21 @@
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Separate multiple tags with commas</p>
                     </div>
 
+                    <!-- Geographic Tags -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Geographic Focus
+                        </label>
+                        <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                            <livewire:components.geographic-tag-selector
+                                :selectedRegions="$selectedRegions"
+                                :selectedCountries="$selectedCountries"
+                                :selectedUsStates="$selectedUsStates"
+                            />
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Tag regions, countries, or US states/territories relevant to this project</p>
+                    </div>
+
                     <!-- Actions -->
                     <div class="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                         <a href="{{ route('projects.index') }}" wire:navigate
