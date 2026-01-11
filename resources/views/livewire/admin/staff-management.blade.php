@@ -68,20 +68,38 @@
                                         @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                                        {{ $member->created_at->format('M j, Y') }}
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                        <button wire:click="toggleAdmin({{ $member->id }})"
-                                            class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">
-                                            {{ $member->is_admin ? 'Remove Admin' : 'Make Admin' }}
-                                        </button>
-                                        @if($member->id !== auth()->id())
-                                            <button wire:click="deleteStaff({{ $member->id }})" 
-                                                wire:confirm="Are you sure you want to remove this staff member?"
-                                                class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">
-                                                Delete
-                                            </button>
+                                        <div>{{ $member->created_at->format('M j, Y') }}</div>
+                                        @if($member->activated_at)
+                                            <span class="text-xs text-green-600 dark:text-green-400">✓ Activated</span>
+                                        @elseif($member->activation_token)
+                                            <span class="text-xs text-yellow-600 dark:text-yellow-400">⏳ Pending</span>
+                                        @else
+                                            <span class="text-xs text-gray-400">—</span>
                                         @endif
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <div class="flex items-center justify-end gap-3">
+                                            @if(!$member->activated_at)
+                                                <button wire:click="generateActivationLink({{ $member->id }})"
+                                                    class="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300"
+                                                    title="Generate activation link">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                                    </svg>
+                                                </button>
+                                            @endif
+                                            <button wire:click="toggleAdmin({{ $member->id }})"
+                                                class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">
+                                                {{ $member->is_admin ? 'Remove Admin' : 'Make Admin' }}
+                                            </button>
+                                            @if($member->id !== auth()->id())
+                                                <button wire:click="deleteStaff({{ $member->id }})" 
+                                                    wire:confirm="Are you sure you want to remove this staff member?"
+                                                    class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">
+                                                    Delete
+                                                </button>
+                                            @endif
+                                        </div>
                                     </td>
                                 </tr>
                             @empty
@@ -167,6 +185,57 @@
                                 Cancel
                             </button>
                         @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Activation Link Modal -->
+    @if($showActivationModal)
+        <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" wire:click="closeActivationModal"></div>
+
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+                <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                    <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="flex items-center mb-4">
+                            <div class="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mr-3">
+                                <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-900 dark:text-white">Activation Link Generated</h3>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">For {{ $activationUserName }}</p>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-4">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Send this link to <strong>{{ $activationUserEmail }}</strong>:</p>
+                            <div class="flex items-center gap-2">
+                                <input type="text" value="{{ $activationLink }}" readonly id="activation-link-input"
+                                    class="flex-1 text-sm font-mono bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-gray-700 dark:text-gray-300">
+                                <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('activation-link-input').value); this.innerHTML='✓ Copied'; setTimeout(() => this.innerHTML='Copy', 2000)"
+                                    class="px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 transition">
+                                    Copy
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="text-sm text-gray-600 dark:text-gray-400 space-y-2">
+                            <p>📧 <strong>Send this link</strong> to the user via email or message</p>
+                            <p>⏱️ <strong>Expires in 7 days</strong> - generate a new one if needed</p>
+                            <p>🔐 They'll set their password when they click the link</p>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button type="button" wire:click="closeActivationModal"
+                            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 sm:ml-3 sm:w-auto sm:text-sm">
+                            Done
+                        </button>
                     </div>
                 </div>
             </div>
