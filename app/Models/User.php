@@ -39,6 +39,7 @@ class User extends Authenticatable
         'profile_completed_at',
         'location',
         'timezone',
+        'timezone_confirmed_at',
         'bio_short',
         'bio_medium',
         'publications',
@@ -83,6 +84,7 @@ class User extends Authenticatable
             'calendar_import_date' => 'datetime',
             'activation_token_expires_at' => 'datetime',
             'activated_at' => 'datetime',
+            'timezone_confirmed_at' => 'datetime',
         ];
     }
 

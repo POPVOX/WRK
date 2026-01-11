@@ -63,6 +63,9 @@ class Dashboard extends Component
 
     public bool $isLoadingSuggestions = false;
 
+    // Timezone prompt
+    public bool $showTimezonePrompt = false;
+
     public function mount(GoogleCalendarService $calendarService)
     {
         $this->user = Auth::user();
@@ -90,6 +93,15 @@ class Dashboard extends Component
             $this->calendarWarning = 'Calendar is not connected. Connect to keep meetings in sync.';
         } elseif ($this->user->calendar_import_date && $this->user->calendar_import_date->lt(now()->subDays(7))) {
             $this->calendarWarning = 'Calendar has not synced in over a week.';
+        }
+
+        // Check if we should prompt for timezone (no timezone set, or not confirmed in 7 days)
+        $shouldPromptTimezone = ! $this->user->timezone
+            || ! $this->user->timezone_confirmed_at
+            || $this->user->timezone_confirmed_at->lt(now()->subDays(7));
+
+        if ($shouldPromptTimezone) {
+            $this->showTimezonePrompt = true;
         }
     }
 

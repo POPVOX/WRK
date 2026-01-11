@@ -25,9 +25,11 @@
                         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
                             {{ $greeting }}, {{ $firstName }}
                         </h1>
-                        <p class="mt-1 text-gray-500 dark:text-gray-400">
-                            Here's what's on your plate today
-                            <span class="text-gray-400 dark:text-gray-500 ml-2">{{ now()->format('l, F j, Y') }}</span>
+                        <p class="mt-1 text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span>Here's what's on your plate today</span>
+                            <span class="text-gray-400 dark:text-gray-500">{{ now()->format('l, F j, Y') }}</span>
+                            <span class="text-gray-300 dark:text-gray-600">•</span>
+                            <livewire:components.timezone-location />
                         </p>
                     </div>
                     <div class="flex items-center gap-3">
@@ -841,6 +843,11 @@
 
         </div>
     </div>
+
+    {{-- Timezone Prompt on Login --}}
+    @if($showTimezonePrompt)
+        <livewire:components.timezone-location :isPrompt="true" />
+    @endif
 </div>
 
 @script
