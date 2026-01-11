@@ -47,6 +47,9 @@ class User extends Authenticatable
         'google_refresh_token',
         'google_token_expires_at',
         'calendar_import_date',
+        'activation_token',
+        'activation_token_expires_at',
+        'activated_at',
     ];
 
     /**
@@ -57,6 +60,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'activation_token',
     ];
 
     /**
@@ -77,6 +81,8 @@ class User extends Authenticatable
             'profile_completed_at' => 'datetime',
             'google_token_expires_at' => 'datetime',
             'calendar_import_date' => 'datetime',
+            'activation_token_expires_at' => 'datetime',
+            'activated_at' => 'datetime',
         ];
     }
 

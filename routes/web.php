@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome');
 
+// Account Activation (public route for existing staff)
+Route::get('/activate/{token}', \App\Livewire\Auth\ActivateAccount::class)->name('activate');
+
 Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard
     Route::get('/dashboard', Dashboard::class)->name('dashboard');
