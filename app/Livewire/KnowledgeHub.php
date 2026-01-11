@@ -9,8 +9,6 @@ use App\Models\Meeting;
 use App\Models\Organization;
 use App\Models\Person;
 use App\Models\Project;
-use App\Models\ReportingRequirement;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -51,6 +49,7 @@ class KnowledgeHub extends Component
         }
 
         $this->searching = false;
+        $this->dispatch('searchComplete');
     }
 
     protected function performSearch(): void
@@ -262,112 +261,7 @@ class KnowledgeHub extends Component
         $this->aiAnswer = null;
     }
 
-    // Computed: Needs Attention
-    public function getNeedsAttentionProperty(): array
-    {
-        $user = Auth::user();
-
-        return [
-            'overdue_commitments' => Commitment::where('status', 'open')
-                ->where('direction', 'from_us')
-                ->where('due_date', '<', now())
-                ->with(['organization', 'person', 'meeting'])
-                ->orderBy('due_date')
-                ->limit(5)
-                ->get(),
-
-            'overdue_count' => Commitment::where('status', 'open')
-                ->where('direction', 'from_us')
-                ->where('due_date', '<', now())
-                ->count(),
-
-            'meetings_need_notes' => Meeting::needsNotes()
-                ->with(['organizations'])
-                ->limit(3)
-                ->get(),
-
-            'meetings_need_notes_count' => Meeting::needsNotes()->count(),
-
-            'reports_due_soon' => $user?->is_admin
-                ? ReportingRequirement::where('status', '!=', 'submitted')
-                    ->where('due_date', '<=', now()->addWeek())
-                    ->with(['grant.funder'])
-                    ->limit(3)
-                    ->get()
-                : collect(),
-        ];
-    }
-
-    // Computed: This Week's Meetings
-    public function getThisWeekMeetingsProperty()
-    {
-        return Meeting::whereBetween('meeting_date', [now()->startOfDay(), now()->endOfWeek()])
-            ->with(['people', 'organizations', 'issues'])
-            ->orderBy('meeting_date')
-            ->limit(8)
-            ->get()
-            ->groupBy(fn ($m) => $m->meeting_date->format('Y-m-d'));
-    }
-
-    // Computed: Active Relationships
-    public function getActiveRelationshipsProperty()
-    {
-        return Organization::withCount([
-            'meetings' => fn ($q) => $q->where('meeting_date', '>=', now()->subDays(90)),
-        ])
-            ->withCount([
-                'commitments' => fn ($q) => $q->where('status', 'open'),
-            ])
-            ->get()
-            ->filter(fn ($org) => $org->meetings_count > 0)
-            ->sortByDesc('meetings_count')
-            ->take(5)
-            ->values();
-    }
-
-    // Computed: Recent Insights
-    public function getRecentInsightsProperty(): array
-    {
-        $thirtyDaysAgo = now()->subDays(30);
-
-        // Topics discussed this month
-        $topicCounts = Issue::withCount([
-            'meetings' => fn ($q) => $q->where('meeting_date', '>=', $thirtyDaysAgo),
-        ])
-            ->get()
-            ->filter(fn ($t) => $t->meetings_count > 0)
-            ->sortByDesc('meetings_count')
-            ->take(5)
-            ->values();
-
-        // Top organizations this month
-        $orgCounts = Organization::withCount([
-            'meetings' => fn ($q) => $q->where('meeting_date', '>=', $thirtyDaysAgo),
-        ])
-            ->get()
-            ->filter(fn ($o) => $o->meetings_count > 0)
-            ->sortByDesc('meetings_count')
-            ->take(5)
-            ->values();
-
-        // Recent decisions
-        $recentDecisions = Decision::with(['project', 'madeBy'])
-            ->where('decided_at', '>=', $thirtyDaysAgo)
-            ->orderByDesc('decided_at')
-            ->limit(3)
-            ->get();
-
-        return [
-            'topics' => $topicCounts,
-            'organizations' => $orgCounts,
-            'decisions' => $recentDecisions,
-            'total_meetings_this_month' => Meeting::where('meeting_date', '>=', $thirtyDaysAgo)
-                ->where('meeting_date', '<=', now())
-                ->count(),
-        ];
-    }
-
-    // Computed: Quick Queries
+    // Quick query suggestions based on current data
     public function getQuickQueriesProperty(): array
     {
         $queries = [];
@@ -392,7 +286,7 @@ class KnowledgeHub extends Component
             ->first();
 
         if ($topTopic) {
-            $queries[] = "Summarize our {$topTopic->name} discussions this month";
+            $queries[] = "Summarize our {$topTopic->name} discussions";
         }
 
         // Standard queries
@@ -405,10 +299,6 @@ class KnowledgeHub extends Component
     public function render()
     {
         return view('livewire.knowledge-hub', [
-            'needsAttention' => $this->needsAttention,
-            'thisWeekMeetings' => $this->thisWeekMeetings,
-            'activeRelationships' => $this->activeRelationships,
-            'recentInsights' => $this->recentInsights,
             'quickQueries' => $this->quickQueries,
         ])->title('Knowledge Hub');
     }
