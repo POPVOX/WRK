@@ -25,6 +25,15 @@ class StaffManagement extends Component
 
     public ?string $tempPassword = null;
 
+    // Activation link modal
+    public bool $showActivationModal = false;
+
+    public ?string $activationLink = null;
+
+    public ?string $activationUserName = null;
+
+    public ?string $activationUserEmail = null;
+
     protected $rules = [
         'newName' => 'required|string|max:255',
         'newEmail' => 'required|email|unique:users,email',
@@ -88,6 +97,39 @@ class StaffManagement extends Component
 
         $user->delete();
         $this->dispatch('notify', type: 'success', message: 'Staff member removed.');
+    }
+
+    public function generateActivationLink(int $userId): void
+    {
+        $user = User::find($userId);
+        if (! $user) {
+            $this->dispatch('notify', type: 'error', message: 'User not found.');
+
+            return;
+        }
+
+        // Generate a 64-character token
+        $token = Str::random(64);
+        $expiresAt = now()->addDays(7);
+
+        $user->update([
+            'activation_token' => $token,
+            'activation_token_expires_at' => $expiresAt,
+            'activated_at' => null, // Reset if previously activated
+        ]);
+
+        $this->activationLink = url("/activate/{$token}");
+        $this->activationUserName = $user->name;
+        $this->activationUserEmail = $user->email;
+        $this->showActivationModal = true;
+    }
+
+    public function closeActivationModal(): void
+    {
+        $this->showActivationModal = false;
+        $this->activationLink = null;
+        $this->activationUserName = null;
+        $this->activationUserEmail = null;
     }
 
     public function render()
