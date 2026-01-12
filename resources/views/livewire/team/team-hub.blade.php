@@ -197,6 +197,29 @@
                             class="w-full px-4 py-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
                             placeholder="Share an update, question, or announcement with the team..."></textarea>
                         @error('newMessage') <span class="text-red-500 text-sm mt-1">{{ $message }}</span> @enderror
+
+                        {{-- Screenshot Upload --}}
+                        <div class="mt-3 flex items-center gap-4">
+                            <label class="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                Add Screenshot
+                                <input type="file" wire:model="messageScreenshot" class="hidden" accept="image/*">
+                            </label>
+                            @if($messageScreenshot)
+                                <div class="flex items-center gap-2">
+                                    <img src="{{ $messageScreenshot->temporaryUrl() }}" class="h-10 w-10 object-cover rounded">
+                                    <button type="button" wire:click="$set('messageScreenshot', null)" class="text-red-500 hover:text-red-700">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            @endif
+                            @error('messageScreenshot') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                        </div>
+
                         <div class="flex justify-end mt-3">
                             <button type="submit"
                                 class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors">
@@ -213,38 +236,32 @@
                 <!-- Messages List -->
                 <div class="space-y-4">
                     @forelse($messages as $message)
-                        <div
-                            class="bg-white dark:bg-gray-800 rounded-xl shadow-md p-5 {{ $message->is_pinned ? 'ring-2 ring-amber-400' : '' }}">
+                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-md p-5 {{ $message->is_pinned ? 'ring-2 ring-amber-400' : '' }}">
+                            {{-- Message Header --}}
                             <div class="flex items-start justify-between">
                                 <div class="flex items-center">
-                                    <div
-                                        class="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-medium">
+                                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-medium">
                                         {{ substr($message->user->name ?? 'U', 0, 1) }}
                                     </div>
                                     <div class="ml-3">
-                                        <p class="font-medium text-gray-900 dark:text-white">
-                                            {{ $message->user->name ?? 'Unknown User' }}</p>
-                                        <p class="text-sm text-gray-500 dark:text-gray-400">
-                                            {{ $message->created_at->diffForHumans() }}</p>
+                                        <p class="font-medium text-gray-900 dark:text-white">{{ $message->user->name ?? 'Unknown User' }}</p>
+                                        <p class="text-sm text-gray-500 dark:text-gray-400">{{ $message->created_at->diffForHumans() }}</p>
                                     </div>
                                 </div>
                                 <div class="flex items-center space-x-2">
                                     @if($message->is_pinned)
-                                        <span
-                                            class="inline-flex items-center px-2 py-1 text-xs font-medium text-amber-700 bg-amber-100 dark:bg-amber-900/50 dark:text-amber-300 rounded-full">
+                                        <span class="inline-flex items-center px-2 py-1 text-xs font-medium text-amber-700 bg-amber-100 dark:bg-amber-900/50 dark:text-amber-300 rounded-full">
                                             📌 Pinned
                                         </span>
                                     @endif
                                     <button wire:click="togglePin({{ $message->id }})"
                                         class="p-1 text-gray-400 hover:text-amber-500 transition-colors"
                                         title="{{ $message->is_pinned ? 'Unpin' : 'Pin' }}">
-                                        <svg class="w-5 h-5" fill="{{ $message->is_pinned ? 'currentColor' : 'none' }}"
-                                            stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                                        <svg class="w-5 h-5" fill="{{ $message->is_pinned ? 'currentColor' : 'none' }}" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                                         </svg>
                                     </button>
-                                    @if(auth()->id() === $message->user_id)
+                                    @if(auth()->id() === $message->user_id || auth()->user()->isAdmin())
                                         <button wire:click="deleteMessage({{ $message->id }})" wire:confirm="Delete this message?"
                                             class="p-1 text-gray-400 hover:text-red-500 transition-colors" title="Delete">
                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -255,12 +272,153 @@
                                     @endif
                                 </div>
                             </div>
+
+                            {{-- Message Content --}}
                             <p class="mt-3 text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ $message->content }}</p>
+
+                            {{-- Screenshot --}}
+                            @if($message->screenshot_path)
+                                <div class="mt-3">
+                                    <img src="{{ Storage::url($message->screenshot_path) }}" alt="Screenshot"
+                                        class="max-w-full max-h-80 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90"
+                                        onclick="window.open('{{ Storage::url($message->screenshot_path) }}', '_blank')">
+                                </div>
+                            @endif
+
+                            {{-- Reactions --}}
+                            <div class="mt-4 flex flex-wrap items-center gap-2">
+                                {{-- Existing Reactions --}}
+                                @foreach($message->groupedReactions as $reaction)
+                                    <button wire:click="toggleReaction({{ $message->id }}, '{{ $reaction['emoji'] }}')"
+                                        class="inline-flex items-center gap-1 px-2 py-1 text-sm rounded-full transition
+                                            {{ in_array(auth()->id(), $reaction['user_ids']) 
+                                                ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-300 dark:ring-indigo-700' 
+                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600' }}"
+                                        title="{{ implode(', ', $reaction['users']) }}">
+                                        <span>{{ $reaction['emoji'] }}</span>
+                                        <span class="text-xs font-medium">{{ $reaction['count'] }}</span>
+                                    </button>
+                                @endforeach
+
+                                {{-- Add Reaction Dropdown --}}
+                                <div x-data="{ open: false }" class="relative">
+                                    <button @click="open = !open" type="button"
+                                        class="inline-flex items-center gap-1 px-2 py-1 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </button>
+                                    <div x-show="open" @click.away="open = false" x-transition
+                                        class="absolute left-0 mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-2 flex gap-1 z-10">
+                                        @foreach($availableReactions as $emoji)
+                                            <button wire:click="toggleReaction({{ $message->id }}, '{{ $emoji }}')" @click="open = false"
+                                                class="text-xl hover:scale-125 transition-transform p-1">
+                                                {{ $emoji }}
+                                            </button>
+                                        @endforeach
+                                    </div>
+                                </div>
+
+                                {{-- Reply Button --}}
+                                <button wire:click="startReply({{ $message->id }})"
+                                    class="inline-flex items-center gap-1 px-2 py-1 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition ml-auto">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                    </svg>
+                                    Reply
+                                    @if($message->replies->count() > 0)
+                                        <span class="text-xs">({{ $message->replies->count() }})</span>
+                                    @endif
+                                </button>
+                            </div>
+
+                            {{-- Replies --}}
+                            @if($message->replies->count() > 0)
+                                <div class="mt-4 ml-6 pl-4 border-l-2 border-gray-200 dark:border-gray-700 space-y-3">
+                                    @foreach($message->replies as $reply)
+                                        <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+                                            <div class="flex items-start justify-between">
+                                                <div class="flex items-center gap-2">
+                                                    <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-xs font-medium">
+                                                        {{ substr($reply->user->name ?? 'U', 0, 1) }}
+                                                    </div>
+                                                    <div>
+                                                        <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $reply->user->name ?? 'Unknown' }}</span>
+                                                        <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">{{ $reply->created_at->diffForHumans() }}</span>
+                                                    </div>
+                                                </div>
+                                                @if(auth()->id() === $reply->user_id || auth()->user()->isAdmin())
+                                                    <button wire:click="deleteMessage({{ $reply->id }})" wire:confirm="Delete this reply?"
+                                                        class="p-1 text-gray-400 hover:text-red-500 transition-colors">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                @endif
+                                            </div>
+                                            <p class="mt-2 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ $reply->content }}</p>
+                                            @if($reply->screenshot_path)
+                                                <img src="{{ Storage::url($reply->screenshot_path) }}" alt="Screenshot"
+                                                    class="mt-2 max-w-xs max-h-40 rounded border border-gray-200 dark:border-gray-600 cursor-pointer"
+                                                    onclick="window.open('{{ Storage::url($reply->screenshot_path) }}', '_blank')">
+                                            @endif
+
+                                            {{-- Reply Reactions --}}
+                                            <div class="mt-2 flex flex-wrap items-center gap-1">
+                                                @foreach($reply->groupedReactions as $reaction)
+                                                    <button wire:click="toggleReaction({{ $reply->id }}, '{{ $reaction['emoji'] }}')"
+                                                        class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs rounded-full transition
+                                                            {{ in_array(auth()->id(), $reaction['user_ids']) 
+                                                                ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' 
+                                                                : 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300' }}">
+                                                        <span>{{ $reaction['emoji'] }}</span>
+                                                        <span>{{ $reaction['count'] }}</span>
+                                                    </button>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+
+                            {{-- Reply Form --}}
+                            @if($replyingTo === $message->id)
+                                <div class="mt-4 ml-6 pl-4 border-l-2 border-indigo-300 dark:border-indigo-700">
+                                    <form wire:submit="postReply" class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+                                        <textarea wire:model="replyContent" rows="2"
+                                            class="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                                            placeholder="Write a reply..."></textarea>
+                                        @error('replyContent') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+
+                                        <div class="mt-2 flex items-center justify-between">
+                                            <label class="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-600 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-500 transition">
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                                Screenshot
+                                                <input type="file" wire:model="replyScreenshot" class="hidden" accept="image/*">
+                                            </label>
+                                            @if($replyScreenshot)
+                                                <img src="{{ $replyScreenshot->temporaryUrl() }}" class="h-8 w-8 object-cover rounded">
+                                            @endif
+                                            <div class="flex gap-2">
+                                                <button type="button" wire:click="cancelReply"
+                                                    class="px-3 py-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">
+                                                    Cancel
+                                                </button>
+                                                <button type="submit"
+                                                    class="px-3 py-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded transition">
+                                                    Reply
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            @endif
                         </div>
                     @empty
                         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-md p-12 text-center">
-                            <div
-                                class="w-16 h-16 mx-auto bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
+                            <div class="w-16 h-16 mx-auto bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
                                 <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -290,10 +448,8 @@
                         Pinned Messages
                     </h3>
                     @forelse($pinnedMessages as $pinned)
-                        <div
-                            class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg mb-3">
-                            <p class="text-sm font-medium text-gray-900 dark:text-white">{{ $pinned->user->name ?? 'Unknown' }}
-                            </p>
+                        <div class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg mb-3">
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">{{ $pinned->user->name ?? 'Unknown' }}</p>
                             <p class="text-sm text-gray-600 dark:text-gray-300 mt-1 line-clamp-3">{{ $pinned->content }}</p>
                             <p class="text-xs text-gray-400 mt-2">{{ $pinned->created_at->diffForHumans() }}</p>
                         </div>

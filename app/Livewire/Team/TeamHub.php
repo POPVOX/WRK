@@ -3,22 +3,28 @@
 namespace App\Livewire\Team;
 
 use App\Models\TeamMessage;
+use App\Models\TeamMessageReaction;
 use App\Models\TeamResource;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 #[Layout('layouts.app')]
 class TeamHub extends Component
 {
+    use WithFileUploads;
     use WithPagination;
 
     public string $activeTab = 'team';
 
     public string $newMessage = '';
+
+    public $messageScreenshot = null;
 
     public string $aiQuery = '';
 
@@ -29,6 +35,13 @@ class TeamHub extends Component
     public bool $isQuerying = false;
 
     public array $chatHistory = [];
+
+    // Reply state
+    public ?int $replyingTo = null;
+
+    public string $replyContent = '';
+
+    public $replyScreenshot = null;
 
     // Resource form
     public bool $showResourceForm = false;
@@ -60,12 +73,18 @@ class TeamHub extends Component
 
     protected $rules = [
         'newMessage' => 'required|min:2|max:2000',
+        'messageScreenshot' => 'nullable|image|max:5120',
+        'replyContent' => 'required|min:2|max:2000',
+        'replyScreenshot' => 'nullable|image|max:5120',
         'aiQuery' => 'required|min:2|max:1000',
         'resourceTitle' => 'required|min:2|max:255',
         'resourceDescription' => 'nullable|max:1000',
         'resourceCategory' => 'required|in:policy,resource,howto,template',
         'resourceUrl' => 'nullable|url|max:500',
     ];
+
+    // Available reactions
+    public array $availableReactions = ['👍', '❤️', '🎉', '😂', '🤔', '👀'];
 
     public function setTab(string $tab): void
     {
@@ -75,23 +94,94 @@ class TeamHub extends Component
 
     public function postMessage(): void
     {
-        $this->validate(['newMessage' => $this->rules['newMessage']]);
+        $this->validate([
+            'newMessage' => $this->rules['newMessage'],
+            'messageScreenshot' => $this->rules['messageScreenshot'],
+        ]);
+
+        $screenshotPath = null;
+        if ($this->messageScreenshot) {
+            $screenshotPath = $this->messageScreenshot->store('team-messages', 'public');
+        }
 
         TeamMessage::create([
             'user_id' => Auth::id(),
             'content' => $this->newMessage,
+            'screenshot_path' => $screenshotPath,
             'is_pinned' => false,
             'is_announcement' => false,
         ]);
 
         $this->newMessage = '';
+        $this->messageScreenshot = null;
         $this->dispatch('message-posted');
+    }
+
+    public function startReply(int $messageId): void
+    {
+        $this->replyingTo = $messageId;
+        $this->replyContent = '';
+        $this->replyScreenshot = null;
+    }
+
+    public function cancelReply(): void
+    {
+        $this->replyingTo = null;
+        $this->replyContent = '';
+        $this->replyScreenshot = null;
+    }
+
+    public function postReply(): void
+    {
+        $this->validate([
+            'replyContent' => $this->rules['replyContent'],
+            'replyScreenshot' => $this->rules['replyScreenshot'],
+        ]);
+
+        $screenshotPath = null;
+        if ($this->replyScreenshot) {
+            $screenshotPath = $this->replyScreenshot->store('team-messages', 'public');
+        }
+
+        TeamMessage::create([
+            'user_id' => Auth::id(),
+            'parent_id' => $this->replyingTo,
+            'content' => $this->replyContent,
+            'screenshot_path' => $screenshotPath,
+            'is_pinned' => false,
+            'is_announcement' => false,
+        ]);
+
+        $this->cancelReply();
+        $this->dispatch('reply-posted');
+    }
+
+    public function toggleReaction(int $messageId, string $emoji): void
+    {
+        $existing = TeamMessageReaction::where('team_message_id', $messageId)
+            ->where('user_id', Auth::id())
+            ->where('emoji', $emoji)
+            ->first();
+
+        if ($existing) {
+            $existing->delete();
+        } else {
+            TeamMessageReaction::create([
+                'team_message_id' => $messageId,
+                'user_id' => Auth::id(),
+                'emoji' => $emoji,
+            ]);
+        }
     }
 
     public function deleteMessage(int $messageId): void
     {
         $message = TeamMessage::find($messageId);
-        if ($message && $message->user_id === Auth::id()) {
+        if ($message && ($message->user_id === Auth::id() || Auth::user()->isAdmin())) {
+            // Delete screenshot if exists
+            if ($message->screenshot_path) {
+                Storage::disk('public')->delete($message->screenshot_path);
+            }
             $message->delete();
         }
     }
@@ -291,14 +381,12 @@ PROMPT;
             return;
         }
 
-        // Find the resource above it in the same category
         $above = TeamResource::where('category', $resource->category)
             ->where('sort_order', '<', $resource->sort_order)
             ->orderByDesc('sort_order')
             ->first();
 
         if ($above) {
-            // Swap sort orders
             $tempOrder = $resource->sort_order;
             $resource->sort_order = $above->sort_order;
             $above->sort_order = $tempOrder;
@@ -314,14 +402,12 @@ PROMPT;
             return;
         }
 
-        // Find the resource below it in the same category
         $below = TeamResource::where('category', $resource->category)
             ->where('sort_order', '>', $resource->sort_order)
             ->orderBy('sort_order')
             ->first();
 
         if ($below) {
-            // Swap sort orders
             $tempOrder = $resource->sort_order;
             $resource->sort_order = $below->sort_order;
             $below->sort_order = $tempOrder;
@@ -332,9 +418,7 @@ PROMPT;
 
     public function getTeamMapData()
     {
-        // Map of city names to coordinates
         $cityCoordinates = [
-            // US Cities
             'Washington, DC' => [38.9072, -77.0369],
             'New York, NY' => [40.7128, -74.0060],
             'Boston, MA' => [42.3601, -71.0589],
@@ -369,7 +453,6 @@ PROMPT;
             'Charlotte, NC' => [35.2271, -80.8431],
             'Baltimore, MD' => [39.2904, -76.6122],
             'Pittsburgh, PA' => [40.4406, -79.9959],
-            // International
             'London, UK' => [51.5074, -0.1278],
             'Paris, France' => [48.8566, 2.3522],
             'Berlin, Germany' => [52.5200, 13.4050],
@@ -396,7 +479,6 @@ PROMPT;
             $location = $member->location;
             $coords = $cityCoordinates[$location] ?? null;
 
-            // Try partial match if exact match not found
             if (! $coords) {
                 foreach ($cityCoordinates as $city => $coordinates) {
                     if (stripos($location, explode(',', $city)[0]) !== false) {
@@ -426,7 +508,9 @@ PROMPT;
     {
         $teamMembers = User::where('is_visible', true)->orderBy('name')->get();
 
-        $messages = TeamMessage::with('user')
+        // Only get parent messages (not replies)
+        $messages = TeamMessage::with(['user', 'replies.user', 'replies.reactions.user', 'reactions.user'])
+            ->whereNull('parent_id')
             ->orderByDesc('is_pinned')
             ->orderByDesc('created_at')
             ->paginate(20);
@@ -437,6 +521,7 @@ PROMPT;
             ->groupBy('category');
 
         $pinnedMessages = TeamMessage::with('user')
+            ->whereNull('parent_id')
             ->where('is_pinned', true)
             ->orderByDesc('created_at')
             ->get();

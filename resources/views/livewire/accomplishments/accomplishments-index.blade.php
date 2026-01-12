@@ -3,15 +3,37 @@
         {{-- Header --}}
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div>
+                @if(!$isOwnProfile && auth()->user()->isAdmin())
+                    <a href="{{ route('accomplishments.team') }}" wire:navigate
+                        class="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 mb-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Back to Team Overview
+                    </a>
+                @endif
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     @if($isOwnProfile)
                         🏆 My Accomplishments
                     @else
-                        🏆 {{ $viewingUser->name }}'s Accomplishments
+                        <div class="flex items-center gap-3">
+                            @if($viewingUser->photo_url)
+                                <img src="{{ $viewingUser->photo_url }}" alt="" class="w-10 h-10 rounded-full object-cover">
+                            @else
+                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-semibold">
+                                    {{ substr($viewingUser->name, 0, 1) }}
+                                </div>
+                            @endif
+                            <span>{{ $viewingUser->name }}</span>
+                        </div>
                     @endif
                 </h1>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    Track your wins, celebrate achievements, and document your impact
+                    @if($isOwnProfile)
+                        Track your wins, celebrate achievements, and document your impact
+                    @else
+                        {{ $viewingUser->title ?? 'Team Member' }} • Activity & accomplishments
+                    @endif
                 </p>
             </div>
             <div class="flex items-center gap-2">
