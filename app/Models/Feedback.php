@@ -35,6 +35,13 @@ class Feedback extends Model
         'ai_analyzed_at',
         'github_issue_url',
         'github_issue_number',
+        // Resolution tracking
+        'resolved_at',
+        'resolved_by',
+        'resolution_notes',
+        'resolution_commit',
+        'resolution_effort_minutes',
+        'resolution_type',
     ];
 
     protected function casts(): array
@@ -42,8 +49,17 @@ class Feedback extends Model
         return [
             'ai_tags' => 'array',
             'ai_analyzed_at' => 'datetime',
+            'resolved_at' => 'datetime',
         ];
     }
+
+    public const RESOLUTION_TYPES = [
+        'fix' => 'Bug Fix',
+        'enhancement' => 'Enhancement',
+        'wontfix' => "Won't Fix",
+        'duplicate' => 'Duplicate',
+        'workaround' => 'Workaround Provided',
+    ];
 
     public const TYPES = [
         'bug' => 'Bug Report',
@@ -85,6 +101,54 @@ class Feedback extends Model
     public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    public function resolver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'resolved_by');
+    }
+
+    /**
+     * Get time to resolution in a human-readable format.
+     */
+    public function getTimeToResolutionAttribute(): ?string
+    {
+        if (!$this->resolved_at) {
+            return null;
+        }
+
+        $diff = $this->created_at->diff($this->resolved_at);
+
+        if ($diff->days > 0) {
+            return $diff->days . ' day' . ($diff->days > 1 ? 's' : '') . ', ' . $diff->h . 'h';
+        } elseif ($diff->h > 0) {
+            return $diff->h . ' hour' . ($diff->h > 1 ? 's' : '') . ', ' . $diff->i . 'm';
+        } else {
+            return $diff->i . ' minute' . ($diff->i > 1 ? 's' : '');
+        }
+    }
+
+    /**
+     * Get effort in a human-readable format.
+     */
+    public function getEffortDisplayAttribute(): ?string
+    {
+        if (!$this->resolution_effort_minutes) {
+            return null;
+        }
+
+        $minutes = $this->resolution_effort_minutes;
+        if ($minutes >= 60) {
+            $hours = floor($minutes / 60);
+            $mins = $minutes % 60;
+            return $hours . 'h' . ($mins > 0 ? ' ' . $mins . 'm' : '');
+        }
+        return $minutes . ' min';
+    }
+
+    public function scopeResolved($query)
+    {
+        return $query->whereNotNull('resolved_at');
     }
 
     public function scopeNew($query)

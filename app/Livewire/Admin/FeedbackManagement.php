@@ -22,6 +22,9 @@ class FeedbackManagement extends Component
     use WithPagination;
 
     #[Url]
+    public string $activeTab = 'feedback'; // 'feedback' or 'resolutions'
+
+    #[Url]
     public string $filterStatus = '';
 
     #[Url]
@@ -31,6 +34,14 @@ class FeedbackManagement extends Component
     public string $filterPriority = '';
 
     public string $search = '';
+
+    // Resolution form
+    public bool $showResolveModal = false;
+    public ?int $resolvingFeedbackId = null;
+    public string $resolutionNotes = '';
+    public string $resolutionType = 'fix';
+    public ?int $resolutionEffortMinutes = null;
+    public string $resolutionCommit = '';
 
     // Detail modal
     public bool $showDetailModal = false;
@@ -614,10 +625,86 @@ BODY;
         ]);
     }
 
+    // === Resolution Methods ===
+
+    public function setTab(string $tab): void
+    {
+        $this->activeTab = $tab;
+        $this->resetPage();
+    }
+
+    public function openResolveModal(int $id): void
+    {
+        $this->resolvingFeedbackId = $id;
+        $this->resolutionNotes = '';
+        $this->resolutionType = 'fix';
+        $this->resolutionEffortMinutes = null;
+        $this->resolutionCommit = '';
+        $this->showResolveModal = true;
+    }
+
+    public function closeResolveModal(): void
+    {
+        $this->showResolveModal = false;
+        $this->resolvingFeedbackId = null;
+    }
+
+    public function markResolved(): void
+    {
+        $feedback = Feedback::find($this->resolvingFeedbackId);
+        if (!$feedback) {
+            return;
+        }
+
+        $feedback->update([
+            'status' => 'addressed',
+            'resolved_at' => now(),
+            'resolved_by' => auth()->id(),
+            'resolution_notes' => $this->resolutionNotes ?: null,
+            'resolution_type' => $this->resolutionType,
+            'resolution_effort_minutes' => $this->resolutionEffortMinutes,
+            'resolution_commit' => $this->resolutionCommit ?: null,
+        ]);
+
+        $this->closeResolveModal();
+        $this->dispatch('notify', type: 'success', message: 'Feedback marked as resolved!');
+    }
+
+    public function markUnresolved(int $id): void
+    {
+        $feedback = Feedback::find($id);
+        if ($feedback) {
+            $feedback->update([
+                'status' => 'in_progress',
+                'resolved_at' => null,
+                'resolved_by' => null,
+            ]);
+            $this->dispatch('notify', type: 'info', message: 'Resolution reverted.');
+        }
+    }
+
+    public function getResolutionStatsProperty(): array
+    {
+        $resolved = Feedback::resolved()->get();
+
+        $totalEffort = $resolved->sum('resolution_effort_minutes');
+        $avgTimeToResolution = $resolved->map(function ($f) {
+            return $f->created_at->diffInMinutes($f->resolved_at);
+        })->avg();
+
+        return [
+            'total_resolved' => $resolved->count(),
+            'total_effort_hours' => round($totalEffort / 60, 1),
+            'avg_resolution_time_hours' => round($avgTimeToResolution / 60, 1),
+            'by_type' => $resolved->groupBy('resolution_type')->map->count(),
+            'by_month' => $resolved->groupBy(fn ($f) => $f->resolved_at->format('Y-m'))->map->count(),
+        ];
+    }
+
     public function render()
     {
         $query = Feedback::query()
-            ->with(['user', 'assignee'])
+            ->with(['user', 'assignee', 'resolver'])
             ->when($this->search, function ($q) {
                 $q->where(function ($q) {
                     $q->where('message', 'like', '%'.$this->search.'%')
@@ -630,14 +717,23 @@ BODY;
             ->when($this->filterPriority, fn ($q) => $q->where('priority', $this->filterPriority))
             ->orderBy('created_at', 'desc');
 
+        // Get resolved items for the resolution tab
+        $resolvedItems = Feedback::resolved()
+            ->with(['user', 'resolver'])
+            ->orderBy('resolved_at', 'desc')
+            ->get();
+
         return view('livewire.admin.feedback-management', [
             'feedbackItems' => $query->paginate(20),
+            'resolvedItems' => $resolvedItems,
             'stats' => $this->stats,
+            'resolutionStats' => $this->resolutionStats,
             'statuses' => Feedback::STATUSES,
             'types' => Feedback::TYPES,
             'priorities' => Feedback::PRIORITIES,
+            'resolutionTypes' => Feedback::RESOLUTION_TYPES,
             'staffMembers' => User::orderBy('name')->get(['id', 'name']),
-            'githubConfigured' => $this->gitHubConfigured,
+            'githubConfigured' => $this->githubConfigured,
         ]);
     }
 }

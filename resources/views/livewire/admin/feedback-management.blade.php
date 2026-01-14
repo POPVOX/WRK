@@ -84,6 +84,27 @@
                 </div>
             </div>
 
+            {{-- Tabs --}}
+            <div class="border-b border-gray-200 dark:border-gray-700 mb-6">
+                <nav class="-mb-px flex gap-6">
+                    <button
+                        wire:click="setTab('feedback')"
+                        class="py-3 px-1 border-b-2 font-medium text-sm transition-colors {{ $activeTab === 'feedback' ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300' }}"
+                    >
+                        📋 All Feedback
+                        <span class="ml-2 px-2 py-0.5 rounded-full text-xs {{ $activeTab === 'feedback' ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' }}">{{ $stats['total'] }}</span>
+                    </button>
+                    <button
+                        wire:click="setTab('resolutions')"
+                        class="py-3 px-1 border-b-2 font-medium text-sm transition-colors {{ $activeTab === 'resolutions' ? 'border-green-500 text-green-600 dark:text-green-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300' }}"
+                    >
+                        ✅ Resolution Tracker
+                        <span class="ml-2 px-2 py-0.5 rounded-full text-xs {{ $activeTab === 'resolutions' ? 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' }}">{{ $resolutionStats['total_resolved'] }}</span>
+                    </button>
+                </nav>
+            </div>
+
+            @if($activeTab === 'feedback')
             {{-- Stats --}}
             <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                 <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
@@ -102,9 +123,9 @@
                     <p class="text-sm text-blue-600 dark:text-blue-400">Suggestions</p>
                     <p class="text-2xl font-bold text-blue-700 dark:text-blue-300">{{ $stats['suggestions'] }}</p>
                 </div>
-                <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-                    <p class="text-sm text-gray-500 dark:text-gray-400">This Week</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ $stats['this_week'] }}</p>
+                <div class="bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800 p-4">
+                    <p class="text-sm text-green-600 dark:text-green-400">Resolved</p>
+                    <p class="text-2xl font-bold text-green-700 dark:text-green-300">{{ $resolutionStats['total_resolved'] }}</p>
                 </div>
             </div>
 
@@ -211,9 +232,16 @@
                                                 'dismissed' => 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
                                             ];
                                         @endphp
-                                        <span class="inline-flex px-2 py-1 rounded-full text-xs font-medium {{ $statusColors[$item->status] ?? '' }}">
-                                            {{ $statuses[$item->status] ?? $item->status }}
-                                        </span>
+                                        <div class="flex flex-col gap-1">
+                                            <span class="inline-flex px-2 py-1 rounded-full text-xs font-medium {{ $statusColors[$item->status] ?? '' }}">
+                                                {{ $statuses[$item->status] ?? $item->status }}
+                                            </span>
+                                            @if($item->resolved_at)
+                                                <span class="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                                                    ✓ {{ $item->time_to_resolution }}
+                                                </span>
+                                            @endif
+                                        </div>
                                     </td>
                                     <td class="px-4 py-3">
                                         @if($item->priority)
@@ -235,12 +263,23 @@
                                     <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                                         {{ $item->created_at->format('M j, g:i A') }}
                                     </td>
-                                    <td class="px-4 py-3">
-                                        @if($item->screenshot_path)
-                                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                            </svg>
-                                        @endif
+                                    <td class="px-4 py-3" wire:click.stop>
+                                        <div class="flex items-center gap-2">
+                                            @if($item->screenshot_path)
+                                                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                            @endif
+                                            @if(!$item->resolved_at)
+                                                <button
+                                                    wire:click="openResolveModal({{ $item->id }})"
+                                                    class="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded hover:bg-green-200 dark:hover:bg-green-900/60 transition-colors"
+                                                    title="Mark as resolved"
+                                                >
+                                                    ✓ Resolve
+                                                </button>
+                                            @endif
+                                        </div>
                                     </td>
                                 </tr>
                             @empty
@@ -264,8 +303,243 @@
                     </div>
                 @endif
             </div>
+            @else
+            {{-- Resolution Tracker Tab --}}
+            <div class="space-y-6">
+                {{-- Resolution Stats --}}
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-5 text-white">
+                        <p class="text-sm font-medium text-green-100">Total Resolved</p>
+                        <p class="text-3xl font-bold mt-1">{{ $resolutionStats['total_resolved'] }}</p>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Total Effort</p>
+                        <p class="text-3xl font-bold text-gray-900 dark:text-white mt-1">{{ $resolutionStats['total_effort_hours'] }}h</p>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Avg Time to Fix</p>
+                        <p class="text-3xl font-bold text-gray-900 dark:text-white mt-1">{{ $resolutionStats['avg_resolution_time_hours'] }}h</p>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Resolution Rate</p>
+                        <p class="text-3xl font-bold text-gray-900 dark:text-white mt-1">
+                            {{ $stats['total'] > 0 ? round(($resolutionStats['total_resolved'] / $stats['total']) * 100) : 0 }}%
+                        </p>
+                    </div>
+                </div>
+
+                {{-- Resolution by Type --}}
+                @if(count($resolutionStats['by_type']) > 0)
+                <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+                    <h3 class="font-semibold text-gray-900 dark:text-white mb-4">Resolutions by Type</h3>
+                    <div class="flex flex-wrap gap-3">
+                        @foreach($resolutionStats['by_type'] as $type => $count)
+                            @php
+                                $typeColors = [
+                                    'fix' => 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+                                    'enhancement' => 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+                                    'wontfix' => 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+                                    'duplicate' => 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+                                    'workaround' => 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+                                ];
+                            @endphp
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium {{ $typeColors[$type] ?? 'bg-gray-100 text-gray-700' }}">
+                                {{ $resolutionTypes[$type] ?? ucfirst($type) }}
+                                <span class="ml-2 px-2 py-0.5 rounded-full bg-white/50 dark:bg-black/20 text-xs">{{ $count }}</span>
+                            </span>
+                        @endforeach
+                    </div>
+                </div>
+                @endif
+
+                {{-- Resolution Timeline --}}
+                <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <h3 class="font-semibold text-gray-900 dark:text-white">Resolution History</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">All fixes and updates with time elapsed and effort</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-900/50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Issue</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Resolution</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Reported</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Resolved</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Time to Fix</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Effort</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Resolved By</th>
+                                    <th class="px-4 py-3"></th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                @forelse($resolvedItems as $item)
+                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                        <td class="px-4 py-3">
+                                            @php
+                                                $typeColors = [
+                                                    'fix' => 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+                                                    'enhancement' => 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+                                                    'wontfix' => 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
+                                                    'duplicate' => 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
+                                                    'workaround' => 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+                                                ];
+                                            @endphp
+                                            <span class="inline-flex px-2 py-1 rounded-full text-xs font-medium {{ $typeColors[$item->resolution_type] ?? 'bg-gray-100 text-gray-700' }}">
+                                                {{ $resolutionTypes[$item->resolution_type] ?? 'Fixed' }}
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <div class="max-w-xs">
+                                                <p class="text-sm text-gray-900 dark:text-white font-medium line-clamp-2">{{ Str::limit($item->message, 80) }}</p>
+                                                @if($item->ai_summary)
+                                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-1">{{ $item->ai_summary }}</p>
+                                                @endif
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            @if($item->resolution_notes)
+                                                <p class="text-sm text-gray-700 dark:text-gray-300 max-w-xs line-clamp-2">{{ $item->resolution_notes }}</p>
+                                            @else
+                                                <span class="text-xs text-gray-400">—</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                            {{ $item->created_at->format('M j, Y') }}
+                                            <span class="text-xs block text-gray-400">{{ $item->created_at->format('g:i A') }}</span>
+                                        </td>
+                                        <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                            {{ $item->resolved_at->format('M j, Y') }}
+                                            <span class="text-xs block text-gray-400">{{ $item->resolved_at->format('g:i A') }}</span>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                                                ⏱ {{ $item->time_to_resolution }}
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            @if($item->effort_display)
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+                                                    🔧 {{ $item->effort_display }}
+                                                </span>
+                                            @else
+                                                <span class="text-xs text-gray-400">—</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                                            {{ $item->resolver?->name ?? '—' }}
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <button
+                                                wire:click="markUnresolved({{ $item->id }})"
+                                                class="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                                                title="Revert resolution"
+                                            >
+                                                ↩
+                                            </button>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="9" class="px-4 py-12 text-center">
+                                            <div class="flex flex-col items-center">
+                                                <svg class="w-12 h-12 text-gray-300 dark:text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                <p class="text-gray-500 dark:text-gray-400">No resolutions yet</p>
+                                                <p class="text-sm text-gray-400 dark:text-gray-500 mt-1">Mark feedback items as resolved to track them here</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            @endif
         </div>
     </div>
+
+    {{-- Resolve Modal --}}
+    @if($showResolveModal)
+        <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" wire:click="closeResolveModal"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+                <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                    <div class="px-6 pt-5 pb-4">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/40">
+                                <svg class="h-6 w-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                            </div>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Mark as Resolved</h3>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Resolution Type</label>
+                                <select wire:model="resolutionType" class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                                    @foreach($resolutionTypes as $key => $label)
+                                        <option value="{{ $key }}">{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Resolution Notes</label>
+                                <textarea
+                                    wire:model="resolutionNotes"
+                                    rows="3"
+                                    class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm"
+                                    placeholder="Describe what was fixed or changed..."
+                                ></textarea>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Effort (minutes)</label>
+                                    <input
+                                        type="number"
+                                        wire:model="resolutionEffortMinutes"
+                                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm"
+                                        placeholder="30"
+                                        min="0"
+                                    >
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Commit Hash (optional)</label>
+                                    <input
+                                        type="text"
+                                        wire:model="resolutionCommit"
+                                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm"
+                                        placeholder="abc123"
+                                    >
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-gray-700/50 px-6 py-3 flex justify-end gap-3">
+                        <button
+                            wire:click="closeResolveModal"
+                            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            wire:click="markResolved"
+                            class="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+                        >
+                            Mark Resolved
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 
     {{-- Detail Modal --}}
     @if($showDetailModal && $viewingFeedback)
