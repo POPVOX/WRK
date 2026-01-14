@@ -443,7 +443,7 @@ BODY;
     /**
      * Check if GitHub integration is configured.
      */
-    public function getGitHubConfiguredProperty(): bool
+    public function getGithubConfiguredProperty(): bool
     {
         return ! empty(config('services.github.token')) && ! empty(config('services.github.repo'));
     }
@@ -687,17 +687,19 @@ BODY;
     {
         $resolved = Feedback::resolved()->get();
 
-        $totalEffort = $resolved->sum('resolution_effort_minutes');
-        $avgTimeToResolution = $resolved->map(function ($f) {
-            return $f->created_at->diffInMinutes($f->resolved_at);
-        })->avg();
+        $totalEffort = $resolved->sum('resolution_effort_minutes') ?? 0;
+        $avgTimeToResolution = $resolved->count() > 0 
+            ? $resolved->map(function ($f) {
+                return $f->created_at->diffInMinutes($f->resolved_at);
+            })->avg() 
+            : 0;
 
         return [
             'total_resolved' => $resolved->count(),
-            'total_effort_hours' => round($totalEffort / 60, 1),
-            'avg_resolution_time_hours' => round($avgTimeToResolution / 60, 1),
+            'total_effort_hours' => round(($totalEffort ?? 0) / 60, 1),
+            'avg_resolution_time_hours' => round(($avgTimeToResolution ?? 0) / 60, 1),
             'by_type' => $resolved->groupBy('resolution_type')->map->count(),
-            'by_month' => $resolved->groupBy(fn ($f) => $f->resolved_at->format('Y-m'))->map->count(),
+            'by_month' => $resolved->filter(fn ($f) => $f->resolved_at)->groupBy(fn ($f) => $f->resolved_at->format('Y-m'))->map->count(),
         ];
     }
 
