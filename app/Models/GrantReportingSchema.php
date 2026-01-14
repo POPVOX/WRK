@@ -208,3 +208,4 @@ class GrantReportingSchema extends Model
         return $query->where('status', 'draft');
     }
 }
+

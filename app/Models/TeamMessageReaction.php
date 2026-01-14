@@ -24,3 +24,4 @@ class TeamMessageReaction extends Model
     }
 }
 
+

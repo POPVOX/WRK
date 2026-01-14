@@ -199,3 +199,4 @@ composer dump-autoload
 | Feedback Widget | `app/Livewire/FeedbackWidget.php` |
 | This Document | `CURSOR_WORKFLOW.md` |
 
+

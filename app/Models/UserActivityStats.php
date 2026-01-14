@@ -134,3 +134,4 @@ class UserActivityStats extends Model
         ]);
     }
 }
+

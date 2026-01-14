@@ -196,3 +196,4 @@ class GeographicSeeder extends Seeder
         ];
     }
 }
+
