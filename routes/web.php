@@ -82,9 +82,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/funders', \App\Livewire\Grants\GrantIndex::class)->name('grants.index');
     Route::get('/funders/{grant}', \App\Livewire\Grants\GrantShow::class)->name('grants.show');
 
-    // Appropriations Tracker
-    Route::get('/appropriations', \App\Livewire\Appropriations\Dashboard::class)->name('appropriations.index');
-    Route::get('/appropriations/upload', \App\Livewire\Appropriations\UploadReport::class)->name('appropriations.upload');
 
     // API routes
     Route::get('/api/mentions/search', [\App\Http\Controllers\Api\MentionSearchController::class, 'search'])->name('api.mentions.search');
