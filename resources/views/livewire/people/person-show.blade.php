@@ -191,6 +191,69 @@
                             @endif
                         </div>
 
+                        <!-- Journalist/Media Info -->
+                        <div class="md:col-span-2 border-t border-gray-200 dark:border-gray-700 pt-4 mt-2">
+                            <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                                📰 Media Contact
+                                @if($editing)
+                                    <label class="inline-flex items-center ml-4">
+                                        <input type="checkbox" wire:model="is_journalist"
+                                            class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600">
+                                        <span class="ml-2 text-sm text-gray-600 dark:text-gray-400">Is Journalist/Media</span>
+                                    </label>
+                                @elseif($person->is_journalist)
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300">Journalist</span>
+                                @endif
+                            </h4>
+
+                            @if($editing && $is_journalist)
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Beat/Coverage Area</label>
+                                        <input type="text" wire:model="beat" placeholder="e.g., Technology, Politics, Climate"
+                                            class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Responsiveness</label>
+                                        <select wire:model="responsiveness"
+                                            class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                            <option value="">Select...</option>
+                                            <option value="excellent">Excellent - Always responds quickly</option>
+                                            <option value="good">Good - Usually responds</option>
+                                            <option value="fair">Fair - Sometimes responds</option>
+                                            <option value="poor">Poor - Rarely responds</option>
+                                        </select>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Media Notes</label>
+                                        <textarea wire:model="media_notes" rows="2" placeholder="Preferred contact method, best times to reach, story preferences..."
+                                            class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
+                                    </div>
+                                </div>
+                            @elseif($person->is_journalist)
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                    @if($person->beat)
+                                        <div>
+                                            <span class="text-gray-500 dark:text-gray-400">Beat:</span>
+                                            <span class="text-gray-900 dark:text-white ml-1">{{ $person->beat }}</span>
+                                        </div>
+                                    @endif
+                                    @if($person->responsiveness)
+                                        <div>
+                                            <span class="text-gray-500 dark:text-gray-400">Responsiveness:</span>
+                                            <span class="text-gray-900 dark:text-white ml-1 capitalize">{{ $person->responsiveness }}</span>
+                                        </div>
+                                    @endif
+                                    @if($person->media_notes)
+                                        <div class="md:col-span-2">
+                                            <span class="text-gray-500 dark:text-gray-400">Media Notes:</span>
+                                            <p class="text-gray-900 dark:text-white mt-1">{{ $person->media_notes }}</p>
+                                        </div>
+                                    @endif
+                                </div>
+                            @endif
+                        </div>
+
                         <!-- Geographic Focus -->
                         <div class="md:col-span-2">
                             <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Geographic Focus</label>

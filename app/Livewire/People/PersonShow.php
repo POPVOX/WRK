@@ -50,6 +50,15 @@ class PersonShow extends Component
 
     public string $next_action_note = '';
 
+    // Media/Journalist fields
+    public bool $is_journalist = false;
+
+    public string $beat = '';
+
+    public string $media_notes = '';
+
+    public ?string $responsiveness = null;
+
     // Interaction form
     public string $interaction_type = 'note'; // call,email,meeting,note
 
@@ -106,6 +115,12 @@ class PersonShow extends Component
         $this->next_action_at = optional($this->person->next_action_at)->format('Y-m-d\TH:i') ?? null;
         $this->next_action_note = $this->person->next_action_note ?? '';
 
+        // Journalist fields
+        $this->is_journalist = (bool) $this->person->is_journalist;
+        $this->beat = $this->person->beat ?? '';
+        $this->media_notes = $this->person->media_notes ?? '';
+        $this->responsiveness = $this->person->responsiveness;
+
         // Geographic tags
         $this->selectedRegions = $this->person->geographicTags()->where('geographic_type', 'region')->pluck('geographic_id')->toArray();
         $this->selectedCountries = $this->person->geographicTags()->where('geographic_type', 'country')->pluck('geographic_id')->toArray();
@@ -153,6 +168,11 @@ class PersonShow extends Component
             'phone' => $this->phone ?: null,
             'linkedin_url' => $this->linkedin_url ?: null,
             'notes' => $this->notes ?: null,
+            // Journalist fields
+            'is_journalist' => $this->is_journalist,
+            'beat' => $this->beat ?: null,
+            'media_notes' => $this->media_notes ?: null,
+            'responsiveness' => $this->responsiveness ?: null,
         ]);
 
         // Sync geographic tags

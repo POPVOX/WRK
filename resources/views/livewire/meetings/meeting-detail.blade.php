@@ -436,13 +436,28 @@
                                     @endif
                                 </div>
                                 <div>
-                                    <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Date</dt>
+                                    <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Date & Time</dt>
                                     @if($editing)
-                                        <input type="date" wire:model="meeting_date"
-                                            class="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm">
+                                        <div class="mt-1 flex gap-2 flex-wrap">
+                                            <input type="date" wire:model="meeting_date"
+                                                class="flex-1 min-w-[140px] rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm">
+                                            <input type="time" wire:model="meeting_time" placeholder="Start"
+                                                class="w-28 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm">
+                                            <span class="self-center text-gray-400">-</span>
+                                            <input type="time" wire:model="meeting_end_time" placeholder="End"
+                                                class="w-28 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm">
+                                        </div>
                                     @else
                                         <dd class="text-sm text-gray-900 dark:text-white">
                                             {{ $meeting->meeting_date->format('l, F j, Y') }}
+                                            @if($meeting->meeting_time)
+                                                <span class="text-gray-500 dark:text-gray-400 ml-2">
+                                                    {{ \Carbon\Carbon::parse($meeting->meeting_time)->format('g:i A') }}
+                                                    @if($meeting->meeting_end_time)
+                                                        - {{ \Carbon\Carbon::parse($meeting->meeting_end_time)->format('g:i A') }}
+                                                    @endif
+                                                </span>
+                                            @endif
                                         </dd>
                                     @endif
                                 </div>

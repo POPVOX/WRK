@@ -18,6 +18,8 @@ class Organization extends Model
         'abbreviation',
         'type',
         'website',
+        'email',
+        'phone',
         'linkedin_url',
         'logo_url',
         'description',

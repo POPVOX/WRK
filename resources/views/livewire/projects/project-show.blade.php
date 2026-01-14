@@ -1,13 +1,24 @@
-<div>
+<div x-on:open-project-edit-modal.window="$wire.startEditing()">
     <x-slot name="header">
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-4">
-                <a href="{{ route('projects.index') }}" wire:navigate
-                    class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                    </svg>
-                </a>
+                @if($project->parent)
+                    <a href="{{ route('projects.show', $project->parent) }}" wire:navigate
+                        class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center gap-1"
+                        title="Back to {{ $project->parent->name }}">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                        <span class="text-xs hidden sm:inline">{{ Str::limit($project->parent->name, 20) }}</span>
+                    </a>
+                @else
+                    <a href="{{ route('projects.index') }}" wire:navigate
+                        class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                    </a>
+                @endif
                 <div>
                     <div class="flex items-center gap-2">
                         <span
@@ -71,7 +82,7 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
-                <button wire:click="startEditing"
+                <button @click="$dispatch('open-project-edit-modal')"
                     class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500">
                     Edit
                 </button>
@@ -878,10 +889,17 @@
                                             </div>
                                             <div class="text-xs text-gray-500 dark:text-gray-400">Completed:
                                                 {{ $milestone->completed_date?->format('M j, Y') }}
+                                                @if($milestone->completedByUser)
+                                                    by {{ $milestone->completedByUser->name }}
+                                                @endif
                                             </div>
                                         </div>
-                                        <button wire:click="deleteMilestone({{ $milestone->id }})" wire:confirm="Delete?"
-                                            class="text-red-600 dark:text-red-400 text-sm">Delete</button>
+                                        <div class="flex gap-2">
+                                            <button wire:click="uncompleteMilestone({{ $milestone->id }})"
+                                                class="px-3 py-1 text-sm text-yellow-700 dark:text-yellow-300 bg-yellow-100 dark:bg-yellow-900 rounded hover:bg-yellow-200">Undo</button>
+                                            <button wire:click="deleteMilestone({{ $milestone->id }})" wire:confirm="Delete?"
+                                                class="text-red-600 dark:text-red-400 text-sm">Delete</button>
+                                        </div>
                                     </div>
                                 @endforeach
                             @endif

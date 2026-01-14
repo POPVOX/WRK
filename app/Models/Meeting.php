@@ -17,6 +17,8 @@ class Meeting extends Model
         'lead_contact_id',
         'title',
         'meeting_date',
+        'meeting_time',
+        'meeting_end_time',
         'location',
         'meeting_link',
         'meeting_link_type',

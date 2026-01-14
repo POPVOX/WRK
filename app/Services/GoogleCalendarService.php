@@ -144,27 +144,41 @@ class GoogleCalendarService
         }
 
         // Convert dates to Carbon if they aren't already
+        // Default to 6 months back to 6 months ahead for wider coverage
         $start = $startDate instanceof \Carbon\Carbon
             ? $startDate
-            : ($startDate ? \Carbon\Carbon::parse($startDate) : now()->subMonth());
+            : ($startDate ? \Carbon\Carbon::parse($startDate) : now()->subMonths(6));
 
         $end = $endDate instanceof \Carbon\Carbon
             ? $endDate
-            : ($endDate ? \Carbon\Carbon::parse($endDate) : now()->addMonth());
+            : ($endDate ? \Carbon\Carbon::parse($endDate) : now()->addMonths(6));
 
         $calendarId = 'primary';
-        $optParams = [
-            'maxResults' => 250,
-            'orderBy' => 'startTime',
-            'singleEvents' => true,
-            'timeMin' => $start->toRfc3339String(),
-            'timeMax' => $end->toRfc3339String(),
-        ];
+        $allEvents = [];
+        $pageToken = null;
 
         try {
-            $results = $service->events->listEvents($calendarId, $optParams);
+            // Paginate through all results
+            do {
+                $optParams = [
+                    'maxResults' => 250,
+                    'orderBy' => 'startTime',
+                    'singleEvents' => true,
+                    'timeMin' => $start->toRfc3339String(),
+                    'timeMax' => $end->toRfc3339String(),
+                ];
 
-            return $results->getItems();
+                if ($pageToken) {
+                    $optParams['pageToken'] = $pageToken;
+                }
+
+                $results = $service->events->listEvents($calendarId, $optParams);
+                $allEvents = array_merge($allEvents, $results->getItems());
+                $pageToken = $results->getNextPageToken();
+
+            } while ($pageToken);
+
+            return $allEvents;
         } catch (\Exception $e) {
             \Log::error('Google Calendar Error: '.$e->getMessage());
 
