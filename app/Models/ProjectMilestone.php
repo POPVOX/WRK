@@ -20,6 +20,7 @@ class ProjectMilestone extends Model
         'status',
         'due_date',
         'completed_date',
+        'completed_by',
         'sort_order',
     ];
 
@@ -75,5 +76,28 @@ class ProjectMilestone extends Model
     public function getIsOverdueAttribute(): bool
     {
         return $this->isOverdue();
+    }
+
+    public function completedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'completed_by');
+    }
+
+    public function markComplete(?int $userId = null): void
+    {
+        $this->update([
+            'status' => 'completed',
+            'completed_date' => now(),
+            'completed_by' => $userId ?? auth()->id(),
+        ]);
+    }
+
+    public function markIncomplete(): void
+    {
+        $this->update([
+            'status' => 'pending',
+            'completed_date' => null,
+            'completed_by' => null,
+        ]);
     }
 }

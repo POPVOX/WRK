@@ -53,6 +53,20 @@
                                 @error('website') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                             </div>
                         </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+                                <input type="email" wire:model="email" placeholder="contact@organization.org"
+                                    class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                @error('email') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
+                                <input type="tel" wire:model="phone" placeholder="(555) 123-4567"
+                                    class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                @error('phone') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                            </div>
+                        </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">LinkedIn
                                 URL</label>
@@ -138,7 +152,7 @@
                                         {{ Str::limit($organization->description, 200) }}
                                     </p>
                                 @endif
-                                <div class="flex gap-4 mt-2">
+                                <div class="flex flex-wrap gap-4 mt-2">
                                     @if($organization->website)
                                         <a href="{{ $organization->website }}" target="_blank"
                                             class="text-indigo-600 dark:text-indigo-400 hover:underline text-sm inline-flex items-center">
@@ -147,6 +161,26 @@
                                                     d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                                             </svg>
                                             Website
+                                        </a>
+                                    @endif
+                                    @if($organization->email)
+                                        <a href="mailto:{{ $organization->email }}"
+                                            class="text-indigo-600 dark:text-indigo-400 hover:underline text-sm inline-flex items-center">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                            </svg>
+                                            {{ $organization->email }}
+                                        </a>
+                                    @endif
+                                    @if($organization->phone)
+                                        <a href="tel:{{ $organization->phone }}"
+                                            class="text-indigo-600 dark:text-indigo-400 hover:underline text-sm inline-flex items-center">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                            </svg>
+                                            {{ $organization->phone }}
                                         </a>
                                     @endif
                                     @if($organization->linkedin_url)

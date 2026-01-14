@@ -125,7 +125,16 @@
             @endforeach
         </select>
 
-        @if($search || $organization || $issue)
+        {{-- Team Member Filter --}}
+        <select wire:model.live="teamMember"
+            class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+            <option value="">All Staff</option>
+            @foreach($teamMembers as $member)
+                <option value="{{ $member->id }}">{{ $member->name }}</option>
+            @endforeach
+        </select>
+
+        @if($search || $organization || $issue || $teamMember)
             <button wire:click="clearFilters" class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
                 Clear filters
             </button>

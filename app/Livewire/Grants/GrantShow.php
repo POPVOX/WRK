@@ -124,7 +124,7 @@ class GrantShow extends Component
     {
         $this->validate([
             'editName' => 'required|string|max:255',
-            'editStatus' => 'required|in:pending,active,completed,declined',
+            'editStatus' => 'required|in:prospective,pending,active,completed,declined',
             'editAmount' => 'nullable|numeric|min:0',
             'editStartDate' => 'nullable|date',
             'editEndDate' => 'nullable|date|after_or_equal:editStartDate',

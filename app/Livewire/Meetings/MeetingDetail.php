@@ -26,6 +26,10 @@ class MeetingDetail extends Component
 
     public string $meeting_date = '';
 
+    public ?string $meeting_time = null;
+
+    public ?string $meeting_end_time = null;
+
     public string $prep_notes = '';  // Before meeting prep
 
     public string $raw_notes = '';   // During meeting notes
@@ -103,6 +107,8 @@ class MeetingDetail extends Component
     {
         $this->title = $this->meeting->title ?? '';
         $this->meeting_date = $this->meeting->meeting_date->format('Y-m-d');
+        $this->meeting_time = $this->meeting->meeting_time;
+        $this->meeting_end_time = $this->meeting->meeting_end_time;
         $this->prep_notes = $this->meeting->prep_notes ?? '';
         $this->raw_notes = $this->meeting->raw_notes ?? '';
         $this->aiSummary = $this->meeting->ai_summary ?? '';
@@ -131,6 +137,8 @@ class MeetingDetail extends Component
         $this->validate([
             'title' => 'nullable|string|max:255',
             'meeting_date' => 'required|date',
+            'meeting_time' => 'nullable|date_format:H:i',
+            'meeting_end_time' => 'nullable|date_format:H:i',
             'prep_notes' => 'nullable|string',
             'raw_notes' => 'nullable|string',
         ]);
@@ -138,6 +146,8 @@ class MeetingDetail extends Component
         $this->meeting->update([
             'title' => $this->title ?: null,
             'meeting_date' => $this->meeting_date,
+            'meeting_time' => $this->meeting_time ?: null,
+            'meeting_end_time' => $this->meeting_end_time ?: null,
             'prep_notes' => $this->prep_notes ?: null,
             'raw_notes' => $this->raw_notes ?: null,
             'ai_summary' => $this->aiSummary ?: null,

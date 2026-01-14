@@ -367,10 +367,22 @@ class ProjectShow extends Component
 
     public function completeMilestone(int $milestoneId)
     {
-        ProjectMilestone::where('id', $milestoneId)->where('project_id', $this->project->id)
-            ->update(['status' => 'completed', 'completed_date' => now()]);
-        $this->project->refresh();
-        $this->dispatch('notify', type: 'success', message: 'Milestone completed!');
+        $milestone = ProjectMilestone::where('id', $milestoneId)->where('project_id', $this->project->id)->first();
+        if ($milestone) {
+            $milestone->markComplete();
+            $this->project->refresh();
+            $this->dispatch('notify', type: 'success', message: 'Milestone completed!');
+        }
+    }
+
+    public function uncompleteMilestone(int $milestoneId)
+    {
+        $milestone = ProjectMilestone::where('id', $milestoneId)->where('project_id', $this->project->id)->first();
+        if ($milestone) {
+            $milestone->markIncomplete();
+            $this->project->refresh();
+            $this->dispatch('notify', type: 'success', message: 'Milestone reopened.');
+        }
     }
 
     public function deleteMilestone(int $milestoneId)

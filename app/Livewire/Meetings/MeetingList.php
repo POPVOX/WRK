@@ -34,6 +34,9 @@ class MeetingList extends Component
     public string $issue = '';
 
     #[Url]
+    public string $teamMember = '';
+
+    #[Url]
     public string $completedPeriod = 'month'; // week, month, quarter, year, all
 
     // Bulk import state
@@ -67,6 +70,7 @@ class MeetingList extends Component
         $this->view = '';
         $this->organization = '';
         $this->issue = '';
+        $this->teamMember = '';
         $this->completedPeriod = 'month';
         $this->resetPage();
     }
@@ -204,10 +208,11 @@ class MeetingList extends Component
     public function getUpcomingMeetingsProperty()
     {
         $query = Meeting::upcoming()
-            ->with(['people', 'organizations', 'issues'])
+            ->with(['people', 'organizations', 'issues', 'teamMembers'])
             ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
             ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)));
+            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)))
+            ->when($this->teamMember, fn ($q) => $q->whereHas('teamMembers', fn ($t) => $t->where('users.id', $this->teamMember)));
 
         return $query->get();
     }
@@ -216,10 +221,11 @@ class MeetingList extends Component
     public function getNeedsNotesMeetingsProperty()
     {
         $query = Meeting::needsNotes()
-            ->with(['people', 'organizations'])
+            ->with(['people', 'organizations', 'teamMembers'])
             ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
             ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)));
+            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)))
+            ->when($this->teamMember, fn ($q) => $q->whereHas('teamMembers', fn ($t) => $t->where('users.id', $this->teamMember)));
 
         return $query->limit(10)->get();
     }
@@ -228,10 +234,11 @@ class MeetingList extends Component
     public function getCompletedMeetingsProperty()
     {
         $query = Meeting::withNotes()
-            ->with(['people', 'organizations', 'issues'])
+            ->with(['people', 'organizations', 'issues', 'teamMembers'])
             ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
             ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)));
+            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)))
+            ->when($this->teamMember, fn ($q) => $q->whereHas('teamMembers', fn ($t) => $t->where('users.id', $this->teamMember)));
 
         // Period filter
         $query->when($this->completedPeriod === 'week', fn ($q) => $q->where('meeting_date', '>=', now()->subWeek()))
@@ -245,10 +252,11 @@ class MeetingList extends Component
     // All meetings for list/cards view
     public function getAllMeetingsProperty()
     {
-        $query = Meeting::with(['people', 'organizations', 'issues'])
+        $query = Meeting::with(['people', 'organizations', 'issues', 'teamMembers'])
             ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
             ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)));
+            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)))
+            ->when($this->teamMember, fn ($q) => $q->whereHas('teamMembers', fn ($t) => $t->where('users.id', $this->teamMember)));
 
         // Filter by view type
         if ($this->view === 'upcoming') {
@@ -283,6 +291,7 @@ class MeetingList extends Component
     {
         $organizations = Organization::orderBy('name')->get();
         $issues = Issue::orderBy('name')->get();
+        $teamMembers = \App\Models\User::where('is_visible', true)->orderBy('name')->get();
 
         return view('livewire.meetings.meeting-list', [
             'upcomingMeetings' => $this->upcomingMeetings,
@@ -293,6 +302,7 @@ class MeetingList extends Component
             'stats' => $this->stats,
             'organizations' => $organizations,
             'issues' => $issues,
+            'teamMembers' => $teamMembers,
         ]);
     }
 }

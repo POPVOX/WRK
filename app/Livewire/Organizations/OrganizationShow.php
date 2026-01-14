@@ -28,6 +28,10 @@ class OrganizationShow extends Component
 
     public string $website = '';
 
+    public string $email = '';
+
+    public string $phone = '';
+
     public string $linkedin_url = '';
 
     public string $notes = '';
@@ -76,6 +80,8 @@ class OrganizationShow extends Component
         $this->abbreviation = $this->organization->abbreviation ?? '';
         $this->type = $this->organization->type ?? '';
         $this->website = $this->organization->website ?? '';
+        $this->email = $this->organization->email ?? '';
+        $this->phone = $this->organization->phone ?? '';
         $this->linkedin_url = $this->organization->linkedin_url ?? '';
         $this->notes = $this->organization->notes ?? '';
 
@@ -111,6 +117,8 @@ class OrganizationShow extends Component
             'abbreviation' => 'nullable|string|max:20',
             'type' => 'nullable|string|max:255',
             'website' => 'nullable|url|max:255',
+            'email' => 'nullable|email|max:255',
+            'phone' => 'nullable|string|max:50',
             'linkedin_url' => 'nullable|url|max:255',
             'notes' => 'nullable|string',
         ]);
@@ -122,6 +130,8 @@ class OrganizationShow extends Component
             'abbreviation' => $this->abbreviation ?: null,
             'type' => $this->type ?: null,
             'website' => $this->website ?: null,
+            'email' => $this->email ?: null,
+            'phone' => $this->phone ?: null,
             'linkedin_url' => $this->linkedin_url ?: null,
             'notes' => $this->notes ?: null,
         ]);

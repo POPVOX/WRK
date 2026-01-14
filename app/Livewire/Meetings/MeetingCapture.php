@@ -64,6 +64,8 @@ class MeetingCapture extends Component
 
     public bool $isExtracting = false;
 
+    public bool $extractionPaused = false;
+
     public ?string $transcript = null;
 
     // AI-extracted fields (for review before saving)
@@ -261,6 +263,16 @@ class MeetingCapture extends Component
         $this->isProcessing = false;
     }
 
+    public function toggleExtractionPause()
+    {
+        $this->extractionPaused = !$this->extractionPaused;
+        if ($this->extractionPaused) {
+            $this->dispatch('notify', type: 'info', message: 'AI extraction paused. Click again to resume.');
+        } else {
+            $this->dispatch('notify', type: 'info', message: 'AI extraction resumed.');
+        }
+    }
+
     /**
      * Extract structured data from notes using AI and auto-fill fields.
      */
@@ -268,6 +280,12 @@ class MeetingCapture extends Component
     {
         if (empty($this->raw_notes)) {
             $this->dispatch('notify', type: 'error', message: 'Please enter meeting notes first.');
+
+            return;
+        }
+
+        if ($this->extractionPaused) {
+            $this->dispatch('notify', type: 'warning', message: 'AI extraction is paused. Unpause to continue.');
 
             return;
         }
