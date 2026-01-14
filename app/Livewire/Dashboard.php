@@ -8,7 +8,6 @@ use App\Models\Grant;
 use App\Models\Meeting;
 use App\Models\PressClip;
 use App\Models\Project;
-use App\Models\ReportingRequirement;
 use App\Services\ChatService;
 use App\Services\GoogleCalendarService;
 use Carbon\Carbon;
@@ -176,15 +175,6 @@ class Dashboard extends Component
             ->whereHas('meeting.projects')
             ->count();
 
-        // Reports (admin only)
-        $reportsOverdue = 0;
-        $reportsDueSoon = 0;
-
-        if ($this->user->isAdmin()) {
-            $reportsOverdue = ReportingRequirement::overdue()->count();
-            $reportsDueSoon = ReportingRequirement::upcoming()->count();
-        }
-
         return [
             'meetings_today' => $meetingsToday,
             'meetings_tomorrow' => $meetingsTomorrow,
@@ -193,8 +183,6 @@ class Dashboard extends Component
             'actions_this_week' => $actionsThisWeek,
             'active_projects' => $activeProjects,
             'project_actions_pending' => $projectActionsPending,
-            'reports_overdue' => $reportsOverdue,
-            'reports_due_soon' => $reportsDueSoon,
         ];
     }
 
@@ -347,23 +335,8 @@ class Dashboard extends Component
             ]);
         }
 
-        // Admin: Overdue reports
+        // Grants ending soon (admin only)
         if ($this->user->isAdmin()) {
-            $overdueReports = ReportingRequirement::with('grant.funder')
-                ->overdue()
-                ->get();
-
-            if ($overdueReports->isNotEmpty()) {
-                $items->push([
-                    'severity' => 'overdue',
-                    'title' => $overdueReports->count().' report'.($overdueReports->count() > 1 ? 's' : '').' overdue',
-                    'items' => $overdueReports->map(fn ($r) => [
-                        'label' => $r->name.' ('.($r->grant->funder->name ?? 'Unknown').')',
-                        'url' => route('grants.show', $r->grant),
-                    ]),
-                ]);
-            }
-
             // Grants ending soon
             $grantsEnding = Grant::with('funder')
                 ->where('status', 'active')
@@ -397,28 +370,17 @@ class Dashboard extends Component
 
         $alerts = collect();
 
-        // Overdue reports
-        ReportingRequirement::with('grant.funder')
-            ->overdue()
-            ->each(function ($report) use ($alerts) {
-                $alerts->push([
-                    'type' => 'overdue',
-                    'title' => $report->name,
-                    'funder' => $report->grant->funder->name ?? 'Unknown',
-                    'url' => route('grants.show', $report->grant),
-                ]);
-            });
-
-        // Reports due soon
-        ReportingRequirement::with('grant.funder')
-            ->where('status', '!=', 'submitted')
-            ->whereBetween('due_date', [now(), now()->addWeeks(2)])
-            ->each(function ($report) use ($alerts) {
+        // Grants ending soon
+        Grant::with('funder')
+            ->where('status', 'active')
+            ->where('end_date', '<=', now()->addMonths(2))
+            ->where('end_date', '>=', now())
+            ->each(function ($grant) use ($alerts) {
                 $alerts->push([
                     'type' => 'due_soon',
-                    'title' => $report->name,
-                    'funder' => $report->grant->funder->name ?? 'Unknown',
-                    'url' => route('grants.show', $report->grant),
+                    'title' => $grant->name,
+                    'funder' => $grant->funder->name ?? 'Unknown',
+                    'url' => route('grants.show', $grant),
                 ]);
             });
 
@@ -684,21 +646,6 @@ class Dashboard extends Component
 
         if ($overdueCount > 0) {
             $context[] = "\n## Warning: {$overdueCount} overdue tasks!";
-        }
-
-        // Admin: Grant reporting
-        if ($this->user->isAdmin()) {
-            $upcomingReports = ReportingRequirement::with('grant')
-                ->upcoming()
-                ->limit(3)
-                ->get();
-
-            if ($upcomingReports->isNotEmpty()) {
-                $context[] = "\n## Upcoming Grant Reports:\n";
-                foreach ($upcomingReports as $report) {
-                    $context[] = "- {$report->name} for {$report->grant->name} (Due: {$report->due_date->format('M j')})";
-                }
-            }
         }
 
         return implode("\n", $context);
