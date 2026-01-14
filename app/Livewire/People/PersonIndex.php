@@ -71,6 +71,15 @@ class PersonIndex extends Component
 
     public array $importReport = [];
 
+    // Inline editing
+    public ?int $editingPersonId = null;
+    public string $editName = '';
+    public string $editTitle = '';
+    public string $editEmail = '';
+    public string $editPhone = '';
+    public ?int $editOrgId = null;
+    public string $editLinkedIn = '';
+
     // Modal tabs and AI extraction
     public string $addModalTab = 'single'; // 'single', 'bulk', 'csv'
 
@@ -123,6 +132,79 @@ class PersonIndex extends Component
             $person->status = $status;
             $person->save();
         }
+    }
+
+    // ---- Inline Editing ----
+    public function startEditing(int $personId): void
+    {
+        $person = Person::find($personId);
+        if (!$person) return;
+
+        $this->editingPersonId = $personId;
+        $this->editName = $person->name;
+        $this->editTitle = $person->title ?? '';
+        $this->editEmail = $person->email ?? '';
+        $this->editPhone = $person->phone ?? '';
+        $this->editOrgId = $person->organization_id;
+        $this->editLinkedIn = $person->linkedin_url ?? '';
+    }
+
+    public function cancelEditing(): void
+    {
+        $this->editingPersonId = null;
+        $this->editName = '';
+        $this->editTitle = '';
+        $this->editEmail = '';
+        $this->editPhone = '';
+        $this->editOrgId = null;
+        $this->editLinkedIn = '';
+    }
+
+    public function saveInlineEdit(): void
+    {
+        $person = Person::find($this->editingPersonId);
+        if (!$person) {
+            $this->cancelEditing();
+            return;
+        }
+
+        $this->validate([
+            'editName' => 'required|string|max:255',
+            'editTitle' => 'nullable|string|max:255',
+            'editEmail' => 'nullable|email|max:255',
+            'editPhone' => 'nullable|string|max:50',
+            'editOrgId' => 'nullable|exists:organizations,id',
+            'editLinkedIn' => 'nullable|url|max:255',
+        ]);
+
+        $person->update([
+            'name' => $this->editName,
+            'title' => $this->editTitle ?: null,
+            'email' => $this->editEmail ?: null,
+            'phone' => $this->editPhone ?: null,
+            'organization_id' => $this->editOrgId,
+            'linkedin_url' => $this->editLinkedIn ?: null,
+        ]);
+
+        $this->cancelEditing();
+        $this->dispatch('notify', type: 'success', message: 'Contact updated!');
+    }
+
+    public function updateField(int $personId, string $field, $value): void
+    {
+        $person = Person::find($personId);
+        if (!$person) return;
+
+        $allowedFields = ['name', 'title', 'email', 'phone', 'organization_id', 'linkedin_url', 'status'];
+        if (!in_array($field, $allowedFields)) return;
+
+        if ($field === 'status' && !array_key_exists($value, Person::STATUSES)) {
+            return;
+        }
+
+        $person->$field = $value ?: null;
+        $person->save();
+        $this->dispatch('notify', type: 'success', message: 'Updated!');
     }
 
     // ---- Bulk actions ----
