@@ -23,6 +23,7 @@ class Meeting extends Model
         'meeting_link',
         'meeting_link_type',
         'prep_notes',
+        'agenda_notes',
         'prep_analysis',
         'audio_path',
         'transcript',
@@ -121,6 +122,14 @@ class Meeting extends Model
     public function actions(): HasMany
     {
         return $this->hasMany(Action::class);
+    }
+
+    /**
+     * Get the agenda items for this meeting.
+     */
+    public function agendaItems(): HasMany
+    {
+        return $this->hasMany(MeetingAgendaItem::class)->orderBy('order');
     }
 
     /**

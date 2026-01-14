@@ -89,6 +89,15 @@ class MeetingDetail extends Component
 
     public string $notesSummary = '';
 
+    // Agenda Management
+    public string $agendaNotes = '';
+    public bool $showAddAgendaItem = false;
+    public string $newAgendaTitle = '';
+    public string $newAgendaDescription = '';
+    public ?int $newAgendaDuration = null;
+    public ?int $newAgendaPresenter = null;
+    public ?int $editingAgendaItemId = null;
+
     public function mount(Meeting $meeting)
     {
         $this->meeting = $meeting->load([
@@ -98,6 +107,7 @@ class MeetingDetail extends Component
             'people.organization',
             'issues',
             'attachments',
+            'agendaItems.presenter',
             'actions.assignedTo',
         ]);
         $this->loadMeetingData();
@@ -110,6 +120,7 @@ class MeetingDetail extends Component
         $this->meeting_time = $this->meeting->meeting_time;
         $this->meeting_end_time = $this->meeting->meeting_end_time;
         $this->prep_notes = $this->meeting->prep_notes ?? '';
+        $this->agendaNotes = $this->meeting->agenda_notes ?? '';
         $this->raw_notes = $this->meeting->raw_notes ?? '';
         $this->aiSummary = $this->meeting->ai_summary ?? '';
         $this->keyAsk = $this->meeting->key_ask ?? '';
@@ -140,6 +151,7 @@ class MeetingDetail extends Component
             'meeting_time' => 'nullable|date_format:H:i',
             'meeting_end_time' => 'nullable|date_format:H:i',
             'prep_notes' => 'nullable|string',
+            'agendaNotes' => 'nullable|string',
             'raw_notes' => 'nullable|string',
         ]);
 
@@ -149,6 +161,7 @@ class MeetingDetail extends Component
             'meeting_time' => $this->meeting_time ?: null,
             'meeting_end_time' => $this->meeting_end_time ?: null,
             'prep_notes' => $this->prep_notes ?: null,
+            'agenda_notes' => $this->agendaNotes ?: null,
             'raw_notes' => $this->raw_notes ?: null,
             'ai_summary' => $this->aiSummary ?: null,
             'key_ask' => $this->keyAsk ?: null,
@@ -572,6 +585,112 @@ class MeetingDetail extends Component
         $this->dispatch('notify', type: 'success', message: 'AI prep saved to meeting!');
     }
 
+    // === Agenda Management ===
+
+    public function toggleAddAgendaItem(): void
+    {
+        $this->showAddAgendaItem = !$this->showAddAgendaItem;
+        $this->resetAgendaForm();
+    }
+
+    public function resetAgendaForm(): void
+    {
+        $this->newAgendaTitle = '';
+        $this->newAgendaDescription = '';
+        $this->newAgendaDuration = null;
+        $this->newAgendaPresenter = null;
+        $this->editingAgendaItemId = null;
+    }
+
+    public function addAgendaItem(): void
+    {
+        $this->validate([
+            'newAgendaTitle' => 'required|string|max:255',
+            'newAgendaDescription' => 'nullable|string',
+            'newAgendaDuration' => 'nullable|integer|min:1|max:480',
+            'newAgendaPresenter' => 'nullable|exists:users,id',
+        ]);
+
+        $maxOrder = $this->meeting->agendaItems()->max('order') ?? 0;
+
+        $this->meeting->agendaItems()->create([
+            'title' => $this->newAgendaTitle,
+            'description' => $this->newAgendaDescription ?: null,
+            'duration_minutes' => $this->newAgendaDuration,
+            'presenter_id' => $this->newAgendaPresenter,
+            'order' => $maxOrder + 1,
+        ]);
+
+        $this->resetAgendaForm();
+        $this->showAddAgendaItem = false;
+        $this->meeting->refresh();
+        $this->dispatch('notify', type: 'success', message: 'Agenda item added!');
+    }
+
+    public function updateAgendaItemStatus(int $itemId, string $status): void
+    {
+        $item = \App\Models\MeetingAgendaItem::find($itemId);
+        if ($item && $item->meeting_id === $this->meeting->id) {
+            $item->update(['status' => $status]);
+            $this->meeting->refresh();
+        }
+    }
+
+    public function updateAgendaItemNotes(int $itemId, string $notes): void
+    {
+        $item = \App\Models\MeetingAgendaItem::find($itemId);
+        if ($item && $item->meeting_id === $this->meeting->id) {
+            $item->update(['notes' => $notes ?: null]);
+        }
+    }
+
+    public function updateAgendaItemDecisions(int $itemId, string $decisions): void
+    {
+        $item = \App\Models\MeetingAgendaItem::find($itemId);
+        if ($item && $item->meeting_id === $this->meeting->id) {
+            $item->update(['decisions' => $decisions ?: null]);
+        }
+    }
+
+    public function deleteAgendaItem(int $itemId): void
+    {
+        $item = \App\Models\MeetingAgendaItem::find($itemId);
+        if ($item && $item->meeting_id === $this->meeting->id) {
+            $item->delete();
+            $this->meeting->refresh();
+            $this->dispatch('notify', type: 'success', message: 'Agenda item removed.');
+        }
+    }
+
+    public function reorderAgendaItem(int $itemId, string $direction): void
+    {
+        $item = \App\Models\MeetingAgendaItem::find($itemId);
+        if (!$item || $item->meeting_id !== $this->meeting->id) return;
+
+        $items = $this->meeting->agendaItems()->orderBy('order')->get();
+        $currentIndex = $items->search(fn ($i) => $i->id === $itemId);
+
+        if ($direction === 'up' && $currentIndex > 0) {
+            $swapItem = $items[$currentIndex - 1];
+            $tempOrder = $item->order;
+            $item->update(['order' => $swapItem->order]);
+            $swapItem->update(['order' => $tempOrder]);
+        } elseif ($direction === 'down' && $currentIndex < $items->count() - 1) {
+            $swapItem = $items[$currentIndex + 1];
+            $tempOrder = $item->order;
+            $item->update(['order' => $swapItem->order]);
+            $swapItem->update(['order' => $tempOrder]);
+        }
+
+        $this->meeting->refresh();
+    }
+
+    public function saveAgendaNotes(): void
+    {
+        $this->meeting->update(['agenda_notes' => $this->agendaNotes ?: null]);
+        $this->dispatch('notify', type: 'success', message: 'Agenda notes saved!');
+    }
+
     public function render()
     {
         // Get related meetings (same orgs or issues)
@@ -595,6 +714,8 @@ class MeetingDetail extends Component
             'allOrganizations' => Organization::orderBy('name')->get(),
             'allPeople' => Person::orderBy('name')->get(),
             'allIssues' => Issue::orderBy('name')->get(),
+            'teamMembers' => \App\Models\User::orderBy('name')->get(['id', 'name']),
+            'agendaStatuses' => \App\Models\MeetingAgendaItem::STATUSES,
         ]);
     }
 }

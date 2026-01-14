@@ -170,6 +170,191 @@
                         </div>
                     </div>
 
+                    {{-- Meeting Agenda --}}
+                    <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div class="p-6">
+                            <div class="flex items-center justify-between mb-1">
+                                <h3 class="text-lg font-semibold text-blue-900 dark:text-blue-300 flex items-center">
+                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                    </svg>
+                                    Agenda
+                                </h3>
+                                <button wire:click="toggleAddAgendaItem"
+                                    class="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    Add Item
+                                </button>
+                            </div>
+                            <p class="text-xs text-blue-600 dark:text-blue-400 mb-4">Topics to discuss and track during the meeting</p>
+
+                            {{-- Add Agenda Item Form --}}
+                            @if($showAddAgendaItem)
+                                <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Topic *</label>
+                                            <input type="text" wire:model="newAgendaTitle" placeholder="Discussion topic..."
+                                                class="w-full text-sm rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-blue-500 focus:border-blue-500">
+                                            @error('newAgendaTitle') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Duration (min)</label>
+                                                <input type="number" wire:model="newAgendaDuration" placeholder="15"
+                                                    class="w-full text-sm rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-blue-500 focus:border-blue-500">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Presenter</label>
+                                                <select wire:model="newAgendaPresenter"
+                                                    class="w-full text-sm rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-blue-500 focus:border-blue-500">
+                                                    <option value="">—</option>
+                                                    @foreach($teamMembers as $member)
+                                                        <option value="{{ $member->id }}">{{ $member->name }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                                        <textarea wire:model="newAgendaDescription" rows="2" placeholder="Optional details..."
+                                            class="w-full text-sm rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-blue-500 focus:border-blue-500"></textarea>
+                                    </div>
+                                    <div class="flex justify-end gap-2">
+                                        <button wire:click="toggleAddAgendaItem" class="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800">
+                                            Cancel
+                                        </button>
+                                        <button wire:click="addAgendaItem"
+                                            class="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">
+                                            Add Item
+                                        </button>
+                                    </div>
+                                </div>
+                            @endif
+
+                            {{-- Agenda Items List --}}
+                            @if($meeting->agendaItems->count() > 0)
+                                <div class="space-y-2">
+                                    @foreach($meeting->agendaItems as $item)
+                                        <div class="p-3 rounded-lg border {{ $item->status === 'completed' ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : ($item->status === 'in_progress' ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800' : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600') }}"
+                                            x-data="{ expanded: false }">
+                                            <div class="flex items-start gap-3">
+                                                {{-- Status indicator --}}
+                                                <div class="flex flex-col gap-1 pt-1">
+                                                    <button wire:click="reorderAgendaItem({{ $item->id }}, 'up')"
+                                                        class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-0.5"
+                                                        title="Move up">
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                                        </svg>
+                                                    </button>
+                                                    <button wire:click="reorderAgendaItem({{ $item->id }}, 'down')"
+                                                        class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-0.5"
+                                                        title="Move down">
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+
+                                                {{-- Main content --}}
+                                                <div class="flex-1">
+                                                    <div class="flex items-center justify-between">
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="font-medium text-gray-900 dark:text-white {{ $item->status === 'completed' ? 'line-through text-gray-500' : '' }}">
+                                                                {{ $item->title }}
+                                                            </span>
+                                                            @if($item->duration_minutes)
+                                                                <span class="text-xs text-gray-500 dark:text-gray-400">
+                                                                    ({{ $item->duration_display }})
+                                                                </span>
+                                                            @endif
+                                                            @if($item->presenter)
+                                                                <span class="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300">
+                                                                    {{ $item->presenter->name }}
+                                                                </span>
+                                                            @endif
+                                                        </div>
+                                                        <div class="flex items-center gap-2">
+                                                            <select wire:change="updateAgendaItemStatus({{ $item->id }}, $event.target.value)"
+                                                                class="text-xs rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white py-1 px-2">
+                                                                @foreach($agendaStatuses as $key => $label)
+                                                                    <option value="{{ $key }}" {{ $item->status === $key ? 'selected' : '' }}>{{ $label }}</option>
+                                                                @endforeach
+                                                            </select>
+                                                            <button @click="expanded = !expanded" class="text-gray-400 hover:text-gray-600 p-1">
+                                                                <svg class="w-4 h-4 transition-transform" :class="expanded ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                                                </svg>
+                                                            </button>
+                                                            <button wire:click="deleteAgendaItem({{ $item->id }})"
+                                                                wire:confirm="Delete this agenda item?"
+                                                                class="text-red-400 hover:text-red-600 p-1">
+                                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    @if($item->description)
+                                                        <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ $item->description }}</p>
+                                                    @endif
+
+                                                    {{-- Expanded section for notes/decisions --}}
+                                                    <div x-show="expanded" x-collapse class="mt-3 space-y-3">
+                                                        <div>
+                                                            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Discussion Notes</label>
+                                                            <textarea
+                                                                wire:blur="updateAgendaItemNotes({{ $item->id }}, $event.target.value)"
+                                                                rows="2"
+                                                                class="w-full text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                                                placeholder="Notes from discussion...">{{ $item->notes }}</textarea>
+                                                        </div>
+                                                        <div>
+                                                            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Decisions Made</label>
+                                                            <textarea
+                                                                wire:blur="updateAgendaItemDecisions({{ $item->id }}, $event.target.value)"
+                                                                rows="2"
+                                                                class="w-full text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                                                placeholder="Key decisions...">{{ $item->decisions }}</textarea>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+
+                                {{-- Total duration --}}
+                                @php
+                                    $totalMinutes = $meeting->agendaItems->sum('duration_minutes');
+                                @endphp
+                                @if($totalMinutes > 0)
+                                    <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600 text-sm text-gray-500 dark:text-gray-400">
+                                        Total estimated time: <span class="font-medium">{{ floor($totalMinutes / 60) }}h {{ $totalMinutes % 60 }}m</span>
+                                    </div>
+                                @endif
+                            @else
+                                {{-- Free-form agenda notes --}}
+                                <div class="space-y-2">
+                                    <textarea wire:model.blur="agendaNotes" rows="4"
+                                        placeholder="Add agenda topics or click 'Add Item' for structured tracking..."
+                                        class="w-full text-sm rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-blue-500 focus:border-blue-500"></textarea>
+                                    @if($agendaNotes)
+                                        <button wire:click="saveAgendaNotes"
+                                            class="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                                            Save Notes
+                                        </button>
+                                    @endif
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+
                     {{-- Meeting Notes (During Meeting) --}}
                     <div
                         class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm rounded-lg border border-gray-200 dark:border-gray-700"
