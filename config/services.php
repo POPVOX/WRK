@@ -51,4 +51,9 @@ return [
         'auto_create_issues' => env('GITHUB_AUTO_CREATE_ISSUES', false),
     ],
 
+    'legislative_tracker' => [
+        'enabled' => env('LEGISLATIVE_TRACKER_ENABLED', true),
+        'reminder_days' => array_map('intval', explode(',', env('LEGISLATIVE_TRACKER_REMINDER_DAYS', '7,14,30'))),
+    ],
+
 ];
