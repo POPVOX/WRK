@@ -103,7 +103,7 @@
 
                             @if($org->website)
                                 <div class="mt-2 text-sm text-indigo-600 dark:text-indigo-400 truncate">
-                                    {{ $org->website }}
+                                    {{ $org->display_website }}
                                 </div>
                             @endif
                         </a>
@@ -145,7 +145,7 @@
                                         @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-indigo-600 dark:text-indigo-400 truncate max-w-xs">
-                                        {{ $org->website ?? '-' }}
+                                        {{ $org->display_website ?? '-' }}
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                                         {{ $org->meetings_count }}

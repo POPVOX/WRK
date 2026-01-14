@@ -154,4 +154,38 @@ class Organization extends Model
     {
         return $this->hasMany(Person::class)->where('role', 'journalist');
     }
+
+    /**
+     * Get a clean display version of the website URL (without protocol/www).
+     */
+    public function getDisplayWebsiteAttribute(): ?string
+    {
+        if (!$this->website) {
+            return null;
+        }
+
+        $url = $this->website;
+        $url = preg_replace('#^https?://#i', '', $url);
+        $url = preg_replace('#^www\.#i', '', $url);
+        $url = rtrim($url, '/');
+
+        return $url;
+    }
+
+    /**
+     * Get a clean display version of the LinkedIn URL.
+     */
+    public function getDisplayLinkedinAttribute(): ?string
+    {
+        if (!$this->linkedin_url) {
+            return null;
+        }
+
+        $url = $this->linkedin_url;
+        $url = preg_replace('#^https?://#i', '', $url);
+        $url = preg_replace('#^www\.#i', '', $url);
+        $url = rtrim($url, '/');
+
+        return $url;
+    }
 }
