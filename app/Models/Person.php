@@ -188,4 +188,21 @@ class Person extends Model
                     ->first()?->pitched_at,
         ];
     }
+
+    /**
+     * Get a clean display version of the LinkedIn URL (without protocol/www).
+     */
+    public function getDisplayLinkedinAttribute(): ?string
+    {
+        if (!$this->linkedin_url) {
+            return null;
+        }
+
+        $url = $this->linkedin_url;
+        $url = preg_replace('#^https?://#i', '', $url);
+        $url = preg_replace('#^www\.#i', '', $url);
+        $url = rtrim($url, '/');
+
+        return $url;
+    }
 }
