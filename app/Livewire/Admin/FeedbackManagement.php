@@ -76,11 +76,6 @@ class FeedbackManagement extends Component
         ];
     }
 
-    public function getGithubConfiguredProperty(): bool
-    {
-        return ! empty(config('services.github.token')) && ! empty(config('services.github.repo'));
-    }
-
     public function viewFeedback(int $id): void
     {
         $this->viewingFeedback = Feedback::with(['user', 'assignee'])->find($id);
@@ -642,7 +637,7 @@ BODY;
             'types' => Feedback::TYPES,
             'priorities' => Feedback::PRIORITIES,
             'staffMembers' => User::orderBy('name')->get(['id', 'name']),
-            'githubConfigured' => $this->githubConfigured,
+            'githubConfigured' => $this->gitHubConfigured,
         ]);
     }
 }
