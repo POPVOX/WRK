@@ -3,6 +3,7 @@
 namespace App\Livewire\Admin;
 
 use App\Models\User;
+use App\Notifications\TeamInvitation;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
@@ -33,6 +34,10 @@ class StaffManagement extends Component
     public ?string $activationUserName = null;
 
     public ?string $activationUserEmail = null;
+
+    // Bulk activation links
+    public bool $showBulkLinksModal = false;
+    public array $bulkActivationLinks = [];
 
     protected $rules = [
         'newName' => 'required|string|max:255',
@@ -130,6 +135,99 @@ class StaffManagement extends Component
         $this->activationLink = null;
         $this->activationUserName = null;
         $this->activationUserEmail = null;
+    }
+
+    // === Bulk Activation Links ===
+
+    public function generateAllActivationLinks(): void
+    {
+        $users = User::whereNull('activated_at')->get();
+        $this->bulkActivationLinks = [];
+
+        foreach ($users as $user) {
+            $token = Str::random(64);
+            $expiresAt = now()->addDays(7);
+
+            $user->update([
+                'activation_token' => $token,
+                'activation_token_expires_at' => $expiresAt,
+            ]);
+
+            $this->bulkActivationLinks[] = [
+                'name' => $user->name,
+                'email' => $user->email,
+                'link' => url("/activate/{$token}"),
+                'expires' => $expiresAt->format('M j, Y'),
+            ];
+        }
+
+        if (empty($this->bulkActivationLinks)) {
+            $this->dispatch('notify', type: 'info', message: 'All staff members have already activated their accounts.');
+            return;
+        }
+
+        $this->showBulkLinksModal = true;
+    }
+
+    public function closeBulkLinksModal(): void
+    {
+        $this->showBulkLinksModal = false;
+        $this->bulkActivationLinks = [];
+    }
+
+    public function sendInviteEmail(int $userId): void
+    {
+        $user = User::find($userId);
+        if (!$user) {
+            $this->dispatch('notify', type: 'error', message: 'User not found.');
+            return;
+        }
+
+        // Generate activation token if needed
+        if (!$user->activation_token || ($user->activation_token_expires_at && $user->activation_token_expires_at->isPast())) {
+            $token = Str::random(64);
+            $user->update([
+                'activation_token' => $token,
+                'activation_token_expires_at' => now()->addDays(7),
+            ]);
+        }
+
+        try {
+            $user->notify(new TeamInvitation($user->activation_token));
+            $this->dispatch('notify', type: 'success', message: "Invite sent to {$user->email}!");
+        } catch (\Exception $e) {
+            $this->dispatch('notify', type: 'error', message: 'Failed to send email. Check mail configuration.');
+        }
+    }
+
+    public function sendAllInviteEmails(): void
+    {
+        $users = User::whereNull('activated_at')->get();
+        $sent = 0;
+
+        foreach ($users as $user) {
+            // Generate activation token if needed
+            if (!$user->activation_token || ($user->activation_token_expires_at && $user->activation_token_expires_at->isPast())) {
+                $token = Str::random(64);
+                $user->update([
+                    'activation_token' => $token,
+                    'activation_token_expires_at' => now()->addDays(7),
+                ]);
+            }
+
+            try {
+                $user->notify(new TeamInvitation($user->activation_token));
+                $sent++;
+            } catch (\Exception $e) {
+                // Continue to next user
+            }
+        }
+
+        if ($sent > 0) {
+            $this->dispatch('notify', type: 'success', message: "Sent {$sent} invitation email(s)!");
+        } else {
+            $this->dispatch('notify', type: 'info', message: 'No invitations to send. All accounts are activated.');
+        }
     }
 
     public function render()
