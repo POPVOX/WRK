@@ -219,3 +219,4 @@ trait HasGeographicTags
         return $query->whereHas('geographicTags');
     }
 }
+

@@ -87,3 +87,4 @@ class ActivateAccount extends Component
         return view('livewire.auth.activate-account');
     }
 }
+

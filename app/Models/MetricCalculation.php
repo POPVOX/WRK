@@ -151,3 +151,4 @@ class MetricCalculation extends Model
         return $query->where('calculation_method', 'manual');
     }
 }
+

@@ -269,3 +269,4 @@ MARKDOWN;
         return Str::limit($text, $length);
     }
 }
+

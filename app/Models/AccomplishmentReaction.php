@@ -59,3 +59,4 @@ class AccomplishmentReaction extends Model
         return self::TYPES[$this->reaction_type]['label'] ?? 'React';
     }
 }
+

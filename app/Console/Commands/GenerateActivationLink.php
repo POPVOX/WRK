@@ -81,3 +81,4 @@ class GenerateActivationLink extends Command
         return self::SUCCESS;
     }
 }
+

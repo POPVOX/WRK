@@ -134,3 +134,4 @@ class SchemaChatbotConversation extends Model
         return $query->where('conversation_type', 'setup');
     }
 }
+

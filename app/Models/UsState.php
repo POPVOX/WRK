@@ -126,3 +126,4 @@ class UsState extends Model
         ];
     }
 }
+

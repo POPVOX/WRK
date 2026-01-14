@@ -52,3 +52,4 @@ class Country extends Model
         return "{$this->name} ({$this->region->name})";
     }
 }
+

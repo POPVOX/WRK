@@ -66,3 +66,4 @@ class Geographable extends Model
         };
     }
 }
+
