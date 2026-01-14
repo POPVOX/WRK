@@ -91,11 +91,15 @@ class Dashboard extends Component
             });
         }
 
-        return $query->orderByRaw('CASE 
-            WHEN status = "submitted" THEN 2 
-            WHEN due_date < NOW() THEN 0 
+        // Sort: overdue first, then pending/in_progress, then submitted
+        // Using Carbon date for cross-database compatibility
+        $today = now()->toDateString();
+        
+        return $query->orderByRaw("CASE 
+            WHEN status = 'submitted' THEN 2 
+            WHEN due_date < '{$today}' THEN 0 
             ELSE 1 
-        END')
+        END")
             ->orderBy('due_date', 'asc')
             ->get();
     }
