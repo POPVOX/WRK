@@ -39,10 +39,24 @@ class StaffManagement extends Component
     public bool $showBulkLinksModal = false;
     public array $bulkActivationLinks = [];
 
+    // Edit staff member
+    public bool $showEditModal = false;
+    public ?int $editingUserId = null;
+    public string $editName = '';
+    public string $editEmail = '';
+
     protected $rules = [
         'newName' => 'required|string|max:255',
         'newEmail' => 'required|email|unique:users,email',
     ];
+
+    protected function editRules(): array
+    {
+        return [
+            'editName' => 'required|string|max:255',
+            'editEmail' => 'required|email|unique:users,email,' . $this->editingUserId,
+        ];
+    }
 
     public function openAddModal()
     {
@@ -102,6 +116,47 @@ class StaffManagement extends Component
 
         $user->delete();
         $this->dispatch('notify', type: 'success', message: 'Staff member removed.');
+    }
+
+    public function openEditModal(int $userId): void
+    {
+        $user = User::find($userId);
+        if (!$user) {
+            $this->dispatch('notify', type: 'error', message: 'User not found.');
+            return;
+        }
+
+        $this->editingUserId = $userId;
+        $this->editName = $user->name;
+        $this->editEmail = $user->email;
+        $this->showEditModal = true;
+    }
+
+    public function closeEditModal(): void
+    {
+        $this->showEditModal = false;
+        $this->editingUserId = null;
+        $this->editName = '';
+        $this->editEmail = '';
+    }
+
+    public function saveEdit(): void
+    {
+        $this->validate($this->editRules());
+
+        $user = User::find($this->editingUserId);
+        if (!$user) {
+            $this->dispatch('notify', type: 'error', message: 'User not found.');
+            return;
+        }
+
+        $user->update([
+            'name' => $this->editName,
+            'email' => $this->editEmail,
+        ]);
+
+        $this->closeEditModal();
+        $this->dispatch('notify', type: 'success', message: 'Staff member updated.');
     }
 
     public function generateActivationLink(int $userId): void
