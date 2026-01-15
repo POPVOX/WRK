@@ -231,7 +231,91 @@ php artisan queue:work
 
 ---
 
-## 📋 Recent Updates (December 2025)
+## 📋 Recent Updates (January 2026)
+
+### Team Accomplishments & Wins System ✨ NEW
+- ✅ Track personal and team wins/accomplishments
+- ✅ Recognition system for celebrating colleagues
+- ✅ Auto-detection of accomplishments from meetings, projects, and documents
+- ✅ Impact scoring and activity statistics
+- ✅ Emoji reactions on accomplishments
+- ✅ Management dashboard with team oversight
+- ✅ Detailed teammate profiles with activity history (week/month/quarter/year)
+- ✅ Export templates for performance reviews and grant applications
+
+### Message Board Enhancements ✨ NEW
+- ✅ Emoji reactions with full picker on messages
+- ✅ Threaded replies with nested discussions
+- ✅ Screenshot/image upload support in replies
+- ✅ Collapsible reply threads
+
+### Staff Activation System ✨ NEW
+- ✅ Generate activation links for pre-created staff accounts
+- ✅ Admin UI for managing activation tokens
+- ✅ Secure password setup flow for new team members
+- ✅ Email editing capability for staff members
+
+### Geographic Tagging ✨ NEW
+- ✅ Region tagging (North America, LATAM, Caribbean, Africa, Europe, Asia, Middle East, Oceania)
+- ✅ Country-level tagging with multi-select
+- ✅ US States/Territories tagging
+- ✅ Applied to People, Projects, and Organizations
+
+### Timezone & Location Management
+- ✅ Timezone confirmation prompt on login (every 7 days)
+- ✅ "Change timezone/location" link on dashboard
+- ✅ Auto-detection of browser timezone
+- ✅ All dates displayed in user's timezone
+
+### Feedback Resolution Tracker ✨ NEW
+- ✅ Track resolution status for all feedback items
+- ✅ Record resolution descriptions and timestamps
+- ✅ Stats on time-to-resolution and completion rates
+- ✅ Artisan command for bulk resolution recording
+
+### Meeting Improvements
+- ✅ Edit meeting time (not just date)
+- ✅ Meeting filters by staff, date, and keywords
+- ✅ Meeting agenda system
+- ✅ Pause AI extraction feature during note-taking
+- ✅ Fixed data loss when navigating meeting screens
+- ✅ Fixed attendees/topics not working on meeting create
+- ✅ Fixed calendar sync not pulling all meetings
+
+### Project Improvements
+- ✅ Project tasks with assignments
+- ✅ Milestone editing and undo completion
+- ✅ Back arrow navigation to parent project
+- ✅ Fixed edit button for sub-projects
+
+### Contacts & Organizations
+- ✅ Journalist flag (`is_journalist`) on contacts
+- ✅ Add organization inline from contact form
+- ✅ Inline contact editing
+- ✅ Email field for organizations
+- ✅ Clean URL display (without https/www prefixes)
+
+### Grants & Funders
+- ✅ Prospective funder status support
+- ✅ Fixed grant status save button
+
+### Voice & Recording
+- ✅ Fixed voice memo recording/upload
+- ✅ Fixed microphone recording indicator
+
+### Knowledge Hub
+- ✅ Streamlined to simple AI chatbox interface
+- ✅ Removed visual clutter
+
+### UI/UX Refinements
+- ✅ Removed quantitative totals from dashboard
+- ✅ Clean, minimal metrics page
+- ✅ Management section in sidebar navigation
+- ✅ Fixed favicon and metadata
+
+---
+
+## 📋 Previous Updates (December 2025)
 
 ### Meetings
 - ✅ Four meeting view modes (Sections, List, Cards, Kanban)
@@ -252,7 +336,7 @@ php artisan queue:work
 - ✅ AI-powered semantic search
 - ✅ Quick action queries
 
-### Media & Press ✨ NEW
+### Media & Press
 - ✅ Full module implementation with Coverage, Pitches, Inquiries tabs
 - ✅ Press clips tracking with sentiment and staff mentions
 - ✅ Pitch pipeline with Kanban view
@@ -266,7 +350,7 @@ php artisan queue:work
 - ✅ AI/cache resilience (cached chat/status answers on failure; health banners)
 - ✅ Safer link ingestion (domain allow/deny, private host blocking, size caps)
 
-### Beta Feedback System ✨ NEW
+### Beta Feedback System
 - ✅ Floating feedback widget on every page (bottom-right)
 - ✅ Screenshot attachment support for visual feedback
 - ✅ Automatic metadata capture (URL, browser, user context)
@@ -278,7 +362,7 @@ php artisan queue:work
 
 ## 📋 Roadmap
 
-- [ ] AI summary generation for meeting notes
+- [ ] Legislative/Appropriations tracking module
 - [ ] Email notifications for deadlines
 - [ ] Commitment tracking system
 - [ ] Enhanced reporting templates
@@ -288,6 +372,7 @@ php artisan queue:work
 - [ ] Embedding-based search for higher-recall RAG
 - [ ] Alerting hooks (Slack/Email) on AI/queue/calendar faults
 - [ ] Feedback analytics dashboard with trends over time
+- [ ] Advanced team analytics and productivity insights
 
 ---
 
