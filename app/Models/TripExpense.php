@@ -21,19 +21,28 @@ class TripExpense extends Model
         'amount_usd',
         'vendor',
         'receipt_number',
+        'receipt_path',
+        'receipt_original_name',
         'reimbursement_status',
         'reimbursement_submitted_date',
         'reimbursement_paid_date',
+        'approved_by',
+        'approved_at',
         'trip_sponsorship_id',
         'notes',
+        'ai_extracted',
+        'source_text',
+        'source_url',
     ];
 
     protected $casts = [
         'expense_date' => 'date',
         'reimbursement_submitted_date' => 'date',
         'reimbursement_paid_date' => 'date',
+        'approved_at' => 'datetime',
         'amount' => 'decimal:2',
         'amount_usd' => 'decimal:2',
+        'ai_extracted' => 'boolean',
     ];
 
     public function trip(): BelongsTo
@@ -44,6 +53,11 @@ class TripExpense extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     public function sponsorship(): BelongsTo

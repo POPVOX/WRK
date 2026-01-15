@@ -637,53 +637,157 @@
 
         @elseif($activeTab === 'expenses')
             <!-- Expenses Tab -->
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                <h3 class="font-semibold text-gray-900 dark:text-white mb-4">Expenses</h3>
-                @if($trip->expenses->isEmpty())
-                    <div class="text-center py-8 text-gray-500 dark:text-gray-400">
-                        <div class="text-4xl mb-2">💰</div>
-                        <p>No expenses recorded yet</p>
+            <div class="space-y-6">
+                {{-- Header --}}
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                            💰 Expense Reporting
+                        </h3>
+                        @if(Auth::user()->isManagement())
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Viewing all participants' expenses</p>
+                        @else
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Your expenses for this trip</p>
+                        @endif
                     </div>
-                @else
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                            <thead>
-                                <tr>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                                @foreach($trip->expenses as $expense)
-                                    <tr>
-                                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ $expense->expense_date->format('M j') }}</td>
-                                        <td class="px-4 py-3 text-sm">
-                                            {{ $expense->category_icon }} {{ \App\Models\TripExpense::getCategoryOptions()[$expense->category] ?? $expense->category }}
-                                        </td>
-                                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">{{ $expense->description }}</td>
-                                        <td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">${{ number_format($expense->amount, 2) }}</td>
-                                        <td class="px-4 py-3">
-                                            <span class="px-2 py-1 text-xs rounded-full {{ \App\Models\TripExpense::getReimbursementStatusColors()[$expense->reimbursement_status] ?? 'bg-gray-100' }}">
-                                                {{ \App\Models\TripExpense::getReimbursementStatusOptions()[$expense->reimbursement_status] ?? $expense->reimbursement_status }}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                            <tfoot class="bg-gray-50 dark:bg-gray-700">
-                                <tr>
-                                    <td colspan="3" class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">Total</td>
-                                    <td class="px-4 py-3 text-sm text-right font-bold text-gray-900 dark:text-white">${{ number_format($expenseStats['total'], 2) }}</td>
-                                    <td></td>
-                                </tr>
-                            </tfoot>
-                        </table>
+                    <button wire:click="openAddExpense" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        Add Expense
+                    </button>
+                </div>
+
+                {{-- Summary Cards (for management) --}}
+                @if(Auth::user()->isManagement() && $this->visibleExpenses->isNotEmpty())
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                            <div class="text-sm text-gray-500 dark:text-gray-400">Total Expenses</div>
+                            <div class="text-2xl font-bold text-gray-900 dark:text-white">${{ number_format($this->visibleExpenses->sum('amount'), 2) }}</div>
+                        </div>
+                        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                            <div class="text-sm text-gray-500 dark:text-gray-400">Pending Approval</div>
+                            <div class="text-2xl font-bold text-yellow-600">${{ number_format($this->visibleExpenses->whereIn('reimbursement_status', ['pending', 'submitted'])->sum('amount'), 2) }}</div>
+                        </div>
+                        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                            <div class="text-sm text-gray-500 dark:text-gray-400">Approved</div>
+                            <div class="text-2xl font-bold text-green-600">${{ number_format($this->visibleExpenses->where('reimbursement_status', 'approved')->sum('amount'), 2) }}</div>
+                        </div>
+                        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                            <div class="text-sm text-gray-500 dark:text-gray-400">Paid</div>
+                            <div class="text-2xl font-bold text-emerald-600">${{ number_format($this->visibleExpenses->where('reimbursement_status', 'paid')->sum('amount'), 2) }}</div>
+                        </div>
                     </div>
                 @endif
+
+                {{-- Expense List --}}
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                    @if($this->visibleExpenses->isEmpty())
+                        <div class="text-center py-12 text-gray-500 dark:text-gray-400">
+                            <div class="text-5xl mb-3">💳</div>
+                            <p class="mb-2">No expenses recorded yet</p>
+                            <button wire:click="openAddExpense" class="text-indigo-600 hover:text-indigo-800 text-sm">
+                                Add your first expense
+                            </button>
+                        </div>
+                    @else
+                        <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                            @foreach($this->visibleExpenses as $expense)
+                                <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 group">
+                                    <div class="flex items-start gap-4">
+                                        <span class="text-2xl">{{ $expense->category_icon }}</span>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-start justify-between">
+                                                <div>
+                                                    <div class="font-medium text-gray-900 dark:text-white">{{ $expense->description }}</div>
+                                                    <div class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                                                        <span>{{ \App\Models\TripExpense::getCategoryOptions()[$expense->category] ?? $expense->category }}</span>
+                                                        @if($expense->vendor)
+                                                            <span class="text-gray-300 dark:text-gray-600">•</span>
+                                                            <span>{{ $expense->vendor }}</span>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                                <div class="text-right">
+                                                    <div class="font-bold text-gray-900 dark:text-white">${{ number_format($expense->amount, 2) }}</div>
+                                                    <div class="text-xs text-gray-500">{{ $expense->expense_date->format('M j, Y') }}</div>
+                                                </div>
+                                            </div>
+
+                                            {{-- Owner info (management only) --}}
+                                            @if(Auth::user()->isManagement())
+                                                <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                                    Submitted by: <span class="font-medium">{{ $expense->user->name ?? 'Unknown' }}</span>
+                                                </div>
+                                            @endif
+
+                                            {{-- Status and Actions --}}
+                                            <div class="mt-2 flex items-center justify-between">
+                                                <span class="px-2 py-1 text-xs rounded-full {{ \App\Models\TripExpense::getReimbursementStatusColors()[$expense->reimbursement_status] ?? 'bg-gray-100' }}">
+                                                    {{ \App\Models\TripExpense::getReimbursementStatusOptions()[$expense->reimbursement_status] ?? $expense->reimbursement_status }}
+                                                </span>
+
+                                                <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                    {{-- Management approval actions --}}
+                                                    @if(Auth::user()->isManagement())
+                                                        @if(in_array($expense->reimbursement_status, ['pending', 'submitted']))
+                                                            <button wire:click="approveExpense({{ $expense->id }})" 
+                                                                class="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                                                                title="Approve">
+                                                                ✓ Approve
+                                                            </button>
+                                                        @endif
+                                                        @if($expense->reimbursement_status === 'approved')
+                                                            <button wire:click="markExpensePaid({{ $expense->id }})" 
+                                                                class="text-xs px-2 py-1 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200"
+                                                                title="Mark Paid">
+                                                                💵 Mark Paid
+                                                            </button>
+                                                        @endif
+                                                    @endif
+
+                                                    {{-- Receipt indicator --}}
+                                                    @if($expense->receipt_path)
+                                                        <span class="text-xs text-gray-400" title="Receipt attached">📎</span>
+                                                    @endif
+
+                                                    {{-- Edit/Delete for owner or management --}}
+                                                    @if($expense->user_id === Auth::id() || Auth::user()->isManagement())
+                                                        <button wire:click="editExpense({{ $expense->id }})" 
+                                                            class="text-gray-400 hover:text-indigo-600 p-1"
+                                                            title="Edit">
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                            </svg>
+                                                        </button>
+                                                        <button wire:click="deleteExpense({{ $expense->id }})" 
+                                                            wire:confirm="Delete this expense?"
+                                                            class="text-gray-400 hover:text-red-600 p-1"
+                                                            title="Delete">
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                        </button>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        {{-- Total Footer --}}
+                        <div class="p-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700">
+                            <div class="flex justify-between items-center">
+                                <span class="font-medium text-gray-900 dark:text-white">Total</span>
+                                <span class="text-xl font-bold text-gray-900 dark:text-white">${{ number_format($this->visibleExpenses->sum('amount'), 2) }}</span>
+                            </div>
+                        </div>
+                    @endif
+                </div>
             </div>
+
 
         @elseif($activeTab === 'sponsorship')
             <!-- Sponsorship Tab -->
@@ -1662,6 +1766,195 @@ Total: $867 + $112.71 tax = $979.71"
                             wire:loading.attr="disabled">
                             <span wire:loading wire:target="saveLodging" class="animate-spin">⏳</span>
                             {{ $editingLodgingId ? 'Update Lodging' : 'Save Lodging' }}
+                        </button>
+                    @endif
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Add/Edit Expense Modal --}}
+    @if($showAddExpense)
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                💳 {{ $editingExpenseId ? 'Edit Expense' : 'Add Expense' }}
+                            </h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                {{ $editingExpenseId ? 'Update expense details' : 'Record a trip expense for reimbursement' }}
+                            </p>
+                        </div>
+                        <button wire:click="closeAddExpense" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                {{-- Mode Tabs - only show when adding --}}
+                @if(!$editingExpenseId)
+                <div class="flex border-b border-gray-200 dark:border-gray-700 px-6">
+                    <button wire:click="setExpenseMode('manual')" 
+                        class="px-4 py-3 text-sm font-medium {{ $expenseMode === 'manual' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700' }}">
+                        ✏️ Manual Entry
+                    </button>
+                    <button wire:click="setExpenseMode('smart')" 
+                        class="px-4 py-3 text-sm font-medium {{ $expenseMode === 'smart' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700' }}">
+                        ✨ Smart Import
+                    </button>
+                </div>
+                @endif
+
+                <div class="flex-1 overflow-y-auto p-6 space-y-5">
+                    {{-- Smart Import Text Area --}}
+                    @if($expenseMode === 'smart' && !$editingExpenseId)
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Paste Receipt or Expense Details
+                                </label>
+                                <textarea wire:model="expenseSmartText" rows="6" 
+                                    placeholder="Paste your receipt text, credit card statement entry, or expense description...
+
+Example:
+UBER TRIP
+Jan 22, 2026
+From: DCA Airport  To: Downtown DC
+$45.67 + $5.00 tip = $50.67"
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
+                            </div>
+                            <div class="flex justify-end">
+                                <button wire:click="parseExpenseText" 
+                                    class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+                                    wire:loading.attr="disabled">
+                                    <span wire:loading wire:target="parseExpenseText" class="animate-spin">⏳</span>
+                                    <span wire:loading.remove wire:target="parseExpenseText">✨</span>
+                                    Extract Details
+                                </button>
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Parse Error --}}
+                    @if($expenseParseError)
+                        <div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
+                            {{ $expenseParseError }}
+                        </div>
+                    @endif
+
+                    {{-- Extraction Success --}}
+                    @if($extractedExpense && $expenseMode === 'smart')
+                        <div class="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-300 text-sm">
+                            ✓ Expense details extracted! Review and edit below.
+                            @if(isset($extractedExpense['confidence']))
+                                <span class="text-xs opacity-75">(Confidence: {{ number_format($extractedExpense['confidence'] * 100) }}%)</span>
+                            @endif
+                        </div>
+                    @endif
+
+                    {{-- Manual Form Fields --}}
+                    @if($expenseMode === 'manual' || $extractedExpense || $editingExpenseId)
+                        <div class="space-y-4">
+                            {{-- Category & Amount --}}
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category *</label>
+                                    <select wire:model="expenseCategory" 
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                        @foreach(\App\Models\TripExpense::getCategoryOptions() as $value => $label)
+                                            <option value="{{ $value }}">{{ $label }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount *</label>
+                                    <div class="flex">
+                                        <span class="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-400 text-sm">$</span>
+                                        <input type="number" step="0.01" wire:model="expenseAmount" 
+                                            placeholder="0.00"
+                                            class="flex-1 border-gray-300 dark:border-gray-600 rounded-r-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                    </div>
+                                    @error('expenseAmount') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date *</label>
+                                    <input type="date" wire:model="expenseDate" 
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                    @error('expenseDate') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                                </div>
+                            </div>
+
+                            {{-- Description --}}
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description *</label>
+                                <input type="text" wire:model="expenseDescription" 
+                                    placeholder="e.g., Uber from airport to hotel"
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                @error('expenseDescription') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                            </div>
+
+                            {{-- Vendor & Receipt Number --}}
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vendor/Merchant</label>
+                                    <input type="text" wire:model="expenseVendor" 
+                                        placeholder="e.g., Uber, Delta, Marriott"
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Receipt/Confirmation #</label>
+                                    <input type="text" wire:model="expenseReceiptNumber" 
+                                        placeholder="Optional"
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                            </div>
+
+                            {{-- Receipt Upload --}}
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Receipt Upload</label>
+                                <input type="file" wire:model="expenseReceiptFile" 
+                                    accept=".pdf,.jpg,.jpeg,.png,.gif"
+                                    class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                                <p class="text-xs text-gray-500 mt-1">Upload a photo or PDF of your receipt</p>
+                            </div>
+
+                            {{-- Notes --}}
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
+                                <textarea wire:model="expenseNotes" rows="2" 
+                                    placeholder="Any additional details..."
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
+                            </div>
+
+                            {{-- Status (management only when editing) --}}
+                            @if($editingExpenseId && Auth::user()->isManagement())
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reimbursement Status</label>
+                                    <select wire:model="expenseReimbursementStatus" 
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                        @foreach(\App\Models\TripExpense::getReimbursementStatusOptions() as $value => $label)
+                                            <option value="{{ $value }}">{{ $label }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+                </div>
+
+                {{-- Footer --}}
+                <div class="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end gap-3">
+                    <button wire:click="closeAddExpense" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
+                    @if($expenseMode === 'manual' || $extractedExpense || $editingExpenseId)
+                        <button wire:click="saveExpense" 
+                            class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                            wire:loading.attr="disabled">
+                            <span wire:loading wire:target="saveExpense" class="animate-spin">⏳</span>
+                            {{ $editingExpenseId ? 'Update Expense' : 'Save Expense' }}
                         </button>
                     @endif
                 </div>
