@@ -131,9 +131,38 @@
                         </thead>
                         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                             @forelse($organizations as $org)
-                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer" onclick="window.location='{{ route('organizations.show', $org) }}'">
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <span class="font-medium text-gray-900 dark:text-white">{{ $org->name }}</span>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                    <td class="px-6 py-4 whitespace-nowrap" wire:click.stop>
+                                        @if($editingOrgId === $org->id)
+                                            <div class="flex items-center gap-2">
+                                                <input type="text" wire:model="editingName" 
+                                                       wire:keydown.enter="saveInlineEdit"
+                                                       wire:keydown.escape="cancelEditing"
+                                                       class="px-2 py-1 text-sm border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                                       autofocus>
+                                                <button wire:click="saveInlineEdit" class="text-green-600 hover:text-green-800">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                                    </svg>
+                                                </button>
+                                                <button wire:click="cancelEditing" class="text-gray-400 hover:text-gray-600">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        @else
+                                            <div class="flex items-center gap-2 group">
+                                                <a href="{{ route('organizations.show', $org) }}" class="font-medium text-gray-900 dark:text-white hover:text-indigo-600">{{ $org->name }}</a>
+                                                <button wire:click="startEditing({{ $org->id }}, '{{ addslashes($org->name) }}')" 
+                                                        class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-indigo-600 transition-opacity"
+                                                        title="Quick edit name">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         @if($org->type)

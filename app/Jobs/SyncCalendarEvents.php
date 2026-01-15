@@ -45,6 +45,11 @@ class SyncCalendarEvents implements ShouldQueue
             $updated = 0;
 
             foreach ($events as $event) {
+                // Skip events that shouldn't be imported as meetings
+                if ($this->shouldSkipEvent($event)) {
+                    continue;
+                }
+
                 $eventId = $event->getId();
                 $start = $event->getStart();
                 $dateTime = $start->getDateTime() ?? $start->getDate();
@@ -276,5 +281,92 @@ class SyncCalendarEvents implements ShouldQueue
 
         // Fall back to date-based title
         return 'Meeting: '.$date->format('M j, Y');
+    }
+
+    /**
+     * Determine if an event should be skipped (not imported as a meeting).
+     * Filters out personal calendar items like lunch, work blocks, reminders, etc.
+     */
+    protected function shouldSkipEvent($event): bool
+    {
+        $summary = strtolower($event->getSummary() ?? '');
+
+        // Skip events with no title
+        if (empty(trim($summary))) {
+            return true;
+        }
+
+        // Patterns for events to skip
+        $skipPatterns = [
+            // Meals and breaks
+            'lunch',
+            'breakfast',
+            'dinner',
+            'coffee break',
+            'break time',
+
+            // Work blocks and focus time
+            'focus time',
+            'focus block',
+            'work block',
+            'blocked',
+            'do not book',
+            'busy',
+            'hold',
+            'placeholder',
+
+            // Personal items
+            'dentist',
+            'doctor',
+            'appointment',
+            'personal',
+            'pto',
+            'vacation',
+            'out of office',
+            'ooo',
+            'day off',
+            'sick',
+            'errand',
+
+            // Travel/commute
+            'commute',
+            'travel time',
+            'flight',
+            'driving',
+
+            // Internal/recurring
+            'standup',
+            'stand-up',
+            'daily sync',
+            'team sync',
+            '1:1',
+            '1-1',
+            'one on one',
+        ];
+
+        foreach ($skipPatterns as $pattern) {
+            if (str_contains($summary, $pattern)) {
+                return true;
+            }
+        }
+
+        // Skip all-day events (usually OOO, holidays, etc.)
+        $start = $event->getStart();
+        if ($start && $start->getDate() && ! $start->getDateTime()) {
+            return true;
+        }
+
+        // Skip events where user declined
+        $attendees = $event->getAttendees() ?? [];
+        foreach ($attendees as $attendee) {
+            if ($attendee->getEmail() === $this->user->email) {
+                $responseStatus = $attendee->getResponseStatus();
+                if ($responseStatus === 'declined') {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }
