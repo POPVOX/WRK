@@ -87,23 +87,90 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Destination City *</label>
-                        <input type="text" wire:model="destinationCity" 
-                               placeholder="e.g., Nairobi"
-                               class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500">
-                        @error('destinationCity') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                <!-- Destinations Section -->
+                <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300">📍 Destinations *</label>
+                        <span class="text-xs text-gray-500">Add one or more destinations</span>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Country *</label>
-                        <select wire:model.live="destinationCountry" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500">
-                            <option value="">Select country...</option>
-                            @foreach($countries as $code => $name)
-                                <option value="{{ $code }}">{{ $name }}</option>
+
+                    @if(count($destinations) > 0)
+                        <div class="space-y-2 mb-4">
+                            @foreach($destinations as $index => $dest)
+                                <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-lg">{{ $this->getCountryFlag($dest['country']) }}</span>
+                                        <div>
+                                            <span class="font-medium text-gray-900 dark:text-white">{{ $dest['city'] }}</span>
+                                            <span class="text-gray-500 dark:text-gray-400">, {{ $dest['country_name'] }}</span>
+                                            @if(($dest['advisory_level'] ?? 0) >= 3)
+                                                <span class="ml-2 px-2 py-0.5 text-xs rounded-full {{ $dest['advisory_level'] == 4 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700' }}">
+                                                    Level {{ $dest['advisory_level'] }}
+                                                </span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm text-gray-500 dark:text-gray-400">
+                                            {{ \Carbon\Carbon::parse($dest['arrival_date'])->format('M j') }} - {{ \Carbon\Carbon::parse($dest['departure_date'])->format('M j') }}
+                                        </span>
+                                        <button type="button" wire:click="removeDestination({{ $index }})" class="text-red-500 hover:text-red-700 p-1">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
                             @endforeach
-                        </select>
-                        @error('destinationCountry') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                        </div>
+                    @endif
+
+                    @error('destinations') <div class="text-red-500 text-sm mb-3">{{ $message }}</div> @enderror
+
+                    <!-- Add Destination Form -->
+                    <div class="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4">
+                        <div class="grid grid-cols-2 gap-4 mb-3">
+                            <div>
+                                <input type="text" wire:model="newDestCity" 
+                                       placeholder="City (e.g., Nairobi)"
+                                       class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500">
+                                @error('newDestCity') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                            </div>
+                            <div>
+                                <select wire:model="newDestCountry" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500">
+                                    <option value="">Select country...</option>
+                                    @foreach($countries as $code => $name)
+                                        <option value="{{ $code }}">{{ $name }}</option>
+                                    @endforeach
+                                </select>
+                                @error('newDestCountry') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <input type="text" wire:model="newDestStateProvince" 
+                                       placeholder="State/Province (optional)"
+                                       class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <input type="date" wire:model="newDestArrivalDate" 
+                                       class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500">
+                                @error('newDestArrivalDate') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                            </div>
+                            <div>
+                                <input type="date" wire:model="newDestDepartureDate" 
+                                       class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500">
+                                @error('newDestDepartureDate') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                            </div>
+                        </div>
+                        <div class="mt-3 flex justify-end">
+                            <button type="button" wire:click="addDestination" class="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 inline-flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                                Add Destination
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -204,9 +271,17 @@
                             <dt class="text-gray-500 dark:text-gray-400">Type</dt>
                             <dd class="text-gray-900 dark:text-white">{{ $typeOptions[$type] ?? $type }}</dd>
                         </div>
-                        <div class="flex justify-between">
-                            <dt class="text-gray-500 dark:text-gray-400">Destination</dt>
-                            <dd class="text-gray-900 dark:text-white">{{ $destinationCity }}, {{ $countries[$destinationCountry] ?? $destinationCountry }}</dd>
+                        <div>
+                            <dt class="text-gray-500 dark:text-gray-400 mb-1">Destinations</dt>
+                            <dd class="space-y-1">
+                                @foreach($destinations as $dest)
+                                    <div class="flex items-center gap-2 text-gray-900 dark:text-white">
+                                        <span>{{ $this->getCountryFlag($dest['country']) }}</span>
+                                        <span>{{ $dest['city'] }}, {{ $dest['country_name'] }}</span>
+                                        <span class="text-xs text-gray-500">({{ \Carbon\Carbon::parse($dest['arrival_date'])->format('M j') }} - {{ \Carbon\Carbon::parse($dest['departure_date'])->format('M j') }})</span>
+                                    </div>
+                                @endforeach
+                            </dd>
                         </div>
                         <div class="flex justify-between">
                             <dt class="text-gray-500 dark:text-gray-400">Dates</dt>

@@ -141,9 +141,19 @@
                 <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                     <h3 class="font-semibold text-gray-900 dark:text-white mb-4">Trip Summary</h3>
                     <dl class="space-y-3 text-sm">
-                        <div class="flex justify-between">
-                            <dt class="text-gray-500 dark:text-gray-400">Destination</dt>
-                            <dd class="text-gray-900 dark:text-white">{{ $trip->primary_destination_city }}, {{ $trip->primary_destination_country }}</dd>
+                        <div>
+                            <dt class="text-gray-500 dark:text-gray-400 mb-1">{{ $trip->destinations->count() > 1 ? 'Destinations' : 'Destination' }}</dt>
+                            <dd class="space-y-1">
+                                @forelse($trip->destinations->sortBy('order') as $dest)
+                                    <div class="flex items-center gap-2 text-gray-900 dark:text-white">
+                                        <span>{{ $dest->country_flag }}</span>
+                                        <span>{{ $dest->city }}@if($dest->state_province), {{ $dest->state_province }}@endif</span>
+                                        <span class="text-xs text-gray-500">({{ $dest->arrival_date->format('M j') }}-{{ $dest->departure_date->format('j') }})</span>
+                                    </div>
+                                @empty
+                                    <span class="text-gray-500">No destinations set</span>
+                                @endforelse
+                            </dd>
                         </div>
                         <div class="flex justify-between">
                             <dt class="text-gray-500 dark:text-gray-400">Duration</dt>
@@ -245,10 +255,83 @@
             @endif
 
         @elseif($activeTab === 'itinerary')
-            <!-- Itinerary Tab -->
+            <!-- Destinations Section -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold text-gray-900 dark:text-white">📍 Destinations</h3>
+                    @if($canEdit)
+                        <button wire:click="openAddDestination" class="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            Add Destination
+                        </button>
+                    @endif
+                </div>
+
+                @if($trip->destinations->isEmpty())
+                    <div class="text-center py-6 text-gray-500 dark:text-gray-400">
+                        <p>No destinations added yet</p>
+                    </div>
+                @else
+                    <div class="space-y-3">
+                        @foreach($trip->destinations->sortBy('order') as $index => $destination)
+                            <div class="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                <span class="text-2xl">{{ $destination->country_flag }}</span>
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-medium text-gray-900 dark:text-white">
+                                            {{ $destination->city }}@if($destination->state_province), {{ $destination->state_province }}@endif
+                                        </span>
+                                        <span class="text-sm text-gray-500 dark:text-gray-400">
+                                            {{ $countries[$destination->country] ?? $destination->country }}
+                                        </span>
+                                        @if($destination->state_dept_level && $destination->state_dept_level >= 3)
+                                            <span class="px-2 py-0.5 text-xs rounded-full {{ $destination->state_dept_level == 4 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700' }}">
+                                                Level {{ $destination->state_dept_level }}
+                                            </span>
+                                        @endif
+                                    </div>
+                                    <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                        {{ $destination->arrival_date->format('M j') }} - {{ $destination->departure_date->format('M j, Y') }}
+                                        ({{ $destination->duration }} days)
+                                    </div>
+                                </div>
+                                @if($canEdit)
+                                    <div class="flex items-center gap-1">
+                                        @if($destination->order > 1)
+                                            <button wire:click="moveDestinationUp({{ $destination->id }})" class="p-1 text-gray-400 hover:text-gray-600" title="Move up">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                                                </svg>
+                                            </button>
+                                        @endif
+                                        @if($destination->order < $trip->destinations->max('order'))
+                                            <button wire:click="moveDestinationDown({{ $destination->id }})" class="p-1 text-gray-400 hover:text-gray-600" title="Move down">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                                </svg>
+                                            </button>
+                                        @endif
+                                        <button wire:click="deleteDestination({{ $destination->id }})" 
+                                                wire:confirm="Remove this destination?"
+                                                class="p-1 text-gray-400 hover:text-red-600 ml-2">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+
+            <!-- Travel Segments -->
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                 <div class="flex items-center justify-between mb-6">
-                    <h3 class="font-semibold text-gray-900 dark:text-white">Travel Segments</h3>
+                    <h3 class="font-semibold text-gray-900 dark:text-white">✈️ Travel Segments</h3>
                     @if($canEdit)
                         <button wire:click="openAddSegment" class="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -573,6 +656,57 @@
                 <div class="flex justify-end gap-3 mt-6">
                     <button wire:click="closeAddSegment" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
                     <button wire:click="saveSegment" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Save Segment</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Add Destination Modal -->
+    @if($showAddDestination)
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full mx-4 p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add Destination</h3>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">City *</label>
+                        <input type="text" wire:model="destCity" placeholder="e.g., Paris" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                        @error('destCity') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">State/Province</label>
+                        <input type="text" wire:model="destStateProvince" placeholder="Optional" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Country *</label>
+                        <select wire:model="destCountry" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            <option value="">Select country...</option>
+                            @foreach($countries as $code => $name)
+                                <option value="{{ $code }}">{{ $name }}</option>
+                            @endforeach
+                        </select>
+                        @error('destCountry') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Arrival Date *</label>
+                            <input type="date" wire:model="destArrivalDate" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            @error('destArrivalDate') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Departure Date *</label>
+                            <input type="date" wire:model="destDepartureDate" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            @error('destDepartureDate') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button wire:click="closeAddDestination" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
+                    <button wire:click="saveDestination" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add Destination</button>
                 </div>
             </div>
         </div>

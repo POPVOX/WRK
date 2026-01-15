@@ -31,9 +31,19 @@ class TripCreate extends Component
 
     public string $endDate = '';
 
-    public string $destinationCity = '';
+    // Multiple destinations support
+    public array $destinations = [];
 
-    public string $destinationCountry = '';
+    // For adding new destination
+    public string $newDestCity = '';
+
+    public string $newDestStateProvince = '';
+
+    public string $newDestCountry = '';
+
+    public string $newDestArrivalDate = '';
+
+    public string $newDestDepartureDate = '';
 
     public ?int $projectId = null;
 
@@ -66,12 +76,32 @@ class TripCreate extends Component
         $this->startDate = now()->addWeek()->format('Y-m-d');
         $this->endDate = now()->addWeeks(2)->format('Y-m-d');
 
+        // Set default dates for destination form
+        $this->newDestArrivalDate = $this->startDate;
+        $this->newDestDepartureDate = $this->endDate;
+
         // Add current user as default traveler and lead
         $this->selectedTravelers = [Auth::id()];
         $this->leadTravelerId = Auth::id();
 
         // Load countries
         $this->countries = $this->getCountryList();
+    }
+
+    public function updatedStartDate(): void
+    {
+        // Update default arrival date for new destinations
+        if (empty($this->newDestArrivalDate) || $this->newDestArrivalDate < $this->startDate) {
+            $this->newDestArrivalDate = $this->startDate;
+        }
+    }
+
+    public function updatedEndDate(): void
+    {
+        // Update default departure date for new destinations
+        if (empty($this->newDestDepartureDate) || $this->newDestDepartureDate > $this->endDate) {
+            $this->newDestDepartureDate = $this->endDate;
+        }
     }
 
     protected function getCountryList(): array
@@ -126,48 +156,88 @@ class TripCreate extends Component
         ];
     }
 
-    public function updatedDestinationCountry(): void
+    // Destination Management
+    public function addDestination(): void
     {
-        $this->checkTravelAdvisory();
+        $this->validate([
+            'newDestCity' => 'required|string|max:100',
+            'newDestCountry' => 'required|string|size:2',
+            'newDestArrivalDate' => 'required|date',
+            'newDestDepartureDate' => 'required|date|after_or_equal:newDestArrivalDate',
+        ]);
+
+        $advisory = CountryTravelAdvisory::findByCountryCode($this->newDestCountry);
+
+        $this->destinations[] = [
+            'city' => $this->newDestCity,
+            'state_province' => $this->newDestStateProvince ?: null,
+            'country' => $this->newDestCountry,
+            'country_name' => $this->countries[$this->newDestCountry] ?? $this->newDestCountry,
+            'arrival_date' => $this->newDestArrivalDate,
+            'departure_date' => $this->newDestDepartureDate,
+            'advisory_level' => $advisory?->advisory_level,
+            'is_prohibited' => $advisory?->is_prohibited ?? false,
+        ];
+
+        // Reset form
+        $this->reset(['newDestCity', 'newDestStateProvince', 'newDestCountry', 'newDestArrivalDate', 'newDestDepartureDate']);
+
+        // Set default dates for next destination
+        $this->newDestArrivalDate = $this->startDate;
+        $this->newDestDepartureDate = $this->endDate;
     }
 
-    protected function checkTravelAdvisory(): void
+    public function removeDestination(int $index): void
     {
-        if (empty($this->destinationCountry)) {
-            $this->travelAdvisory = null;
+        unset($this->destinations[$index]);
+        $this->destinations = array_values($this->destinations);
+    }
 
-            return;
+    protected function checkTravelAdvisories(): void
+    {
+        // Check advisories for all destinations
+        $this->stepRegistrationRequired = false;
+        $this->travelInsuranceRequired = false;
+        $this->approvalRequired = false;
+        $this->riskLevel = 'standard';
+        $this->travelAdvisory = null;
+
+        $highestLevel = '1';
+
+        foreach ($this->destinations as $dest) {
+            $advisory = CountryTravelAdvisory::findByCountryCode($dest['country']);
+            if ($advisory) {
+                if ($advisory->advisory_level > $highestLevel) {
+                    $highestLevel = $advisory->advisory_level;
+                    $this->travelAdvisory = [
+                        'level' => $advisory->advisory_level,
+                        'title' => $advisory->advisory_title,
+                        'summary' => $advisory->advisory_summary,
+                        'is_prohibited' => $advisory->is_prohibited,
+                        'url' => $advisory->state_dept_url,
+                        'country' => $dest['city'].', '.$dest['country_name'],
+                    ];
+                }
+
+                if ($advisory->requiresStepRegistration()) {
+                    $this->stepRegistrationRequired = true;
+                }
+                if ($advisory->requiresTravelInsurance()) {
+                    $this->travelInsuranceRequired = true;
+                }
+                if ($advisory->requiresApproval()) {
+                    $this->approvalRequired = true;
+                }
+            }
         }
 
-        $advisory = CountryTravelAdvisory::findByCountryCode($this->destinationCountry);
-
-        if ($advisory) {
-            $this->travelAdvisory = [
-                'level' => $advisory->advisory_level,
-                'title' => $advisory->advisory_title,
-                'summary' => $advisory->advisory_summary,
-                'is_prohibited' => $advisory->is_prohibited,
-                'url' => $advisory->state_dept_url,
-            ];
-
-            $this->stepRegistrationRequired = $advisory->requiresStepRegistration();
-            $this->travelInsuranceRequired = $advisory->requiresTravelInsurance();
-            $this->approvalRequired = $advisory->requiresApproval();
-
-            $this->riskLevel = match ($advisory->advisory_level) {
-                '1' => 'standard',
-                '2' => 'moderate',
-                '3' => 'high',
-                '4' => 'prohibited',
-                default => 'standard',
-            };
-        } else {
-            $this->travelAdvisory = null;
-            $this->stepRegistrationRequired = false;
-            $this->travelInsuranceRequired = false;
-            $this->approvalRequired = false;
-            $this->riskLevel = 'standard';
-        }
+        $this->riskLevel = match ($highestLevel) {
+            '1' => 'standard',
+            '2' => 'moderate',
+            '3' => 'high',
+            '4' => 'prohibited',
+            default => 'standard',
+        };
     }
 
     public function toggleTraveler(int $userId): void
@@ -199,9 +269,9 @@ class TripCreate extends Component
             $this->step++;
         }
 
-        // Check advisory when moving to step 3
+        // Check advisories when moving to step 3
         if ($this->step === 3) {
-            $this->checkTravelAdvisory();
+            $this->checkTravelAdvisories();
         }
     }
 
@@ -220,8 +290,7 @@ class TripCreate extends Component
                 'type' => 'required|in:'.implode(',', array_keys(Trip::getTypeOptions())),
                 'startDate' => 'required|date',
                 'endDate' => 'required|date|after_or_equal:startDate',
-                'destinationCity' => 'required|string|max:100',
-                'destinationCountry' => 'required|string|size:2',
+                'destinations' => 'required|array|min:1',
             ]);
         } elseif ($this->step === 2) {
             $this->validate([
@@ -235,6 +304,9 @@ class TripCreate extends Component
     {
         $this->validateStep();
 
+        // Use first destination as primary
+        $primaryDest = $this->destinations[0] ?? null;
+
         $trip = Trip::create([
             'name' => $this->name,
             'description' => $this->description ?: null,
@@ -242,8 +314,8 @@ class TripCreate extends Component
             'status' => 'planning',
             'start_date' => $this->startDate,
             'end_date' => $this->endDate,
-            'primary_destination_city' => $this->destinationCity,
-            'primary_destination_country' => $this->destinationCountry,
+            'primary_destination_city' => $primaryDest['city'] ?? '',
+            'primary_destination_country' => $primaryDest['country'] ?? '',
             'project_id' => $this->projectId ?: null,
             'partner_organization_id' => $this->partnerOrganizationId ?: null,
             'partner_program_name' => $this->partnerProgramName ?: null,
@@ -261,16 +333,19 @@ class TripCreate extends Component
             ]);
         }
 
-        // Create primary destination
-        $trip->destinations()->create([
-            'order' => 1,
-            'city' => $this->destinationCity,
-            'country' => $this->destinationCountry,
-            'arrival_date' => $this->startDate,
-            'departure_date' => $this->endDate,
-            'state_dept_level' => $this->travelAdvisory['level'] ?? null,
-            'is_prohibited_destination' => $this->travelAdvisory['is_prohibited'] ?? false,
-        ]);
+        // Create all destinations
+        foreach ($this->destinations as $index => $dest) {
+            $trip->destinations()->create([
+                'order' => $index + 1,
+                'city' => $dest['city'],
+                'state_province' => $dest['state_province'] ?? null,
+                'country' => $dest['country'],
+                'arrival_date' => $dest['arrival_date'],
+                'departure_date' => $dest['departure_date'],
+                'state_dept_level' => $dest['advisory_level'] ?? null,
+                'is_prohibited_destination' => $dest['is_prohibited'] ?? false,
+            ]);
+        }
 
         $this->redirect(route('travel.show', $trip), navigate: true);
     }
@@ -293,6 +368,17 @@ class TripCreate extends Component
     {
         return Organization::orderBy('name')
             ->get(['id', 'name']);
+    }
+
+    public function getCountryFlag(string $code): string
+    {
+        // Convert country code to flag emoji
+        $flag = '';
+        foreach (str_split(strtoupper($code)) as $char) {
+            $flag .= mb_chr(0x1F1E6 + ord($char) - ord('A'));
+        }
+
+        return $flag;
     }
 
     public function render()
