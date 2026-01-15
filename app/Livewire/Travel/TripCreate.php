@@ -116,54 +116,7 @@ class TripCreate extends Component
 
     protected function getCountryList(): array
     {
-        // Common travel destinations first
-        return [
-            'US' => 'United States',
-            'GB' => 'United Kingdom',
-            'CA' => 'Canada',
-            'DE' => 'Germany',
-            'FR' => 'France',
-            'BE' => 'Belgium',
-            'NL' => 'Netherlands',
-            'CH' => 'Switzerland',
-            'MX' => 'Mexico',
-            'BR' => 'Brazil',
-            'AR' => 'Argentina',
-            'CO' => 'Colombia',
-            'CL' => 'Chile',
-            'KE' => 'Kenya',
-            'ZA' => 'South Africa',
-            'NG' => 'Nigeria',
-            'GH' => 'Ghana',
-            'EG' => 'Egypt',
-            'MA' => 'Morocco',
-            'JP' => 'Japan',
-            'KR' => 'South Korea',
-            'TW' => 'Taiwan',
-            'SG' => 'Singapore',
-            'IN' => 'India',
-            'AU' => 'Australia',
-            'NZ' => 'New Zealand',
-            'PH' => 'Philippines',
-            'ID' => 'Indonesia',
-            'TH' => 'Thailand',
-            'VN' => 'Vietnam',
-            'AE' => 'United Arab Emirates',
-            'IL' => 'Israel',
-            'JO' => 'Jordan',
-            'ES' => 'Spain',
-            'IT' => 'Italy',
-            'PT' => 'Portugal',
-            'PL' => 'Poland',
-            'CZ' => 'Czech Republic',
-            'AT' => 'Austria',
-            'SE' => 'Sweden',
-            'NO' => 'Norway',
-            'DK' => 'Denmark',
-            'FI' => 'Finland',
-            'IE' => 'Ireland',
-            'GR' => 'Greece',
-        ];
+        return \App\Support\Countries::all();
     }
 
     // Destination Management
