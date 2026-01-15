@@ -1885,7 +1885,7 @@ class TripDetail extends Component
         $this->trip->delete();
 
         session()->flash('success', "Trip '{$tripName}' has been deleted.");
-        $this->redirect(route('travel'), navigate: true);
+        $this->redirect(route('travel.index'), navigate: true);
     }
 
     public function getCountriesProperty(): array
