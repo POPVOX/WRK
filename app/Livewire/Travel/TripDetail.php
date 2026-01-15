@@ -235,6 +235,43 @@ class TripDetail extends Component
 
     public ?string $eventParseError = null;
 
+    // Add Expense modal
+    public bool $showAddExpense = false;
+
+    public ?int $editingExpenseId = null;
+
+    public string $expenseMode = 'manual'; // 'manual', 'smart'
+
+    // Expense form fields
+    public string $expenseCategory = 'other';
+
+    public string $expenseDescription = '';
+
+    public string $expenseDate = '';
+
+    public ?float $expenseAmount = null;
+
+    public string $expenseCurrency = 'USD';
+
+    public string $expenseVendor = '';
+
+    public string $expenseReceiptNumber = '';
+
+    public string $expenseNotes = '';
+
+    public string $expenseReimbursementStatus = 'pending';
+
+    // Receipt upload
+    public $expenseReceiptFile = null;
+
+    // Smart import
+    public string $expenseSmartText = '';
+
+    public ?array $extractedExpense = null;
+
+    public bool $expenseParsing = false;
+
+    public ?string $expenseParseError = null;
 
     public function mount(Trip $trip): void
     {
@@ -1298,6 +1335,279 @@ class TripDetail extends Component
         return \App\Models\ProjectEvent::orderBy('event_date', 'desc')
             ->limit(50)
             ->get();
+    }
+
+    // Expense Management
+    public function openAddExpense(): void
+    {
+        $this->resetExpenseForm();
+        $this->showAddExpense = true;
+    }
+
+    public function closeAddExpense(): void
+    {
+        $this->showAddExpense = false;
+        $this->resetExpenseForm();
+    }
+
+    public function setExpenseMode(string $mode): void
+    {
+        $this->expenseMode = $mode;
+        $this->extractedExpense = null;
+        $this->expenseParseError = null;
+    }
+
+    protected function resetExpenseForm(): void
+    {
+        $this->reset([
+            'editingExpenseId',
+            'expenseMode',
+            'expenseCategory',
+            'expenseDescription',
+            'expenseDate',
+            'expenseAmount',
+            'expenseCurrency',
+            'expenseVendor',
+            'expenseReceiptNumber',
+            'expenseNotes',
+            'expenseReimbursementStatus',
+            'expenseReceiptFile',
+            'expenseSmartText',
+            'extractedExpense',
+            'expenseParsing',
+            'expenseParseError',
+        ]);
+        $this->expenseMode = 'manual';
+        $this->expenseCategory = 'other';
+        $this->expenseCurrency = 'USD';
+        $this->expenseReimbursementStatus = 'pending';
+
+        // Default to trip start date
+        $this->expenseDate = $this->trip->start_date->format('Y-m-d');
+    }
+
+    public function parseExpenseText(): void
+    {
+        $this->expenseParseError = null;
+        $this->extractedExpense = null;
+
+        if (empty(trim($this->expenseSmartText))) {
+            $this->expenseParseError = 'Please paste expense/receipt details.';
+            return;
+        }
+
+        $this->expenseParsing = true;
+
+        try {
+            $parser = new \App\Services\ExpenseParserService();
+            $result = $parser->parseText($this->expenseSmartText);
+
+            if (isset($result['error'])) {
+                $this->expenseParseError = $result['error'];
+            } elseif (isset($result['expense'])) {
+                $this->extractedExpense = $result['expense'];
+                $this->applyExtractedExpense($result['expense']);
+            } else {
+                $this->expenseParseError = 'Could not extract expense information.';
+            }
+        } catch (\Exception $e) {
+            $this->expenseParseError = 'Error parsing text: ' . $e->getMessage();
+        }
+
+        $this->expenseParsing = false;
+    }
+
+    protected function applyExtractedExpense(array $data): void
+    {
+        $this->expenseCategory = $data['category'] ?? 'other';
+        $this->expenseDescription = $data['description'] ?? '';
+        $this->expenseDate = $data['expense_date'] ?? '';
+        $this->expenseAmount = $data['amount'] ?? null;
+        $this->expenseCurrency = $data['currency'] ?? 'USD';
+        $this->expenseVendor = $data['vendor'] ?? '';
+        $this->expenseReceiptNumber = $data['receipt_number'] ?? '';
+        $this->expenseNotes = $data['notes'] ?? '';
+    }
+
+    public function editExpense(int $expenseId): void
+    {
+        $expense = \App\Models\TripExpense::where('id', $expenseId)
+            ->where('trip_id', $this->trip->id)
+            ->first();
+
+        if (!$expense) {
+            return;
+        }
+
+        // Only allow editing own expenses unless management
+        $user = \Illuminate\Support\Facades\Auth::user();
+        if ($expense->user_id !== $user->id && !$user->isManagement()) {
+            return;
+        }
+
+        $this->editingExpenseId = $expenseId;
+        $this->expenseMode = 'manual';
+        $this->expenseCategory = $expense->category ?? 'other';
+        $this->expenseDescription = $expense->description ?? '';
+        $this->expenseDate = $expense->expense_date?->format('Y-m-d') ?? '';
+        $this->expenseAmount = $expense->amount;
+        $this->expenseCurrency = $expense->currency ?? 'USD';
+        $this->expenseVendor = $expense->vendor ?? '';
+        $this->expenseReceiptNumber = $expense->receipt_number ?? '';
+        $this->expenseNotes = $expense->notes ?? '';
+        $this->expenseReimbursementStatus = $expense->reimbursement_status ?? 'pending';
+
+        $this->showAddExpense = true;
+    }
+
+    public function saveExpense(): void
+    {
+        $this->validate([
+            'expenseCategory' => 'required|in:' . implode(',', array_keys(\App\Models\TripExpense::getCategoryOptions())),
+            'expenseDescription' => 'required|string|max:255',
+            'expenseDate' => 'required|date',
+            'expenseAmount' => 'required|numeric|min:0',
+        ]);
+
+        $user = \Illuminate\Support\Facades\Auth::user();
+
+        $data = [
+            'category' => $this->expenseCategory,
+            'description' => $this->expenseDescription,
+            'expense_date' => $this->expenseDate,
+            'amount' => $this->expenseAmount,
+            'currency' => $this->expenseCurrency ?: 'USD',
+            'vendor' => $this->expenseVendor ?: null,
+            'receipt_number' => $this->expenseReceiptNumber ?: null,
+            'notes' => $this->expenseNotes ?: null,
+        ];
+
+        // Handle receipt file upload
+        if ($this->expenseReceiptFile) {
+            $path = $this->expenseReceiptFile->store('expense-receipts', 'local');
+            $data['receipt_path'] = $path;
+            $data['receipt_original_name'] = $this->expenseReceiptFile->getClientOriginalName();
+        }
+
+        if ($this->editingExpenseId) {
+            $expense = \App\Models\TripExpense::where('id', $this->editingExpenseId)
+                ->where('trip_id', $this->trip->id)
+                ->first();
+
+            if ($expense) {
+                // Only allow editing own expenses unless management
+                if ($expense->user_id !== $user->id && !$user->isManagement()) {
+                    $this->expenseParseError = 'You can only edit your own expenses.';
+                    return;
+                }
+
+                // Management can also update status
+                if ($user->isManagement()) {
+                    $data['reimbursement_status'] = $this->expenseReimbursementStatus;
+                }
+
+                $expense->update($data);
+            }
+
+            $this->trip->load('expenses.user');
+            $this->closeAddExpense();
+            $this->dispatch('notify', type: 'success', message: 'Expense updated!');
+            return;
+        }
+
+        // Create new expense for current user
+        $this->trip->expenses()->create(array_merge($data, [
+            'user_id' => $user->id,
+            'reimbursement_status' => 'pending',
+            'ai_extracted' => $this->extractedExpense !== null,
+            'source_text' => $this->expenseSmartText ?: null,
+        ]));
+
+        $this->trip->load('expenses.user');
+        $this->closeAddExpense();
+        $this->dispatch('notify', type: 'success', message: 'Expense added!');
+    }
+
+    public function deleteExpense(int $expenseId): void
+    {
+        $expense = \App\Models\TripExpense::where('id', $expenseId)
+            ->where('trip_id', $this->trip->id)
+            ->first();
+
+        if (!$expense) {
+            return;
+        }
+
+        $user = \Illuminate\Support\Facades\Auth::user();
+
+        // Only allow deleting own expenses unless management
+        if ($expense->user_id !== $user->id && !$user->isManagement()) {
+            return;
+        }
+
+        $expense->delete();
+        $this->trip->load('expenses.user');
+        $this->dispatch('notify', type: 'success', message: 'Expense removed.');
+    }
+
+    public function approveExpense(int $expenseId): void
+    {
+        $user = \Illuminate\Support\Facades\Auth::user();
+
+        if (!$user->isManagement()) {
+            return;
+        }
+
+        $expense = \App\Models\TripExpense::where('id', $expenseId)
+            ->where('trip_id', $this->trip->id)
+            ->first();
+
+        if ($expense) {
+            $expense->update([
+                'reimbursement_status' => 'approved',
+                'approved_by' => $user->id,
+                'approved_at' => now(),
+            ]);
+        }
+
+        $this->trip->load('expenses.user');
+        $this->dispatch('notify', type: 'success', message: 'Expense approved.');
+    }
+
+    public function markExpensePaid(int $expenseId): void
+    {
+        $user = \Illuminate\Support\Facades\Auth::user();
+
+        if (!$user->isManagement()) {
+            return;
+        }
+
+        $expense = \App\Models\TripExpense::where('id', $expenseId)
+            ->where('trip_id', $this->trip->id)
+            ->first();
+
+        if ($expense) {
+            $expense->update([
+                'reimbursement_status' => 'paid',
+                'reimbursement_paid_date' => now(),
+            ]);
+        }
+
+        $this->trip->load('expenses.user');
+        $this->dispatch('notify', type: 'success', message: 'Expense marked as paid.');
+    }
+
+    public function getVisibleExpensesProperty()
+    {
+        $user = \Illuminate\Support\Facades\Auth::user();
+
+        // Management sees all expenses
+        if ($user->isManagement()) {
+            return $this->trip->expenses->sortByDesc('expense_date');
+        }
+
+        // Regular users only see their own expenses
+        return $this->trip->expenses->where('user_id', $user->id)->sortByDesc('expense_date');
     }
 
     public function parseAndCreateSponsorship(): void
