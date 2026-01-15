@@ -130,6 +130,15 @@ class TripDetail extends Component
 
     public ?string $sponsorshipParseError = null;
 
+    // Add new organization inline (for sponsorship)
+    public bool $showAddSponsorOrg = false;
+
+    public string $newSponsorOrgName = '';
+
+    public string $newSponsorOrgType = 'nonprofit';
+
+    public string $newSponsorOrgWebsite = '';
+
     public function mount(Trip $trip): void
     {
         $this->trip = $trip->load([
@@ -152,7 +161,7 @@ class TripDetail extends Component
 
     public function getTitleProperty(): string
     {
-        return $this->trip->name.' - Travel';
+        return $this->trip->name . ' - Travel';
     }
 
     public function setTab(string $tab): void
@@ -296,7 +305,7 @@ class TripDetail extends Component
         $this->extractedSegments = [];
 
         // Validate we have a traveler selected
-        if (! $this->smartImportTravelerId) {
+        if (!$this->smartImportTravelerId) {
             $this->smartImportError = 'Please select a traveler first.';
 
             return;
@@ -309,7 +318,7 @@ class TripDetail extends Component
             $path = $this->smartImportFile->getRealPath();
             $mimeType = $this->smartImportFile->getMimeType();
             $result = $parser->parseFile($path, $mimeType);
-        } elseif (! empty(trim($this->smartImportText))) {
+        } elseif (!empty(trim($this->smartImportText))) {
             // Otherwise use the pasted text
             $result = $parser->parseText($this->smartImportText);
         } else {
@@ -347,7 +356,7 @@ class TripDetail extends Component
 
     public function saveExtractedSegments(): void
     {
-        if (! $this->smartImportTravelerId) {
+        if (!$this->smartImportTravelerId) {
             $this->smartImportError = 'Please select a traveler.';
 
             return;
@@ -467,7 +476,7 @@ class TripDetail extends Component
     public function moveDestinationUp(int $destinationId): void
     {
         $destination = $this->trip->destinations->find($destinationId);
-        if (! $destination || $destination->order <= 1) {
+        if (!$destination || $destination->order <= 1) {
             return;
         }
 
@@ -484,7 +493,7 @@ class TripDetail extends Component
     {
         $destination = $this->trip->destinations->find($destinationId);
         $maxOrder = $this->trip->destinations->max('order');
-        if (! $destination || $destination->order >= $maxOrder) {
+        if (!$destination || $destination->order >= $maxOrder) {
             return;
         }
 
@@ -565,7 +574,7 @@ class TripDetail extends Component
             ->first();
 
         if ($item) {
-            $item->update(['is_completed' => ! $item->is_completed]);
+            $item->update(['is_completed' => !$item->is_completed]);
             $this->trip->load('checklists');
         }
     }
@@ -597,7 +606,7 @@ class TripDetail extends Component
     {
         $expenses = $this->trip->expenses;
 
-        $byCategory = $expenses->groupBy('category')->map(fn ($items) => $items->sum('amount'));
+        $byCategory = $expenses->groupBy('category')->map(fn($items) => $items->sum('amount'));
 
         return [
             'total' => $expenses->sum('amount'),
@@ -629,6 +638,37 @@ class TripDetail extends Component
         $this->showAddSponsorship = false;
     }
 
+    // Add Organization inline (from sponsorship modal)
+    public function openAddSponsorOrg(): void
+    {
+        $this->reset(['newSponsorOrgName', 'newSponsorOrgType', 'newSponsorOrgWebsite']);
+        $this->showAddSponsorOrg = true;
+    }
+
+    public function closeAddSponsorOrg(): void
+    {
+        $this->showAddSponsorOrg = false;
+    }
+
+    public function saveNewSponsorOrg(): void
+    {
+        $this->validate([
+            'newSponsorOrgName' => 'required|string|max:255',
+            'newSponsorOrgType' => 'required|in:nonprofit,government,corporate,university,media,other',
+            'newSponsorOrgWebsite' => 'nullable|url|max:255',
+        ]);
+
+        $org = Organization::create([
+            'name' => $this->newSponsorOrgName,
+            'type' => $this->newSponsorOrgType,
+            'website' => $this->newSponsorOrgWebsite ?: null,
+        ]);
+
+        $this->sponsorshipOrgId = $org->id;
+        $this->showAddSponsorOrg = false;
+        $this->dispatch('notify', type: 'success', message: 'Organization created!');
+    }
+
     public function parseAndCreateSponsorship(): void
     {
         $this->validate([
@@ -637,12 +677,12 @@ class TripDetail extends Component
         ]);
 
         $text = $this->sponsorshipAgreementText;
-        
+
         // If file uploaded, extract text from it
         if ($this->sponsorshipFile) {
             $filePath = $this->sponsorshipFile->store('sponsorship-docs', 'local');
-            $fullPath = storage_path('app/'.$filePath);
-            
+            $fullPath = storage_path('app/' . $filePath);
+
             if (str_ends_with(strtolower($this->sponsorshipFile->getClientOriginalName()), '.pdf')) {
                 $parser = new SponsorshipParserService();
                 $extractedText = $parser->extractTextFromPdf($fullPath);
@@ -668,13 +708,13 @@ class TripDetail extends Component
         ]);
 
         // If we have agreement text, parse it with AI
-        if (! empty($text)) {
+        if (!empty($text)) {
             $this->parsingSponsorship = true;
-            
+
             try {
                 $parser = new SponsorshipParserService();
                 $result = $parser->parseAgreement($text, $sponsorship);
-                
+
                 if ($result['success']) {
                     $parser->applyToSponsorship($sponsorship, $result);
                     $this->dispatch('notify', type: 'success', message: 'Sponsorship created and terms extracted!');
@@ -682,9 +722,9 @@ class TripDetail extends Component
                     $this->dispatch('notify', type: 'warning', message: 'Sponsorship created but AI extraction failed. You can add details manually.');
                 }
             } catch (\Exception $e) {
-                $this->dispatch('notify', type: 'warning', message: 'Sponsorship created but parsing failed: '.$e->getMessage());
+                $this->dispatch('notify', type: 'warning', message: 'Sponsorship created but parsing failed: ' . $e->getMessage());
             }
-            
+
             $this->parsingSponsorship = false;
         } else {
             $this->dispatch('notify', type: 'success', message: 'Sponsorship added!');
@@ -710,7 +750,7 @@ class TripDetail extends Component
     public function toggleDeliverable(int $sponsorshipId, int $index): void
     {
         $sponsorship = TripSponsorship::find($sponsorshipId);
-        if (! $sponsorship || $sponsorship->trip_id !== $this->trip->id) {
+        if (!$sponsorship || $sponsorship->trip_id !== $this->trip->id) {
             return;
         }
 
@@ -729,7 +769,7 @@ class TripDetail extends Component
     public function reparseSponsorship(int $sponsorshipId): void
     {
         $sponsorship = TripSponsorship::find($sponsorshipId);
-        if (! $sponsorship || $sponsorship->trip_id !== $this->trip->id) {
+        if (!$sponsorship || $sponsorship->trip_id !== $this->trip->id) {
             return;
         }
 
@@ -741,15 +781,15 @@ class TripDetail extends Component
         try {
             $parser = new SponsorshipParserService();
             $result = $parser->parseAgreement($sponsorship->agreement_text, $sponsorship);
-            
+
             if ($result['success']) {
                 $parser->applyToSponsorship($sponsorship, $result);
                 $this->dispatch('notify', type: 'success', message: 'Terms re-extracted successfully!');
             } else {
-                $this->dispatch('notify', type: 'error', message: 'Extraction failed: '.($result['error'] ?? 'Unknown error'));
+                $this->dispatch('notify', type: 'error', message: 'Extraction failed: ' . ($result['error'] ?? 'Unknown error'));
             }
         } catch (\Exception $e) {
-            $this->dispatch('notify', type: 'error', message: 'Parsing error: '.$e->getMessage());
+            $this->dispatch('notify', type: 'error', message: 'Parsing error: ' . $e->getMessage());
         }
 
         $this->trip->load('sponsorships.organization');
@@ -818,7 +858,7 @@ class TripDetail extends Component
             ]);
         }
 
-        return $events->sortBy('datetime')->groupBy(fn ($e) => $e['datetime']->format('Y-m-d'))->toArray();
+        return $events->sortBy('datetime')->groupBy(fn($e) => $e['datetime']->format('Y-m-d'))->toArray();
     }
 
     public function canEdit(): bool

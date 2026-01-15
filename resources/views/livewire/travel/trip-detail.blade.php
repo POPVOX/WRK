@@ -1111,7 +1111,10 @@
                 <div class="p-6 space-y-5">
                     {{-- Sponsor Organization --}}
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sponsor Organization *</label>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Sponsor Organization *</label>
+                            <button type="button" wire:click="openAddSponsorOrg" class="text-xs text-indigo-600 hover:text-indigo-800">+ Add New</button>
+                        </div>
                         <select wire:model="sponsorshipOrgId" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                             <option value="">Select organization...</option>
                             @foreach($organizations as $org)
@@ -1198,6 +1201,51 @@ Payment: Net 30 from valid invoice after completion of deliverables."
                         <span wire:loading.remove wire:target="parseAndCreateSponsorship">✨</span>
                         Create & Extract Terms
                     </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Add Organization Modal (from sponsorship) -->
+    @if($showAddSponsorOrg)
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add New Organization</h3>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Organization Name *</label>
+                        <input type="text" wire:model="newSponsorOrgName" 
+                               placeholder="e.g., Brookings Institution"
+                               class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                        @error('newSponsorOrgName') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type *</label>
+                        <select wire:model="newSponsorOrgType" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            <option value="nonprofit">Nonprofit</option>
+                            <option value="government">Government</option>
+                            <option value="corporate">Corporate</option>
+                            <option value="university">University</option>
+                            <option value="media">Media</option>
+                            <option value="other">Other</option>
+                        </select>
+                        @error('newSponsorOrgType') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Website</label>
+                        <input type="url" wire:model="newSponsorOrgWebsite" 
+                               placeholder="https://example.org"
+                               class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                        @error('newSponsorOrgWebsite') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button wire:click="closeAddSponsorOrg" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
+                    <button wire:click="saveNewSponsorOrg" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add Organization</button>
                 </div>
             </div>
         </div>
