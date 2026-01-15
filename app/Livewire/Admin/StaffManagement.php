@@ -107,15 +107,36 @@ class StaffManagement extends Component
     {
         $user = User::find($userId);
 
-        // Prevent self-deletion
-        if ($user->id === auth()->id()) {
-            $this->dispatch('notify', type: 'error', message: 'You cannot delete your own account.');
-
+        if (!$user) {
+            $this->dispatch('notify', type: 'error', message: 'User not found.');
             return;
         }
 
-        $user->delete();
-        $this->dispatch('notify', type: 'success', message: 'Staff member removed.');
+        // Prevent self-deletion
+        if ($user->id === auth()->id()) {
+            $this->dispatch('notify', type: 'error', message: 'You cannot delete your own account.');
+            return;
+        }
+
+        try {
+            // Nullify foreign key references before deletion
+            \DB::table('feedback')->where('resolved_by', $userId)->update(['resolved_by' => null]);
+            \DB::table('actions')->where('assigned_to', $userId)->update(['assigned_to' => null]);
+            \DB::table('trips')->where('created_by', $userId)->update(['created_by' => null]);
+            \DB::table('trips')->where('approved_by', $userId)->update(['approved_by' => null]);
+            \DB::table('trip_travelers')->where('user_id', $userId)->delete();
+            \DB::table('trip_segments')->where('user_id', $userId)->update(['user_id' => null]);
+            \DB::table('trip_lodging')->where('user_id', $userId)->update(['user_id' => null]);
+            \DB::table('trip_ground_transport')->where('user_id', $userId)->update(['user_id' => null]);
+            \DB::table('accomplishments')->where('user_id', $userId)->delete();
+            \DB::table('accomplishment_reactions')->where('user_id', $userId)->delete();
+            
+            $user->delete();
+            $this->dispatch('notify', type: 'success', message: 'Staff member removed.');
+        } catch (\Exception $e) {
+            \Log::error('Failed to delete user: ' . $e->getMessage());
+            $this->dispatch('notify', type: 'error', message: 'Could not delete user. They may have associated data.');
+        }
     }
 
     public function openEditModal(int $userId): void
