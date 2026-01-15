@@ -5,7 +5,9 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -144,6 +146,24 @@ class User extends Authenticatable
     public function meetings(): HasMany
     {
         return $this->hasMany(Meeting::class);
+    }
+
+    /**
+     * Get trips the user is traveling on.
+     */
+    public function trips(): BelongsToMany
+    {
+        return $this->belongsToMany(Trip::class, 'trip_travelers')
+            ->withPivot(['role', 'calendar_events_created', 'personal_notes'])
+            ->withTimestamps();
+    }
+
+    /**
+     * Get the user's travel profile.
+     */
+    public function travelProfile(): HasOne
+    {
+        return $this->hasOne(TravelProfile::class);
     }
 
     /**
