@@ -193,6 +193,49 @@ class TripDetail extends Component
 
     public ?string $lodgingParseError = null;
 
+    // Add Event modal
+    public bool $showAddEvent = false;
+
+    public ?int $editingEventId = null;
+
+    public string $eventMode = 'manual'; // 'manual', 'smart', 'url', 'project'
+
+    // Event form fields
+    public string $eventTitle = '';
+
+    public string $eventType = 'other';
+
+    public string $eventStartDate = '';
+
+    public string $eventStartTime = '';
+
+    public string $eventEndDate = '';
+
+    public string $eventEndTime = '';
+
+    public string $eventLocation = '';
+
+    public string $eventAddress = '';
+
+    public string $eventDescription = '';
+
+    public string $eventNotes = '';
+
+    // Link to project event
+    public ?int $eventProjectEventId = null;
+
+    // Smart import / URL extraction
+    public string $eventSmartText = '';
+
+    public string $eventUrl = '';
+
+    public ?array $extractedEvent = null;
+
+    public bool $eventParsing = false;
+
+    public ?string $eventParseError = null;
+
+
     public function mount(Trip $trip): void
     {
         $this->trip = $trip->load([
@@ -994,6 +1037,268 @@ class TripDetail extends Component
         $this->dispatch('notify', type: 'success', message: 'Lodging removed.');
     }
 
+    // Event Management
+    public function openAddEvent(): void
+    {
+        $this->resetEventForm();
+        $this->showAddEvent = true;
+    }
+
+    public function closeAddEvent(): void
+    {
+        $this->showAddEvent = false;
+        $this->resetEventForm();
+    }
+
+    public function setEventMode(string $mode): void
+    {
+        $this->eventMode = $mode;
+        $this->extractedEvent = null;
+        $this->eventParseError = null;
+    }
+
+    protected function resetEventForm(): void
+    {
+        $this->reset([
+            'editingEventId',
+            'eventMode',
+            'eventTitle',
+            'eventType',
+            'eventStartDate',
+            'eventStartTime',
+            'eventEndDate',
+            'eventEndTime',
+            'eventLocation',
+            'eventAddress',
+            'eventDescription',
+            'eventNotes',
+            'eventProjectEventId',
+            'eventSmartText',
+            'eventUrl',
+            'extractedEvent',
+            'eventParsing',
+            'eventParseError',
+        ]);
+        $this->eventMode = 'manual';
+        $this->eventType = 'other';
+
+        // Default to trip dates
+        $this->eventStartDate = $this->trip->start_date->format('Y-m-d');
+        $this->eventEndDate = $this->trip->start_date->format('Y-m-d');
+    }
+
+    public function parseEventText(): void
+    {
+        $this->eventParseError = null;
+        $this->extractedEvent = null;
+
+        if (empty(trim($this->eventSmartText))) {
+            $this->eventParseError = 'Please paste event details.';
+            return;
+        }
+
+        $this->eventParsing = true;
+
+        try {
+            $parser = new \App\Services\EventParserService();
+            $result = $parser->parseText($this->eventSmartText);
+
+            if (isset($result['error'])) {
+                $this->eventParseError = $result['error'];
+            } elseif (isset($result['event'])) {
+                $this->extractedEvent = $result['event'];
+                $this->applyExtractedEvent($result['event']);
+            } else {
+                $this->eventParseError = 'Could not extract event information.';
+            }
+        } catch (\Exception $e) {
+            $this->eventParseError = 'Error parsing text: ' . $e->getMessage();
+        }
+
+        $this->eventParsing = false;
+    }
+
+    public function parseEventUrl(): void
+    {
+        $this->eventParseError = null;
+        $this->extractedEvent = null;
+
+        if (empty(trim($this->eventUrl))) {
+            $this->eventParseError = 'Please enter a URL.';
+            return;
+        }
+
+        $this->eventParsing = true;
+
+        try {
+            $parser = new \App\Services\EventParserService();
+            $result = $parser->parseUrl($this->eventUrl);
+
+            if (isset($result['error'])) {
+                $this->eventParseError = $result['error'];
+            } elseif (isset($result['event'])) {
+                $this->extractedEvent = $result['event'];
+                $this->applyExtractedEvent($result['event']);
+            } else {
+                $this->eventParseError = 'Could not extract event information from URL.';
+            }
+        } catch (\Exception $e) {
+            $this->eventParseError = 'Error fetching URL: ' . $e->getMessage();
+        }
+
+        $this->eventParsing = false;
+    }
+
+    public function linkProjectEvent(): void
+    {
+        if (!$this->eventProjectEventId) {
+            $this->eventParseError = 'Please select a project event.';
+            return;
+        }
+
+        $projectEvent = \App\Models\ProjectEvent::find($this->eventProjectEventId);
+        if (!$projectEvent) {
+            $this->eventParseError = 'Project event not found.';
+            return;
+        }
+
+        // Populate form from project event
+        $this->eventTitle = $projectEvent->title;
+        $this->eventType = in_array($projectEvent->type, ['workshop', 'briefing', 'demo', 'launch'])
+            ? ($projectEvent->type === 'briefing' ? 'presentation' : $projectEvent->type)
+            : 'other';
+        $this->eventStartDate = $projectEvent->event_date?->format('Y-m-d') ?? '';
+        $this->eventStartTime = $projectEvent->event_date?->format('H:i') ?? '';
+        $this->eventLocation = $projectEvent->location ?? '';
+        $this->eventDescription = $projectEvent->description ?? '';
+
+        $this->eventMode = 'manual'; // Switch to manual to show form
+    }
+
+    protected function applyExtractedEvent(array $data): void
+    {
+        $this->eventTitle = $data['title'] ?? '';
+        $this->eventType = $data['type'] ?? 'other';
+        $this->eventLocation = $data['location'] ?? '';
+        $this->eventAddress = $data['address'] ?? '';
+        $this->eventDescription = $data['description'] ?? '';
+        $this->eventNotes = $data['notes'] ?? '';
+
+        // Parse datetime
+        if (!empty($data['start_datetime'])) {
+            try {
+                $dt = \Carbon\Carbon::parse($data['start_datetime']);
+                $this->eventStartDate = $dt->format('Y-m-d');
+                $this->eventStartTime = $dt->format('H:i');
+            } catch (\Exception $e) {
+            }
+        }
+
+        if (!empty($data['end_datetime'])) {
+            try {
+                $dt = \Carbon\Carbon::parse($data['end_datetime']);
+                $this->eventEndDate = $dt->format('Y-m-d');
+                $this->eventEndTime = $dt->format('H:i');
+            } catch (\Exception $e) {
+            }
+        }
+    }
+
+    public function editEvent(int $eventId): void
+    {
+        $event = \App\Models\TripEvent::where('id', $eventId)
+            ->where('trip_id', $this->trip->id)
+            ->first();
+
+        if (!$event) {
+            return;
+        }
+
+        $this->editingEventId = $eventId;
+        $this->eventMode = 'manual';
+        $this->eventTitle = $event->title ?? '';
+        $this->eventType = $event->type ?? 'other';
+        $this->eventStartDate = $event->start_datetime?->format('Y-m-d') ?? '';
+        $this->eventStartTime = $event->start_datetime?->format('H:i') ?? '';
+        $this->eventEndDate = $event->end_datetime?->format('Y-m-d') ?? '';
+        $this->eventEndTime = $event->end_datetime?->format('H:i') ?? '';
+        $this->eventLocation = $event->location ?? '';
+        $this->eventAddress = $event->address ?? '';
+        $this->eventDescription = $event->description ?? '';
+        $this->eventNotes = $event->notes ?? '';
+        $this->eventProjectEventId = $event->project_event_id;
+
+        $this->showAddEvent = true;
+    }
+
+    public function saveEvent(): void
+    {
+        $this->validate([
+            'eventTitle' => 'required|string|max:255',
+            'eventType' => 'required|in:conference_session,meeting,presentation,workshop,reception,site_visit,other',
+            'eventStartDate' => 'required|date',
+        ]);
+
+        // Build datetime
+        $startDatetime = $this->eventStartDate . ($this->eventStartTime ? ' ' . $this->eventStartTime : ' 00:00');
+        $endDatetime = null;
+        if ($this->eventEndDate) {
+            $endDatetime = $this->eventEndDate . ($this->eventEndTime ? ' ' . $this->eventEndTime : ' 23:59');
+        }
+
+        $data = [
+            'title' => $this->eventTitle,
+            'type' => $this->eventType,
+            'start_datetime' => $startDatetime,
+            'end_datetime' => $endDatetime,
+            'location' => $this->eventLocation ?: null,
+            'address' => $this->eventAddress ?: null,
+            'description' => $this->eventDescription ?: null,
+            'notes' => $this->eventNotes ?: null,
+            'project_event_id' => $this->eventProjectEventId ?: null,
+        ];
+
+        if ($this->editingEventId) {
+            $event = \App\Models\TripEvent::where('id', $this->editingEventId)
+                ->where('trip_id', $this->trip->id)
+                ->first();
+
+            if ($event) {
+                $event->update($data);
+            }
+
+            $this->trip->load('events');
+            $this->closeAddEvent();
+            $this->dispatch('notify', type: 'success', message: 'Event updated!');
+            return;
+        }
+
+        // Create new event
+        $this->trip->events()->create(array_merge($data, [
+            'ai_extracted' => $this->extractedEvent !== null,
+        ]));
+
+        $this->trip->load('events');
+        $this->closeAddEvent();
+        $this->dispatch('notify', type: 'success', message: 'Event added!');
+    }
+
+    public function deleteEvent(int $eventId): void
+    {
+        \App\Models\TripEvent::where('id', $eventId)
+            ->where('trip_id', $this->trip->id)
+            ->delete();
+
+        $this->trip->load('events');
+        $this->dispatch('notify', type: 'success', message: 'Event removed.');
+    }
+
+    public function getProjectEventsProperty()
+    {
+        return \App\Models\ProjectEvent::orderBy('event_date', 'desc')
+            ->limit(50)
+            ->get();
+    }
 
     public function parseAndCreateSponsorship(): void
     {

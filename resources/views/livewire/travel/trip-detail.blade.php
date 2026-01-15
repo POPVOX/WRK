@@ -908,6 +908,97 @@
                 @endif
             </div>
 
+        @elseif($activeTab === 'events')
+            <!-- Events Tab -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                        📅 Events & Agenda
+                    </h3>
+                    <button wire:click="openAddEvent" class="text-sm bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        Add Event
+                    </button>
+                </div>
+
+                @if($trip->events->isEmpty())
+                    <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+                        <div class="text-4xl mb-2">📅</div>
+                        <p>No events added yet</p>
+                        <button wire:click="openAddEvent" class="mt-2 text-indigo-600 hover:text-indigo-800 text-sm">Add your first event</button>
+                    </div>
+                @else
+                    <div class="space-y-3">
+                        @foreach($trip->events->sortBy('start_datetime') as $event)
+                            <div class="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg group">
+                                <span class="text-2xl">{{ $event->type_icon }}</span>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-start justify-between">
+                                        <div>
+                                            <div class="font-medium text-gray-900 dark:text-white">{{ $event->title }}</div>
+                                            <div class="text-xs text-gray-500 dark:text-gray-400">
+                                                {{ \App\Models\TripEvent::getTypeOptions()[$event->type] ?? ucfirst($event->type) }}
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                            <button wire:click="editEvent({{ $event->id }})" 
+                                                class="text-gray-400 hover:text-indigo-600 p-1"
+                                                title="Edit">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </button>
+                                            <button wire:click="deleteEvent({{ $event->id }})" 
+                                                wire:confirm="Remove this event?"
+                                                class="text-gray-400 hover:text-red-600 p-1"
+                                                title="Delete">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="text-sm text-gray-600 dark:text-gray-400 mt-1 flex flex-wrap items-center gap-3">
+                                        <span class="flex items-center gap-1">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                            </svg>
+                                            {{ $event->start_datetime->format('M j, Y') }}
+                                            @if($event->start_datetime->format('H:i') !== '00:00')
+                                                at {{ $event->start_datetime->format('g:i A') }}
+                                            @endif
+                                        </span>
+                                        @if($event->duration)
+                                            <span class="text-gray-400">·</span>
+                                            <span>{{ $event->duration }}</span>
+                                        @endif
+                                    </div>
+                                    @if($event->location)
+                                        <div class="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            </svg>
+                                            {{ $event->location }}
+                                        </div>
+                                    @endif
+                                    @if($event->projectEvent)
+                                        <div class="mt-2 text-xs text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                            </svg>
+                                            Linked to: {{ $event->projectEvent->title }}
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+
         @elseif($activeTab === 'notes')
             <!-- Notes Tab -->
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
@@ -1571,6 +1662,251 @@ Total: $867 + $112.71 tax = $979.71"
                             wire:loading.attr="disabled">
                             <span wire:loading wire:target="saveLodging" class="animate-spin">⏳</span>
                             {{ $editingLodgingId ? 'Update Lodging' : 'Save Lodging' }}
+                        </button>
+                    @endif
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Add/Edit Event Modal --}}
+    @if($showAddEvent)
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                📅 {{ $editingEventId ? 'Edit Event' : 'Add Event' }}
+                            </h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                {{ $editingEventId ? 'Update event details' : 'Add a conference session, meeting, or other event' }}
+                            </p>
+                        </div>
+                        <button wire:click="closeAddEvent" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                {{-- Mode Tabs - only show when adding --}}
+                @if(!$editingEventId)
+                <div class="flex border-b border-gray-200 dark:border-gray-700 px-6">
+                    <button wire:click="setEventMode('manual')" 
+                        class="px-4 py-3 text-sm font-medium {{ $eventMode === 'manual' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700' }}">
+                        ✏️ Manual
+                    </button>
+                    <button wire:click="setEventMode('smart')" 
+                        class="px-4 py-3 text-sm font-medium {{ $eventMode === 'smart' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700' }}">
+                        ✨ Smart Import
+                    </button>
+                    <button wire:click="setEventMode('url')" 
+                        class="px-4 py-3 text-sm font-medium {{ $eventMode === 'url' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700' }}">
+                        🔗 From URL
+                    </button>
+                    <button wire:click="setEventMode('project')" 
+                        class="px-4 py-3 text-sm font-medium {{ $eventMode === 'project' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700' }}">
+                        🔗 WRK Project
+                    </button>
+                </div>
+                @endif
+
+                <div class="flex-1 overflow-y-auto p-6 space-y-5">
+                    {{-- Smart Import Text Area --}}
+                    @if($eventMode === 'smart' && !$editingEventId)
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Paste Event Details
+                                </label>
+                                <textarea wire:model="eventSmartText" rows="8" 
+                                    placeholder="Paste your calendar invite, event page content, or any text with event details...
+
+Example:
+Join us for the Tech Policy Workshop
+Date: January 22, 2026 at 2:00 PM - 5:00 PM
+Location: Capitol Hill Conference Center
+123 Independence Ave SE, Washington DC"
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
+                            </div>
+                            <div class="flex justify-end">
+                                <button wire:click="parseEventText" 
+                                    class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+                                    wire:loading.attr="disabled">
+                                    <span wire:loading wire:target="parseEventText" class="animate-spin">⏳</span>
+                                    <span wire:loading.remove wire:target="parseEventText">✨</span>
+                                    Extract Details
+                                </button>
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- URL Input --}}
+                    @if($eventMode === 'url' && !$editingEventId)
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Event URL
+                                </label>
+                                <input type="url" wire:model="eventUrl" 
+                                    placeholder="https://www.eventbrite.com/e/... or https://www.meetup.com/..."
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                <p class="text-xs text-gray-500 mt-1">Works with Eventbrite, Meetup, Luma, and most event pages</p>
+                            </div>
+                            <div class="flex justify-end">
+                                <button wire:click="parseEventUrl" 
+                                    class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+                                    wire:loading.attr="disabled">
+                                    <span wire:loading wire:target="parseEventUrl" class="animate-spin">⏳</span>
+                                    <span wire:loading.remove wire:target="parseEventUrl">🔗</span>
+                                    Fetch Details
+                                </button>
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Link to WRK Project Event --}}
+                    @if($eventMode === 'project' && !$editingEventId)
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Select WRK Project Event
+                                </label>
+                                <select wire:model="eventProjectEventId" 
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                    <option value="">-- Select an event --</option>
+                                    @foreach($this->projectEvents as $projEvent)
+                                        <option value="{{ $projEvent->id }}">
+                                            {{ $projEvent->title }} 
+                                            @if($projEvent->event_date)
+                                                ({{ $projEvent->event_date->format('M j, Y') }})
+                                            @endif
+                                            - {{ $projEvent->project->name ?? 'Unknown Project' }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <p class="text-xs text-gray-500 mt-1">Link this trip to an event from your WRK projects</p>
+                            </div>
+                            <div class="flex justify-end">
+                                <button wire:click="linkProjectEvent" 
+                                    class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2">
+                                    🔗 Link & Continue
+                                </button>
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Parse Error --}}
+                    @if($eventParseError)
+                        <div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
+                            {{ $eventParseError }}
+                        </div>
+                    @endif
+
+                    {{-- Extraction Success --}}
+                    @if($extractedEvent && ($eventMode === 'smart' || $eventMode === 'url'))
+                        <div class="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-300 text-sm">
+                            ✓ Event details extracted! Review and edit below.
+                            @if(isset($extractedEvent['confidence']))
+                                <span class="text-xs opacity-75">(Confidence: {{ number_format($extractedEvent['confidence'] * 100) }}%)</span>
+                            @endif
+                        </div>
+                    @endif
+
+                    {{-- Manual Form Fields --}}
+                    @if($eventMode === 'manual' || $extractedEvent || $editingEventId)
+                        <div class="space-y-4">
+                            {{-- Title & Type --}}
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div class="md:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Event Title *</label>
+                                    <input type="text" wire:model="eventTitle" 
+                                        placeholder="e.g., Opening Keynote"
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                    @error('eventTitle') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type *</label>
+                                    <select wire:model="eventType" 
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                        @foreach(\App\Models\TripEvent::getTypeOptions() as $value => $label)
+                                            <option value="{{ $value }}">{{ $label }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+
+                            {{-- Date & Time --}}
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date *</label>
+                                    <input type="date" wire:model="eventStartDate" 
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                    @error('eventStartDate') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Time</label>
+                                    <input type="time" wire:model="eventStartTime" 
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date</label>
+                                    <input type="date" wire:model="eventEndDate" 
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Time</label>
+                                    <input type="time" wire:model="eventEndTime" 
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                            </div>
+
+                            {{-- Location & Address --}}
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Location</label>
+                                    <input type="text" wire:model="eventLocation" 
+                                        placeholder="e.g., Main Ballroom"
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Address</label>
+                                    <input type="text" wire:model="eventAddress" 
+                                        placeholder="e.g., 123 Convention Center Dr"
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                            </div>
+
+                            {{-- Description --}}
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                                <textarea wire:model="eventDescription" rows="3" 
+                                    placeholder="Event description or agenda..."
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
+                            </div>
+
+                            {{-- Notes --}}
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
+                                <textarea wire:model="eventNotes" rows="2" 
+                                    placeholder="Personal notes about this event..."
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+
+                {{-- Footer --}}
+                <div class="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end gap-3">
+                    <button wire:click="closeAddEvent" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
+                    @if($eventMode === 'manual' || $extractedEvent || $editingEventId)
+                        <button wire:click="saveEvent" 
+                            class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                            wire:loading.attr="disabled">
+                            <span wire:loading wire:target="saveEvent" class="animate-spin">⏳</span>
+                            {{ $editingEventId ? 'Update Event' : 'Save Event' }}
                         </button>
                     @endif
                 </div>
