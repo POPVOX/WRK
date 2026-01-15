@@ -110,7 +110,6 @@
                                 <option value="podcast">Podcast</option>
                                 <option value="opinion">Opinion/Editorial</option>
                                 <option value="interview">Interview</option>
-                                <option value="mention">Mention</option>
                             </select>
                         </div>
                         <div>

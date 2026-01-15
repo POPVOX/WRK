@@ -23,7 +23,6 @@
                 <option value="podcast">Podcasts</option>
                 <option value="opinion">Opinion</option>
                 <option value="interview">Interviews</option>
-                <option value="mention">Mentions</option>
             </select>
             <select wire:model.live="sentiment"
                 class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">

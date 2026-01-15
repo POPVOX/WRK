@@ -62,6 +62,38 @@ class OrganizationIndex extends Component
 
     public array $importErrors = [];
 
+    // Inline editing
+    public ?int $editingOrgId = null;
+
+    public string $editingName = '';
+
+    public function startEditing(int $orgId, string $name): void
+    {
+        $this->editingOrgId = $orgId;
+        $this->editingName = $name;
+    }
+
+    public function cancelEditing(): void
+    {
+        $this->editingOrgId = null;
+        $this->editingName = '';
+    }
+
+    public function saveInlineEdit(): void
+    {
+        $this->validate([
+            'editingName' => 'required|min:2|max:255',
+        ]);
+
+        $org = Organization::find($this->editingOrgId);
+        if ($org) {
+            $org->update(['name' => $this->editingName]);
+        }
+
+        $this->editingOrgId = null;
+        $this->editingName = '';
+    }
+
     public function updatingSearch()
     {
         $this->resetPage();

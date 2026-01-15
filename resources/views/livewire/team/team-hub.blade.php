@@ -829,8 +829,8 @@
         const map = L.map('team-map', {
             maxBounds: worldBounds,
             maxBoundsViscosity: 1.0,
-            minZoom: 2
-        }).setView([centerLat, centerLng], 4);
+            minZoom: 1  // Lowered to allow zooming out to see Hawaii and international team members
+        }).setView([centerLat, centerLng], 3);  // Start more zoomed out
 
         // Use a nice map style
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -866,10 +866,13 @@
             `);
         });
 
-        // Fit bounds to show all markers
+        // Fit bounds to show all markers with extra padding to show Hawaii/international
         if (teamMapData.length > 1) {
             const bounds = L.latLngBounds(teamMapData.map(m => [m.lat, m.lng]));
-            map.fitBounds(bounds, { padding: [50, 50] });
+            map.fitBounds(bounds, { 
+                padding: [80, 80],
+                maxZoom: 4  // Don't zoom in too far, so we can see distant team members
+            });
         }
 
         // Fix tile rendering issues by invalidating size after a short delay
