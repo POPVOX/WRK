@@ -139,6 +139,58 @@ class TripDetail extends Component
 
     public string $newSponsorOrgWebsite = '';
 
+    // Add Lodging modal
+    public bool $showAddLodging = false;
+
+    public string $lodgingMode = 'manual'; // 'manual', 'smart', 'url'
+
+    // Manual form fields
+    public string $lodgingPropertyName = '';
+
+    public string $lodgingChain = '';
+
+    public string $lodgingAddress = '';
+
+    public string $lodgingCity = '';
+
+    public string $lodgingCountry = '';
+
+    public string $lodgingCheckInDate = '';
+
+    public string $lodgingCheckInTime = '';
+
+    public string $lodgingCheckOutDate = '';
+
+    public string $lodgingCheckOutTime = '';
+
+    public string $lodgingRoomType = '';
+
+    public ?float $lodgingNightlyRate = null;
+
+    public ?float $lodgingTotalCost = null;
+
+    public string $lodgingCurrency = 'USD';
+
+    public string $lodgingConfirmation = '';
+
+    public string $lodgingNotes = '';
+
+    // Traveler assignment
+    public string $lodgingAssignTo = 'all'; // 'all' or 'specific'
+
+    public array $lodgingSelectedTravelers = [];
+
+    // Smart import / URL extraction
+    public string $lodgingSmartText = '';
+
+    public string $lodgingUrl = '';
+
+    public ?array $extractedLodging = null;
+
+    public bool $lodgingParsing = false;
+
+    public ?string $lodgingParseError = null;
+
     public function mount(Trip $trip): void
     {
         $this->trip = $trip->load([
@@ -668,6 +720,210 @@ class TripDetail extends Component
         $this->showAddSponsorOrg = false;
         $this->dispatch('notify', type: 'success', message: 'Organization created!');
     }
+
+    // Lodging Management
+    public function openAddLodging(): void
+    {
+        $this->resetLodgingForm();
+        $this->showAddLodging = true;
+    }
+
+    public function closeAddLodging(): void
+    {
+        $this->showAddLodging = false;
+        $this->resetLodgingForm();
+    }
+
+    public function setLodgingMode(string $mode): void
+    {
+        $this->lodgingMode = $mode;
+        $this->extractedLodging = null;
+        $this->lodgingParseError = null;
+    }
+
+    protected function resetLodgingForm(): void
+    {
+        $this->reset([
+            'lodgingMode',
+            'lodgingPropertyName',
+            'lodgingChain',
+            'lodgingAddress',
+            'lodgingCity',
+            'lodgingCountry',
+            'lodgingCheckInDate',
+            'lodgingCheckInTime',
+            'lodgingCheckOutDate',
+            'lodgingCheckOutTime',
+            'lodgingRoomType',
+            'lodgingNightlyRate',
+            'lodgingTotalCost',
+            'lodgingCurrency',
+            'lodgingConfirmation',
+            'lodgingNotes',
+            'lodgingAssignTo',
+            'lodgingSelectedTravelers',
+            'lodgingSmartText',
+            'lodgingUrl',
+            'extractedLodging',
+            'lodgingParsing',
+            'lodgingParseError',
+        ]);
+        $this->lodgingMode = 'manual';
+        $this->lodgingCurrency = 'USD';
+        $this->lodgingAssignTo = 'all';
+
+        // Default dates based on trip
+        $this->lodgingCheckInDate = $this->trip->start_date->format('Y-m-d');
+        $this->lodgingCheckOutDate = $this->trip->end_date->format('Y-m-d');
+    }
+
+    public function parseLodgingText(): void
+    {
+        $this->lodgingParseError = null;
+        $this->extractedLodging = null;
+
+        if (empty(trim($this->lodgingSmartText))) {
+            $this->lodgingParseError = 'Please paste booking confirmation text.';
+            return;
+        }
+
+        $this->lodgingParsing = true;
+
+        try {
+            $parser = new \App\Services\LodgingParserService();
+            $result = $parser->parseText($this->lodgingSmartText);
+
+            if (isset($result['error'])) {
+                $this->lodgingParseError = $result['error'];
+            } elseif (isset($result['lodging'])) {
+                $this->extractedLodging = $result['lodging'];
+                $this->applyExtractedLodging($result['lodging']);
+            } else {
+                $this->lodgingParseError = 'Could not extract lodging information.';
+            }
+        } catch (\Exception $e) {
+            $this->lodgingParseError = 'Error parsing text: ' . $e->getMessage();
+        }
+
+        $this->lodgingParsing = false;
+    }
+
+    public function parseLodgingUrl(): void
+    {
+        $this->lodgingParseError = null;
+        $this->extractedLodging = null;
+
+        if (empty(trim($this->lodgingUrl))) {
+            $this->lodgingParseError = 'Please enter a URL.';
+            return;
+        }
+
+        $this->lodgingParsing = true;
+
+        try {
+            $parser = new \App\Services\LodgingParserService();
+            $result = $parser->parseUrl($this->lodgingUrl);
+
+            if (isset($result['error'])) {
+                $this->lodgingParseError = $result['error'];
+            } elseif (isset($result['lodging'])) {
+                $this->extractedLodging = $result['lodging'];
+                $this->applyExtractedLodging($result['lodging']);
+            } else {
+                $this->lodgingParseError = 'Could not extract lodging information from URL.';
+            }
+        } catch (\Exception $e) {
+            $this->lodgingParseError = 'Error fetching URL: ' . $e->getMessage();
+        }
+
+        $this->lodgingParsing = false;
+    }
+
+    protected function applyExtractedLodging(array $data): void
+    {
+        $this->lodgingPropertyName = $data['property_name'] ?? '';
+        $this->lodgingChain = $data['chain'] ?? '';
+        $this->lodgingAddress = $data['address'] ?? '';
+        $this->lodgingCity = $data['city'] ?? '';
+        $this->lodgingCountry = $data['country'] ?? '';
+        $this->lodgingCheckInDate = $data['check_in_date'] ?? '';
+        $this->lodgingCheckInTime = $data['check_in_time'] ?? '';
+        $this->lodgingCheckOutDate = $data['check_out_date'] ?? '';
+        $this->lodgingCheckOutTime = $data['check_out_time'] ?? '';
+        $this->lodgingRoomType = $data['room_type'] ?? '';
+        $this->lodgingNightlyRate = $data['nightly_rate'] ?? null;
+        $this->lodgingTotalCost = $data['total_cost'] ?? null;
+        $this->lodgingCurrency = $data['currency'] ?? 'USD';
+        $this->lodgingConfirmation = $data['confirmation_number'] ?? '';
+        $this->lodgingNotes = $data['notes'] ?? '';
+    }
+
+    public function saveLodging(): void
+    {
+        $this->validate([
+            'lodgingPropertyName' => 'required|string|max:255',
+            'lodgingCity' => 'required|string|max:100',
+            'lodgingCountry' => 'required|string|size:2',
+            'lodgingCheckInDate' => 'required|date',
+            'lodgingCheckOutDate' => 'required|date|after:lodgingCheckInDate',
+        ]);
+
+        // Determine which travelers to assign
+        $travelerIds = [];
+        if ($this->lodgingAssignTo === 'all') {
+            $travelerIds = $this->trip->travelers->pluck('id')->toArray();
+        } else {
+            $travelerIds = $this->lodgingSelectedTravelers;
+        }
+
+        // If no travelers selected, create one record with null user_id
+        if (empty($travelerIds)) {
+            $travelerIds = [null];
+        }
+
+        $savedCount = 0;
+        foreach ($travelerIds as $userId) {
+            $this->trip->lodging()->create([
+                'user_id' => $userId,
+                'property_name' => $this->lodgingPropertyName,
+                'chain' => $this->lodgingChain ?: null,
+                'address' => $this->lodgingAddress ?: null,
+                'city' => $this->lodgingCity,
+                'country' => strtoupper($this->lodgingCountry),
+                'confirmation_number' => $this->lodgingConfirmation ?: null,
+                'check_in_date' => $this->lodgingCheckInDate,
+                'check_in_time' => $this->lodgingCheckInTime ?: null,
+                'check_out_date' => $this->lodgingCheckOutDate,
+                'check_out_time' => $this->lodgingCheckOutTime ?: null,
+                'room_type' => $this->lodgingRoomType ?: null,
+                'nightly_rate' => $this->lodgingNightlyRate,
+                'total_cost' => $this->lodgingTotalCost,
+                'currency' => $this->lodgingCurrency ?: 'USD',
+                'notes' => $this->lodgingNotes ?: null,
+                'ai_extracted' => $this->extractedLodging !== null,
+            ]);
+            $savedCount++;
+        }
+
+        $this->trip->load('lodging.traveler');
+        $this->closeAddLodging();
+
+        $message = $savedCount > 1
+            ? "Lodging added for {$savedCount} travelers!"
+            : 'Lodging added!';
+        $this->dispatch('notify', type: 'success', message: $message);
+    }
+
+    public function deleteLodging(int $lodgingId): void
+    {
+        \App\Models\TripLodging::where('id', $lodgingId)
+            ->where('trip_id', $this->trip->id)
+            ->delete();
+
+        $this->trip->load('lodging.traveler');
+        $this->dispatch('notify', type: 'success', message: 'Lodging removed.');
+    }
+
 
     public function parseAndCreateSponsorship(): void
     {

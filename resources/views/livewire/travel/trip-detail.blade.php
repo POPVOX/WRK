@@ -492,29 +492,63 @@
 
             <!-- Lodging -->
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                <h3 class="font-semibold text-gray-900 dark:text-white mb-4">Lodging</h3>
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold text-gray-900 dark:text-white">Lodging</h3>
+                    <button wire:click="openAddLodging" class="inline-flex items-center px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add Lodging
+                    </button>
+                </div>
                 @if($trip->lodging->isEmpty())
                     <div class="text-center py-8 text-gray-500 dark:text-gray-400">
                         <div class="text-4xl mb-2">🏨</div>
                         <p>No lodging added yet</p>
+                        <button wire:click="openAddLodging" class="mt-2 text-indigo-600 hover:text-indigo-800 text-sm">Add your first accommodation</button>
                     </div>
                 @else
                     <div class="space-y-4">
                         @foreach($trip->lodging as $lodging)
-                            <div class="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                            <div class="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg group">
                                 <span class="text-2xl">🏨</span>
-                                <div class="flex-1">
-                                    <div class="font-medium text-gray-900 dark:text-white">{{ $lodging->property_name }}</div>
-                                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-start justify-between">
+                                        <div>
+                                            <div class="font-medium text-gray-900 dark:text-white">{{ $lodging->property_name }}</div>
+                                            @if($lodging->chain)
+                                                <div class="text-xs text-gray-500 dark:text-gray-400">{{ $lodging->chain }}</div>
+                                            @endif
+                                        </div>
+                                        <button wire:click="deleteLodging({{ $lodging->id }})" 
+                                            wire:confirm="Remove this lodging?"
+                                            class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600 transition-all p-1">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                                         {{ $lodging->city }}, {{ $lodging->country }}
                                     </div>
-                                    <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                        {{ $lodging->check_in_date->format('M j') }} - {{ $lodging->check_out_date->format('M j') }}
-                                        ({{ $lodging->nights_count }} nights)
+                                    <div class="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-4">
+                                        <span>{{ $lodging->check_in_date->format('M j') }} - {{ $lodging->check_out_date->format('M j') }}
+                                        ({{ $lodging->nights_count }} nights)</span>
+                                        @if($lodging->total_cost)
+                                            <span class="text-indigo-600 dark:text-indigo-400">${{ number_format($lodging->total_cost, 2) }}</span>
+                                        @endif
                                     </div>
                                     @if($lodging->confirmation_number)
-                                        <div class="text-sm text-gray-500 dark:text-gray-400">
-                                            Confirmation: {{ $lodging->confirmation_number }}
+                                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            Confirmation: <span class="font-mono">{{ $lodging->confirmation_number }}</span>
+                                        </div>
+                                    @endif
+                                    @if($lodging->traveler)
+                                        <div class="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                            </svg>
+                                            {{ $lodging->traveler->name }}
                                         </div>
                                     @endif
                                 </div>
@@ -1246,6 +1280,287 @@ Payment: Net 30 from valid invoice after completion of deliverables."
                 <div class="flex justify-end gap-3 mt-6">
                     <button wire:click="closeAddSponsorOrg" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
                     <button wire:click="saveNewSponsorOrg" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add Organization</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Add Lodging Modal -->
+    @if($showAddLodging)
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                🏨 Add Lodging
+                            </h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                Add hotel, Airbnb, or other accommodation
+                            </p>
+                        </div>
+                        <button wire:click="closeAddLodging" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                {{-- Mode Tabs --}}
+                <div class="flex border-b border-gray-200 dark:border-gray-700 px-6">
+                    <button wire:click="setLodgingMode('manual')" 
+                        class="px-4 py-3 text-sm font-medium {{ $lodgingMode === 'manual' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700' }}">
+                        ✏️ Manual Entry
+                    </button>
+                    <button wire:click="setLodgingMode('smart')" 
+                        class="px-4 py-3 text-sm font-medium {{ $lodgingMode === 'smart' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700' }}">
+                        ✨ Smart Import
+                    </button>
+                    <button wire:click="setLodgingMode('url')" 
+                        class="px-4 py-3 text-sm font-medium {{ $lodgingMode === 'url' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700' }}">
+                        🔗 From URL
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-6 space-y-5">
+                    {{-- Smart Import Text Area --}}
+                    @if($lodgingMode === 'smart')
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Paste Confirmation Email or Booking Details
+                                </label>
+                                <textarea wire:model="lodgingSmartText" rows="8" 
+                                    placeholder="Paste your hotel confirmation email, booking receipt, or any text containing lodging information here...
+
+Example:
+Your reservation is confirmed at Marriott Washington DC.
+Confirmation #: ABC123456
+Check-in: January 20, 2026 at 3:00 PM
+Check-out: January 23, 2026 at 11:00 AM
+Room: King Deluxe Room
+Rate: $289/night
+Total: $867 + $112.71 tax = $979.71"
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm"></textarea>
+                            </div>
+                            <div class="flex justify-end">
+                                <button wire:click="parseLodgingText" 
+                                    class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+                                    wire:loading.attr="disabled">
+                                    <span wire:loading wire:target="parseLodgingText" class="animate-spin">⏳</span>
+                                    <span wire:loading.remove wire:target="parseLodgingText">✨</span>
+                                    Extract Details
+                                </button>
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- URL Input --}}
+                    @if($lodgingMode === 'url')
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Hotel or Booking URL
+                                </label>
+                                <input type="url" wire:model="lodgingUrl" 
+                                    placeholder="https://www.booking.com/hotel/... or https://www.airbnb.com/rooms/..."
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                <p class="text-xs text-gray-500 mt-1">Works with Booking.com, Airbnb, Hotels.com, and most hotel websites</p>
+                            </div>
+                            <div class="flex justify-end">
+                                <button wire:click="parseLodgingUrl" 
+                                    class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+                                    wire:loading.attr="disabled">
+                                    <span wire:loading wire:target="parseLodgingUrl" class="animate-spin">⏳</span>
+                                    <span wire:loading.remove wire:target="parseLodgingUrl">🔗</span>
+                                    Fetch Details
+                                </button>
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Parse Error --}}
+                    @if($lodgingParseError)
+                        <div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
+                            {{ $lodgingParseError }}
+                        </div>
+                    @endif
+
+                    {{-- Extraction Success --}}
+                    @if($extractedLodging && ($lodgingMode === 'smart' || $lodgingMode === 'url'))
+                        <div class="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-300 text-sm">
+                            ✓ Information extracted! Review and edit the fields below.
+                            @if(isset($extractedLodging['confidence']))
+                                <span class="text-xs opacity-75">(Confidence: {{ number_format($extractedLodging['confidence'] * 100) }}%)</span>
+                            @endif
+                        </div>
+                    @endif
+
+                    {{-- Manual Form Fields --}}
+                    @if($lodgingMode === 'manual' || $extractedLodging)
+                        <div class="space-y-4">
+                            {{-- Property Name & Chain --}}
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div class="md:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Property Name *</label>
+                                    <input type="text" wire:model="lodgingPropertyName" 
+                                        placeholder="e.g., Marriott Washington DC"
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                    @error('lodgingPropertyName') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Chain</label>
+                                    <input type="text" wire:model="lodgingChain" 
+                                        placeholder="e.g., Marriott, Airbnb"
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                            </div>
+
+                            {{-- Address --}}
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Address</label>
+                                <input type="text" wire:model="lodgingAddress" 
+                                    placeholder="Street address"
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            </div>
+
+                            {{-- City & Country --}}
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">City *</label>
+                                    <input type="text" wire:model="lodgingCity" 
+                                        placeholder="e.g., Washington"
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                    @error('lodgingCity') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Country (2-letter code) *</label>
+                                    <input type="text" wire:model="lodgingCountry" 
+                                        placeholder="US"
+                                        maxlength="2"
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white uppercase">
+                                    @error('lodgingCountry') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                </div>
+                            </div>
+
+                            {{-- Dates --}}
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Check-in Date *</label>
+                                    <input type="date" wire:model="lodgingCheckInDate" 
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                    @error('lodgingCheckInDate') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Check-in Time</label>
+                                    <input type="time" wire:model="lodgingCheckInTime" 
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Check-out Date *</label>
+                                    <input type="date" wire:model="lodgingCheckOutDate" 
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                    @error('lodgingCheckOutDate') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Check-out Time</label>
+                                    <input type="time" wire:model="lodgingCheckOutTime" 
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                            </div>
+
+                            {{-- Room & Costs --}}
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Room Type</label>
+                                    <input type="text" wire:model="lodgingRoomType" 
+                                        placeholder="e.g., King Suite"
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nightly Rate</label>
+                                    <input type="number" wire:model="lodgingNightlyRate" step="0.01" min="0"
+                                        placeholder="0.00"
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Total Cost</label>
+                                    <input type="number" wire:model="lodgingTotalCost" step="0.01" min="0"
+                                        placeholder="0.00"
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Currency</label>
+                                    <select wire:model="lodgingCurrency" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                        <option value="USD">USD</option>
+                                        <option value="EUR">EUR</option>
+                                        <option value="GBP">GBP</option>
+                                        <option value="CAD">CAD</option>
+                                        <option value="AUD">AUD</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {{-- Confirmation --}}
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirmation Number</label>
+                                <input type="text" wire:model="lodgingConfirmation" 
+                                    placeholder="Booking reference"
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono">
+                            </div>
+
+                            {{-- Notes --}}
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
+                                <textarea wire:model="lodgingNotes" rows="2" 
+                                    placeholder="Special requests, amenities, contact info, etc."
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
+                            </div>
+
+                            {{-- Traveler Assignment --}}
+                            <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Assign Lodging To</label>
+                                <div class="space-y-3">
+                                    <label class="flex items-center gap-2">
+                                        <input type="radio" wire:model="lodgingAssignTo" value="all" 
+                                            class="text-indigo-600 focus:ring-indigo-500">
+                                        <span class="text-sm text-gray-700 dark:text-gray-300">All trip participants (shared accommodation)</span>
+                                    </label>
+                                    <label class="flex items-center gap-2">
+                                        <input type="radio" wire:model="lodgingAssignTo" value="specific"
+                                            class="text-indigo-600 focus:ring-indigo-500">
+                                        <span class="text-sm text-gray-700 dark:text-gray-300">Specific travelers only</span>
+                                    </label>
+
+                                    @if($lodgingAssignTo === 'specific')
+                                        <div class="ml-6 space-y-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                            @foreach($trip->travelers as $traveler)
+                                                <label class="flex items-center gap-2">
+                                                    <input type="checkbox" wire:model="lodgingSelectedTravelers" value="{{ $traveler->id }}"
+                                                        class="text-indigo-600 focus:ring-indigo-500 rounded">
+                                                    <span class="text-sm text-gray-700 dark:text-gray-300">{{ $traveler->name }}</span>
+                                                </label>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+
+                {{-- Footer --}}
+                <div class="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end gap-3">
+                    <button wire:click="closeAddLodging" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
+                    @if($lodgingMode === 'manual' || $extractedLodging)
+                        <button wire:click="saveLodging" 
+                            class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                            wire:loading.attr="disabled">
+                            <span wire:loading wire:target="saveLodging" class="animate-spin">⏳</span>
+                            Save Lodging
+                        </button>
+                    @endif
                 </div>
             </div>
         </div>
