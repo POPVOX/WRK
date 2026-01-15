@@ -6,17 +6,23 @@
             {{-- HEADER - Personal Greeting --}}
             {{-- ============================================== --}}
             <div class="mb-8">
-                @if($aiWarning || $calendarWarning)
+                @if($aiWarning || $calendarWarning || $passportWarning)
                     <div class="space-y-2 mb-4">
                         @if($aiWarning)
-                            <div class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm">
+                            <div class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-300">
                                 {{ $aiWarning }}
                             </div>
                         @endif
                         @if($calendarWarning)
-                            <div class="rounded-lg border border-blue-200 bg-blue-50 text-blue-800 px-4 py-3 text-sm">
+                            <div class="rounded-lg border border-blue-200 bg-blue-50 text-blue-800 px-4 py-3 text-sm dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300">
                                 {{ $calendarWarning }}
                             </div>
+                        @endif
+                        @if($passportWarning)
+                            <a href="{{ route('profile.travel') }}" wire:navigate 
+                               class="block rounded-lg border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm dark:bg-red-900/30 dark:border-red-800 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors">
+                                ✈️ {{ $passportWarning }}
+                            </a>
                         @endif
                     </div>
                 @endif

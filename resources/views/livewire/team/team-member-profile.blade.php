@@ -500,6 +500,130 @@
                                 <p class="text-gray-500 dark:text-gray-400 text-sm">No recent meetings logged.</p>
                             @endif
                         </div>
+
+                        {{-- Travel Profile (Management View) --}}
+                        @if(auth()->user()?->isAdmin())
+                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                    </svg>
+                                    Travel Profile
+                                </h3>
+
+                                @if($this->travelProfile)
+                                    @php $tp = $this->travelProfile; @endphp
+                                    
+                                    {{-- Passport Expiration Warning --}}
+                                    @if($tp->isPassportExpired())
+                                        <div class="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
+                                            <p class="text-sm text-red-700 dark:text-red-400 font-medium">⚠️ Passport is expired!</p>
+                                        </div>
+                                    @elseif($tp->isPassportExpiringSoon())
+                                        <div class="mb-4 p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                                            <p class="text-sm text-amber-700 dark:text-amber-400 font-medium">⚠️ Passport expires {{ $tp->passport_expiration->diffForHumans() }}</p>
+                                        </div>
+                                    @endif
+
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        {{-- Birthday --}}
+                                        @if($tp->birthday)
+                                            <div>
+                                                <span class="text-gray-500 dark:text-gray-400">Birthday</span>
+                                                <p class="font-medium text-gray-900 dark:text-white">{{ $tp->birthday->format('F j') }}</p>
+                                            </div>
+                                        @endif
+
+                                        {{-- Passport (Masked) --}}
+                                        @if($tp->masked_passport)
+                                            <div>
+                                                <span class="text-gray-500 dark:text-gray-400">Passport</span>
+                                                <p class="font-medium text-gray-900 dark:text-white font-mono">{{ $tp->masked_passport }}</p>
+                                            </div>
+                                        @endif
+
+                                        {{-- Passport Country --}}
+                                        @if($tp->passport_country)
+                                            <div>
+                                                <span class="text-gray-500 dark:text-gray-400">Passport Country</span>
+                                                <p class="font-medium text-gray-900 dark:text-white">{{ $tp->passport_country }}</p>
+                                            </div>
+                                        @endif
+
+                                        {{-- Passport Expiration --}}
+                                        @if($tp->passport_expiration)
+                                            <div>
+                                                <span class="text-gray-500 dark:text-gray-400">Passport Expires</span>
+                                                <p class="font-medium text-gray-900 dark:text-white">{{ $tp->passport_expiration->format('M j, Y') }}</p>
+                                            </div>
+                                        @endif
+
+                                        {{-- Known Traveler (Masked) --}}
+                                        @if($tp->masked_tsa_precheck)
+                                            <div>
+                                                <span class="text-gray-500 dark:text-gray-400">TSA PreCheck</span>
+                                                <p class="font-medium text-gray-900 dark:text-white font-mono">{{ $tp->masked_tsa_precheck }}</p>
+                                            </div>
+                                        @endif
+
+                                        @if($tp->masked_global_entry)
+                                            <div>
+                                                <span class="text-gray-500 dark:text-gray-400">Global Entry</span>
+                                                <p class="font-medium text-gray-900 dark:text-white font-mono">{{ $tp->masked_global_entry }}</p>
+                                            </div>
+                                        @endif
+
+                                        {{-- Seat Preference --}}
+                                        @if($tp->seat_preference && $tp->seat_preference !== 'no_preference')
+                                            <div>
+                                                <span class="text-gray-500 dark:text-gray-400">Seat Preference</span>
+                                                <p class="font-medium text-gray-900 dark:text-white">{{ ucfirst($tp->seat_preference) }}</p>
+                                            </div>
+                                        @endif
+
+                                        {{-- Dietary --}}
+                                        @if($tp->dietary_restrictions)
+                                            <div>
+                                                <span class="text-gray-500 dark:text-gray-400">Dietary</span>
+                                                <p class="font-medium text-gray-900 dark:text-white">{{ $tp->dietary_restrictions }}</p>
+                                            </div>
+                                        @endif
+                                    </div>
+
+                                    {{-- Frequent Flyer Programs --}}
+                                    @if($tp->frequent_flyer_programs && count($tp->frequent_flyer_programs) > 0)
+                                        <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                            <span class="text-sm text-gray-500 dark:text-gray-400">Frequent Flyer Programs</span>
+                                            <div class="flex flex-wrap gap-2 mt-2">
+                                                @foreach($tp->frequent_flyer_programs as $ff)
+                                                    <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs rounded-full">
+                                                        {{ $ff['airline'] }}
+                                                    </span>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    @endif
+
+                                    {{-- Emergency Contact --}}
+                                    @if($tp->emergency_contact_name)
+                                        <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                            <span class="text-sm text-gray-500 dark:text-gray-400">Emergency Contact</span>
+                                            <p class="font-medium text-gray-900 dark:text-white mt-1">
+                                                {{ $tp->emergency_contact_name }}
+                                                @if($tp->emergency_contact_relationship)
+                                                    <span class="text-gray-500 dark:text-gray-400 font-normal">({{ $tp->emergency_contact_relationship }})</span>
+                                                @endif
+                                            </p>
+                                            @if($tp->emergency_contact_phone)
+                                                <p class="text-sm text-gray-600 dark:text-gray-400">{{ $tp->emergency_contact_phone }}</p>
+                                            @endif
+                                        </div>
+                                    @endif
+                                @else
+                                    <p class="text-gray-500 dark:text-gray-400 text-sm">No travel profile on file.</p>
+                                @endif
+                            </div>
+                        @endif
                     @endif
                 </div>
             </div>

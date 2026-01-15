@@ -6,14 +6,18 @@ use App\Models\Trip;
 use App\Models\TripChecklist;
 use App\Models\TripSegment;
 use App\Models\User;
+use App\Services\ItineraryParserService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 #[Layout('layouts.app')]
 class TripDetail extends Component
 {
+    use WithFileUploads;
+
     public Trip $trip;
 
     #[Url]
@@ -48,6 +52,23 @@ class TripDetail extends Component
     public string $segmentArrivalDatetime = '';
 
     public string $segmentConfirmation = '';
+
+    // Smart import modal
+    public bool $showSmartImport = false;
+
+    public ?int $smartImportTravelerId = null;
+
+    public string $smartImportText = '';
+
+    public $smartImportFile = null;
+
+    public bool $smartImportParsing = false;
+
+    public array $extractedSegments = [];
+
+    public ?string $smartImportError = null;
+
+    public ?string $smartImportNotes = null;
 
     // Add checklist item
     public string $newChecklistItem = '';
@@ -195,6 +216,142 @@ class TripDetail extends Component
 
         $this->trip->load('segments');
         $this->dispatch('notify', type: 'success', message: 'Segment removed.');
+    }
+
+    // Smart Import
+    public function openSmartImport(?int $travelerId = null): void
+    {
+        $this->reset([
+            'smartImportTravelerId',
+            'smartImportText',
+            'smartImportFile',
+            'smartImportParsing',
+            'extractedSegments',
+            'smartImportError',
+            'smartImportNotes',
+        ]);
+        $this->smartImportTravelerId = $travelerId;
+        $this->showSmartImport = true;
+    }
+
+    public function closeSmartImport(): void
+    {
+        $this->showSmartImport = false;
+        $this->reset([
+            'smartImportText',
+            'smartImportFile',
+            'extractedSegments',
+            'smartImportError',
+            'smartImportNotes',
+        ]);
+    }
+
+    public function parseItinerary(): void
+    {
+        $this->smartImportError = null;
+        $this->smartImportNotes = null;
+        $this->extractedSegments = [];
+
+        // Validate we have a traveler selected
+        if (! $this->smartImportTravelerId) {
+            $this->smartImportError = 'Please select a traveler first.';
+
+            return;
+        }
+
+        $parser = new ItineraryParserService();
+
+        // If a file was uploaded, use that
+        if ($this->smartImportFile) {
+            $path = $this->smartImportFile->getRealPath();
+            $mimeType = $this->smartImportFile->getMimeType();
+            $result = $parser->parseFile($path, $mimeType);
+        } elseif (! empty(trim($this->smartImportText))) {
+            // Otherwise use the pasted text
+            $result = $parser->parseText($this->smartImportText);
+        } else {
+            $this->smartImportError = 'Please paste itinerary text or upload a document.';
+
+            return;
+        }
+
+        if (isset($result['error'])) {
+            $this->smartImportError = $result['error'];
+
+            return;
+        }
+
+        $this->extractedSegments = $result['segments'] ?? [];
+        $this->smartImportNotes = $result['parsing_notes'] ?? null;
+
+        if (empty($this->extractedSegments)) {
+            $this->smartImportError = 'No travel segments could be extracted. Try providing more detailed itinerary information.';
+        }
+    }
+
+    public function removeExtractedSegment(int $index): void
+    {
+        unset($this->extractedSegments[$index]);
+        $this->extractedSegments = array_values($this->extractedSegments);
+    }
+
+    public function updateExtractedSegment(int $index, string $field, $value): void
+    {
+        if (isset($this->extractedSegments[$index])) {
+            $this->extractedSegments[$index][$field] = $value;
+        }
+    }
+
+    public function saveExtractedSegments(): void
+    {
+        if (! $this->smartImportTravelerId) {
+            $this->smartImportError = 'Please select a traveler.';
+
+            return;
+        }
+
+        if (empty($this->extractedSegments)) {
+            $this->smartImportError = 'No segments to save.';
+
+            return;
+        }
+
+        $savedCount = 0;
+        foreach ($this->extractedSegments as $segment) {
+            // Skip if missing required fields
+            if (empty($segment['departure_location']) || empty($segment['arrival_location']) || empty($segment['departure_datetime'])) {
+                continue;
+            }
+
+            $this->trip->segments()->create([
+                'user_id' => $this->smartImportTravelerId,
+                'type' => $segment['type'] ?? 'flight',
+                'carrier' => $segment['carrier'] ?? null,
+                'carrier_code' => $segment['carrier_code'] ?? null,
+                'segment_number' => $segment['segment_number'] ?? null,
+                'confirmation_number' => $segment['confirmation_number'] ?? null,
+                'departure_location' => $segment['departure_location'],
+                'departure_city' => $segment['departure_city'] ?? null,
+                'departure_datetime' => $segment['departure_datetime'],
+                'departure_terminal' => $segment['departure_terminal'] ?? null,
+                'arrival_location' => $segment['arrival_location'],
+                'arrival_city' => $segment['arrival_city'] ?? null,
+                'arrival_datetime' => $segment['arrival_datetime'] ?? null,
+                'arrival_terminal' => $segment['arrival_terminal'] ?? null,
+                'seat_assignment' => $segment['seat_assignment'] ?? null,
+                'cabin_class' => $segment['cabin_class'] ?? null,
+                'cost' => $segment['cost'] ?? null,
+                'currency' => $segment['currency'] ?? 'USD',
+                'notes' => $segment['notes'] ?? null,
+                'ai_extracted' => true,
+                'ai_confidence' => $segment['confidence'] ?? null,
+            ]);
+            $savedCount++;
+        }
+
+        $this->trip->load('segments.traveler');
+        $this->closeSmartImport();
+        $this->dispatch('notify', type: 'success', message: "{$savedCount} segment(s) imported successfully!");
     }
 
     // Destinations

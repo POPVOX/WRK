@@ -191,17 +191,48 @@
                                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" wire:click="viewFeedback({{ $item->id }})">
                                     <td class="px-4 py-3">
                                         @php
-                                            $typeColors = [
-                                                'bug' => 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-                                                'suggestion' => 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-                                                'compliment' => 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-                                                'question' => 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-                                                'general' => 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+                                            $typeStyles = [
+                                                'bug' => [
+                                                    'bg' => 'bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-900/20',
+                                                    'text' => 'text-red-700 dark:text-red-300',
+                                                    'border' => 'border border-red-200 dark:border-red-800/50',
+                                                    'icon' => '🐛',
+                                                    'dot' => 'bg-red-500',
+                                                ],
+                                                'suggestion' => [
+                                                    'bg' => 'bg-gradient-to-r from-amber-50 to-yellow-100 dark:from-yellow-900/30 dark:to-amber-900/20',
+                                                    'text' => 'text-amber-700 dark:text-yellow-300',
+                                                    'border' => 'border border-amber-200 dark:border-yellow-800/50',
+                                                    'icon' => '💡',
+                                                    'dot' => 'bg-amber-500',
+                                                ],
+                                                'compliment' => [
+                                                    'bg' => 'bg-gradient-to-r from-green-50 to-emerald-100 dark:from-green-900/30 dark:to-emerald-900/20',
+                                                    'text' => 'text-green-700 dark:text-green-300',
+                                                    'border' => 'border border-green-200 dark:border-green-800/50',
+                                                    'icon' => '🎉',
+                                                    'dot' => 'bg-green-500',
+                                                ],
+                                                'question' => [
+                                                    'bg' => 'bg-gradient-to-r from-purple-50 to-violet-100 dark:from-purple-900/30 dark:to-violet-900/20',
+                                                    'text' => 'text-purple-700 dark:text-purple-300',
+                                                    'border' => 'border border-purple-200 dark:border-purple-800/50',
+                                                    'icon' => '❓',
+                                                    'dot' => 'bg-purple-500',
+                                                ],
+                                                'general' => [
+                                                    'bg' => 'bg-gradient-to-r from-gray-50 to-slate-100 dark:from-gray-800 dark:to-slate-800',
+                                                    'text' => 'text-gray-600 dark:text-gray-300',
+                                                    'border' => 'border border-gray-200 dark:border-gray-700',
+                                                    'icon' => '💬',
+                                                    'dot' => 'bg-gray-400',
+                                                ],
                                             ];
-                                            $typeEmojis = ['bug' => '🐛', 'suggestion' => '💡', 'compliment' => '🎉', 'question' => '❓', 'general' => '💬'];
+                                            $style = $typeStyles[$item->feedback_type] ?? $typeStyles['general'];
                                         @endphp
-                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium {{ $typeColors[$item->feedback_type] ?? $typeColors['general'] }}">
-                                            {{ $typeEmojis[$item->feedback_type] ?? '💬' }} {{ $types[$item->feedback_type] ?? 'General' }}
+                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium shadow-sm {{ $style['bg'] }} {{ $style['text'] }} {{ $style['border'] }}">
+                                            <span class="text-sm leading-none">{{ $style['icon'] }}</span>
+                                            <span>{{ $types[$item->feedback_type] ?? 'General Feedback' }}</span>
                                         </span>
                                     </td>
                                     <td class="px-4 py-3">
@@ -224,21 +255,51 @@
                                     </td>
                                     <td class="px-4 py-3">
                                         @php
-                                            $statusColors = [
-                                                'new' => 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
-                                                'reviewed' => 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-                                                'in_progress' => 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
-                                                'addressed' => 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-                                                'dismissed' => 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
+                                            $statusStyles = [
+                                                'new' => [
+                                                    'bg' => 'bg-gradient-to-r from-yellow-100 to-amber-100 dark:from-yellow-900/40 dark:to-amber-900/30',
+                                                    'text' => 'text-yellow-800 dark:text-yellow-200',
+                                                    'border' => 'border border-yellow-300 dark:border-yellow-700/50',
+                                                    'dot' => 'bg-yellow-500 animate-pulse',
+                                                ],
+                                                'reviewed' => [
+                                                    'bg' => 'bg-gradient-to-r from-blue-50 to-sky-100 dark:from-blue-900/40 dark:to-sky-900/30',
+                                                    'text' => 'text-blue-700 dark:text-blue-200',
+                                                    'border' => 'border border-blue-200 dark:border-blue-700/50',
+                                                    'dot' => 'bg-blue-500',
+                                                ],
+                                                'in_progress' => [
+                                                    'bg' => 'bg-gradient-to-r from-indigo-50 to-violet-100 dark:from-indigo-900/40 dark:to-violet-900/30',
+                                                    'text' => 'text-indigo-700 dark:text-indigo-200',
+                                                    'border' => 'border border-indigo-200 dark:border-indigo-700/50',
+                                                    'dot' => 'bg-indigo-500 animate-pulse',
+                                                ],
+                                                'addressed' => [
+                                                    'bg' => 'bg-gradient-to-r from-green-50 to-emerald-100 dark:from-green-900/40 dark:to-emerald-900/30',
+                                                    'text' => 'text-green-700 dark:text-green-200',
+                                                    'border' => 'border border-green-200 dark:border-green-700/50',
+                                                    'dot' => 'bg-green-500',
+                                                ],
+                                                'dismissed' => [
+                                                    'bg' => 'bg-gradient-to-r from-gray-100 to-slate-100 dark:from-gray-700 dark:to-slate-700',
+                                                    'text' => 'text-gray-600 dark:text-gray-300',
+                                                    'border' => 'border border-gray-200 dark:border-gray-600',
+                                                    'dot' => 'bg-gray-400',
+                                                ],
                                             ];
+                                            $statusStyle = $statusStyles[$item->status] ?? $statusStyles['new'];
                                         @endphp
-                                        <div class="flex flex-col gap-1">
-                                            <span class="inline-flex px-2 py-1 rounded-full text-xs font-medium {{ $statusColors[$item->status] ?? '' }}">
+                                        <div class="flex flex-col gap-1.5">
+                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium shadow-sm {{ $statusStyle['bg'] }} {{ $statusStyle['text'] }} {{ $statusStyle['border'] }}">
+                                                <span class="w-1.5 h-1.5 rounded-full {{ $statusStyle['dot'] }}"></span>
                                                 {{ $statuses[$item->status] ?? $item->status }}
                                             </span>
                                             @if($item->resolved_at)
-                                                <span class="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                                                    ✓ {{ $item->time_to_resolution }}
+                                                <span class="text-xs text-green-600 dark:text-green-400 flex items-center gap-1 font-medium">
+                                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                                                    </svg>
+                                                    {{ $item->time_to_resolution }}
                                                 </span>
                                             @endif
                                         </div>
@@ -246,18 +307,40 @@
                                     <td class="px-4 py-3">
                                         @if($item->priority)
                                             @php
-                                                $priorityColors = [
-                                                    'critical' => 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-                                                    'high' => 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
-                                                    'medium' => 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
-                                                    'low' => 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
+                                                $priorityStyles = [
+                                                    'critical' => [
+                                                        'bg' => 'bg-gradient-to-r from-red-500 to-rose-600',
+                                                        'text' => 'text-white',
+                                                        'icon' => '🔥',
+                                                        'shadow' => 'shadow-sm shadow-red-200 dark:shadow-red-900/50',
+                                                    ],
+                                                    'high' => [
+                                                        'bg' => 'bg-gradient-to-r from-orange-100 to-amber-100 dark:from-orange-900/40 dark:to-amber-900/30',
+                                                        'text' => 'text-orange-700 dark:text-orange-200',
+                                                        'icon' => '⚡',
+                                                        'border' => 'border border-orange-200 dark:border-orange-700/50',
+                                                    ],
+                                                    'medium' => [
+                                                        'bg' => 'bg-gradient-to-r from-sky-50 to-blue-100 dark:from-sky-900/30 dark:to-blue-900/30',
+                                                        'text' => 'text-sky-700 dark:text-sky-200',
+                                                        'icon' => '➡️',
+                                                        'border' => 'border border-sky-200 dark:border-sky-700/50',
+                                                    ],
+                                                    'low' => [
+                                                        'bg' => 'bg-gradient-to-r from-gray-50 to-slate-100 dark:from-gray-700 dark:to-slate-700',
+                                                        'text' => 'text-gray-500 dark:text-gray-300',
+                                                        'icon' => '↓',
+                                                        'border' => 'border border-gray-200 dark:border-gray-600',
+                                                    ],
                                                 ];
+                                                $priorityStyle = $priorityStyles[$item->priority] ?? $priorityStyles['medium'];
                                             @endphp
-                                            <span class="inline-flex px-2 py-1 rounded-full text-xs font-medium {{ $priorityColors[$item->priority] ?? '' }}">
+                                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold {{ $priorityStyle['bg'] }} {{ $priorityStyle['text'] }} {{ $priorityStyle['border'] ?? '' }} {{ $priorityStyle['shadow'] ?? 'shadow-sm' }}">
+                                                <span class="text-xs leading-none">{{ $priorityStyle['icon'] }}</span>
                                                 {{ $priorities[$item->priority] ?? $item->priority }}
                                             </span>
                                         @else
-                                            <span class="text-xs text-gray-400">—</span>
+                                            <span class="text-sm text-gray-300 dark:text-gray-600">—</span>
                                         @endif
                                     </td>
                                     <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
@@ -335,17 +418,49 @@
                     <div class="flex flex-wrap gap-3">
                         @foreach($resolutionStats['by_type'] as $type => $count)
                             @php
-                                $typeColors = [
-                                    'fix' => 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-                                    'enhancement' => 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-                                    'wontfix' => 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-                                    'duplicate' => 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
-                                    'workaround' => 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+                                $resStatStyles = [
+                                    'fix' => [
+                                        'bg' => 'bg-gradient-to-r from-green-50 to-emerald-100 dark:from-green-900/40 dark:to-emerald-900/30',
+                                        'text' => 'text-green-700 dark:text-green-200',
+                                        'border' => 'border border-green-200 dark:border-green-700/50',
+                                        'icon' => '✅',
+                                        'count_bg' => 'bg-green-200/60 dark:bg-green-800/50',
+                                    ],
+                                    'enhancement' => [
+                                        'bg' => 'bg-gradient-to-r from-blue-50 to-sky-100 dark:from-blue-900/40 dark:to-sky-900/30',
+                                        'text' => 'text-blue-700 dark:text-blue-200',
+                                        'border' => 'border border-blue-200 dark:border-blue-700/50',
+                                        'icon' => '✨',
+                                        'count_bg' => 'bg-blue-200/60 dark:bg-blue-800/50',
+                                    ],
+                                    'wontfix' => [
+                                        'bg' => 'bg-gradient-to-r from-gray-100 to-slate-100 dark:from-gray-700 dark:to-slate-700',
+                                        'text' => 'text-gray-600 dark:text-gray-300',
+                                        'border' => 'border border-gray-200 dark:border-gray-600',
+                                        'icon' => '🚫',
+                                        'count_bg' => 'bg-gray-200/60 dark:bg-gray-600/50',
+                                    ],
+                                    'duplicate' => [
+                                        'bg' => 'bg-gradient-to-r from-amber-50 to-yellow-100 dark:from-amber-900/30 dark:to-yellow-900/30',
+                                        'text' => 'text-amber-700 dark:text-amber-200',
+                                        'border' => 'border border-amber-200 dark:border-amber-700/50',
+                                        'icon' => '🔄',
+                                        'count_bg' => 'bg-amber-200/60 dark:bg-amber-800/50',
+                                    ],
+                                    'workaround' => [
+                                        'bg' => 'bg-gradient-to-r from-purple-50 to-violet-100 dark:from-purple-900/40 dark:to-violet-900/30',
+                                        'text' => 'text-purple-700 dark:text-purple-200',
+                                        'border' => 'border border-purple-200 dark:border-purple-700/50',
+                                        'icon' => '🔧',
+                                        'count_bg' => 'bg-purple-200/60 dark:bg-purple-800/50',
+                                    ],
                                 ];
+                                $statStyle = $resStatStyles[$type] ?? $resStatStyles['fix'];
                             @endphp
-                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium {{ $typeColors[$type] ?? 'bg-gray-100 text-gray-700' }}">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium shadow-sm {{ $statStyle['bg'] }} {{ $statStyle['text'] }} {{ $statStyle['border'] }}">
+                                <span class="text-sm leading-none">{{ $statStyle['icon'] }}</span>
                                 {{ $resolutionTypes[$type] ?? ucfirst($type) }}
-                                <span class="ml-2 px-2 py-0.5 rounded-full bg-white/50 dark:bg-black/20 text-xs">{{ $count }}</span>
+                                <span class="ml-1 px-2 py-0.5 rounded-md text-xs font-semibold {{ $statStyle['count_bg'] }}">{{ $count }}</span>
                             </span>
                         @endforeach
                     </div>
@@ -378,15 +493,42 @@
                                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                         <td class="px-4 py-3">
                                             @php
-                                                $typeColors = [
-                                                    'fix' => 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-                                                    'enhancement' => 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-                                                    'wontfix' => 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
-                                                    'duplicate' => 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
-                                                    'workaround' => 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+                                                $resTypeStyles = [
+                                                    'fix' => [
+                                                        'bg' => 'bg-gradient-to-r from-green-50 to-emerald-100 dark:from-green-900/40 dark:to-emerald-900/30',
+                                                        'text' => 'text-green-700 dark:text-green-200',
+                                                        'border' => 'border border-green-200 dark:border-green-700/50',
+                                                        'icon' => '✅',
+                                                    ],
+                                                    'enhancement' => [
+                                                        'bg' => 'bg-gradient-to-r from-blue-50 to-sky-100 dark:from-blue-900/40 dark:to-sky-900/30',
+                                                        'text' => 'text-blue-700 dark:text-blue-200',
+                                                        'border' => 'border border-blue-200 dark:border-blue-700/50',
+                                                        'icon' => '✨',
+                                                    ],
+                                                    'wontfix' => [
+                                                        'bg' => 'bg-gradient-to-r from-gray-100 to-slate-100 dark:from-gray-700 dark:to-slate-700',
+                                                        'text' => 'text-gray-600 dark:text-gray-300',
+                                                        'border' => 'border border-gray-200 dark:border-gray-600',
+                                                        'icon' => '🚫',
+                                                    ],
+                                                    'duplicate' => [
+                                                        'bg' => 'bg-gradient-to-r from-amber-50 to-yellow-100 dark:from-amber-900/30 dark:to-yellow-900/30',
+                                                        'text' => 'text-amber-700 dark:text-amber-200',
+                                                        'border' => 'border border-amber-200 dark:border-amber-700/50',
+                                                        'icon' => '🔄',
+                                                    ],
+                                                    'workaround' => [
+                                                        'bg' => 'bg-gradient-to-r from-purple-50 to-violet-100 dark:from-purple-900/40 dark:to-violet-900/30',
+                                                        'text' => 'text-purple-700 dark:text-purple-200',
+                                                        'border' => 'border border-purple-200 dark:border-purple-700/50',
+                                                        'icon' => '🔧',
+                                                    ],
                                                 ];
+                                                $resStyle = $resTypeStyles[$item->resolution_type] ?? $resTypeStyles['fix'];
                                             @endphp
-                                            <span class="inline-flex px-2 py-1 rounded-full text-xs font-medium {{ $typeColors[$item->resolution_type] ?? 'bg-gray-100 text-gray-700' }}">
+                                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium shadow-sm {{ $resStyle['bg'] }} {{ $resStyle['text'] }} {{ $resStyle['border'] }}">
+                                                <span class="text-xs leading-none">{{ $resStyle['icon'] }}</span>
                                                 {{ $resolutionTypes[$item->resolution_type] ?? 'Fixed' }}
                                             </span>
                                         </td>
@@ -564,12 +706,23 @@
                         </div>
 
                         {{-- Type & Category --}}
-                        <div class="flex gap-2 mb-4">
-                            <span class="px-2 py-1 rounded-full text-xs font-medium {{ $typeColors[$viewingFeedback->feedback_type] ?? '' }}">
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            @php
+                                $modalTypeStyles = [
+                                    'bug' => 'bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/50',
+                                    'suggestion' => 'bg-gradient-to-r from-amber-50 to-yellow-100 dark:from-yellow-900/30 dark:to-amber-900/20 text-amber-700 dark:text-yellow-300 border border-amber-200 dark:border-yellow-800/50',
+                                    'compliment' => 'bg-gradient-to-r from-green-50 to-emerald-100 dark:from-green-900/30 dark:to-emerald-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/50',
+                                    'question' => 'bg-gradient-to-r from-purple-50 to-violet-100 dark:from-purple-900/30 dark:to-violet-900/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50',
+                                    'general' => 'bg-gradient-to-r from-gray-50 to-slate-100 dark:from-gray-800 dark:to-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700',
+                                ];
+                                $modalTypeEmojis = ['bug' => '🐛', 'suggestion' => '💡', 'compliment' => '🎉', 'question' => '❓', 'general' => '💬'];
+                            @endphp
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium shadow-sm {{ $modalTypeStyles[$viewingFeedback->feedback_type] ?? $modalTypeStyles['general'] }}">
+                                <span class="text-sm leading-none">{{ $modalTypeEmojis[$viewingFeedback->feedback_type] ?? '💬' }}</span>
                                 {{ $types[$viewingFeedback->feedback_type] ?? $viewingFeedback->feedback_type }}
                             </span>
                             @if($viewingFeedback->category)
-                                <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium shadow-sm bg-gradient-to-r from-gray-50 to-slate-100 dark:from-gray-700 dark:to-slate-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600">
                                     {{ \App\Models\Feedback::CATEGORIES[$viewingFeedback->category] ?? $viewingFeedback->category }}
                                 </span>
                             @endif

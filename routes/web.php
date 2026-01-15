@@ -100,4 +100,8 @@ Route::view('profile', 'profile')
     ->middleware(['auth'])
     ->name('profile');
 
+Route::get('profile/travel', \App\Livewire\Profile\TravelProfileEditor::class)
+    ->middleware(['auth'])
+    ->name('profile.travel');
+
 require __DIR__.'/auth.php';
