@@ -175,17 +175,26 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Associated Project</label>
-                    <select wire:model="projectId" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500">
-                        <option value="">None</option>
-                        @foreach($projects as $project)
-                            <option value="{{ $project->id }}">{{ $project->name }}</option>
-                        @endforeach
-                    </select>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Associated Projects</label>
+                    <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-3 max-h-40 overflow-y-auto bg-gray-50 dark:bg-gray-700/30">
+                        @forelse($projects as $project)
+                            <label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 px-2 rounded">
+                                <input type="checkbox" wire:model="selectedProjectIds" value="{{ $project->id }}" 
+                                       class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                <span class="text-sm text-gray-700 dark:text-gray-300">{{ $project->name }}</span>
+                            </label>
+                        @empty
+                            <p class="text-sm text-gray-500">No active projects</p>
+                        @endforelse
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Select all that apply</p>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Partner Organization (for delegations)</label>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Partner Organization</label>
+                        <button type="button" wire:click="openAddOrg" class="text-xs text-indigo-600 hover:text-indigo-800">+ Add New</button>
+                    </div>
                     <select wire:model="partnerOrganizationId" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500">
                         <option value="">None</option>
                         @foreach($organizations as $org)
@@ -400,4 +409,49 @@
             @endif
         </div>
     </div>
+
+    <!-- Add Organization Modal -->
+    @if($showAddOrg)
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add New Organization</h3>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Organization Name *</label>
+                        <input type="text" wire:model="newOrgName" 
+                               placeholder="e.g., Brookings Institution"
+                               class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                        @error('newOrgName') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type *</label>
+                        <select wire:model="newOrgType" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            <option value="nonprofit">Nonprofit</option>
+                            <option value="government">Government</option>
+                            <option value="corporate">Corporate</option>
+                            <option value="university">University</option>
+                            <option value="media">Media</option>
+                            <option value="other">Other</option>
+                        </select>
+                        @error('newOrgType') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Website</label>
+                        <input type="url" wire:model="newOrgWebsite" 
+                               placeholder="https://example.org"
+                               class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                        @error('newOrgWebsite') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button wire:click="closeAddOrg" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
+                    <button wire:click="saveNewOrg" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add Organization</button>
+                </div>
+            </div>
+        </div>
+    @endif
 </div>

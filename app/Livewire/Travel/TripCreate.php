@@ -45,11 +45,21 @@ class TripCreate extends Component
 
     public string $newDestDepartureDate = '';
 
-    public ?int $projectId = null;
+    // Multiple projects support
+    public array $selectedProjectIds = [];
 
     public ?int $partnerOrganizationId = null;
 
     public string $partnerProgramName = '';
+
+    // Add new organization inline
+    public bool $showAddOrg = false;
+
+    public string $newOrgName = '';
+
+    public string $newOrgType = 'nonprofit';
+
+    public string $newOrgWebsite = '';
 
     // Step 2: Travelers
     public array $selectedTravelers = [];
@@ -193,6 +203,37 @@ class TripCreate extends Component
         $this->destinations = array_values($this->destinations);
     }
 
+    // Organization Management
+    public function openAddOrg(): void
+    {
+        $this->reset(['newOrgName', 'newOrgType', 'newOrgWebsite']);
+        $this->showAddOrg = true;
+    }
+
+    public function closeAddOrg(): void
+    {
+        $this->showAddOrg = false;
+    }
+
+    public function saveNewOrg(): void
+    {
+        $this->validate([
+            'newOrgName' => 'required|string|max:255',
+            'newOrgType' => 'required|in:nonprofit,government,corporate,university,media,other',
+            'newOrgWebsite' => 'nullable|url|max:255',
+        ]);
+
+        $org = Organization::create([
+            'name' => $this->newOrgName,
+            'type' => $this->newOrgType,
+            'website' => $this->newOrgWebsite ?: null,
+        ]);
+
+        $this->partnerOrganizationId = $org->id;
+        $this->showAddOrg = false;
+        $this->dispatch('notify', type: 'success', message: 'Organization created!');
+    }
+
     protected function checkTravelAdvisories(): void
     {
         // Check advisories for all destinations
@@ -316,7 +357,6 @@ class TripCreate extends Component
             'end_date' => $this->endDate,
             'primary_destination_city' => $primaryDest['city'] ?? '',
             'primary_destination_country' => $primaryDest['country'] ?? '',
-            'project_id' => $this->projectId ?: null,
             'partner_organization_id' => $this->partnerOrganizationId ?: null,
             'partner_program_name' => $this->partnerProgramName ?: null,
             'created_by' => Auth::id(),
@@ -325,6 +365,11 @@ class TripCreate extends Component
             'travel_insurance_required' => $this->travelInsuranceRequired,
             'approval_required' => $this->approvalRequired,
         ]);
+
+        // Attach projects (many-to-many)
+        if (! empty($this->selectedProjectIds)) {
+            $trip->projects()->attach($this->selectedProjectIds);
+        }
 
         // Attach travelers
         foreach ($this->selectedTravelers as $userId) {

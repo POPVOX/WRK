@@ -31,6 +31,8 @@ class TripDetail extends Component
     // Add segment modal
     public bool $showAddSegment = false;
 
+    public ?int $segmentTravelerId = null;
+
     public string $segmentType = 'flight';
 
     public string $segmentCarrier = '';
@@ -70,15 +72,15 @@ class TripDetail extends Component
         $this->trip = $trip->load([
             'travelers',
             'destinations',
-            'segments',
-            'lodging',
-            'groundTransport',
+            'segments.traveler',
+            'lodging.traveler',
+            'groundTransport.traveler',
             'expenses',
             'sponsorships.organization',
             'events',
             'documents',
             'checklists',
-            'project',
+            'projects',
             'partnerOrganization',
             'creator',
         ]);
@@ -134,9 +136,10 @@ class TripDetail extends Component
     }
 
     // Segments
-    public function openAddSegment(): void
+    public function openAddSegment(?int $travelerId = null): void
     {
         $this->reset([
+            'segmentTravelerId',
             'segmentType',
             'segmentCarrier',
             'segmentNumber',
@@ -147,6 +150,7 @@ class TripDetail extends Component
             'segmentConfirmation',
         ]);
         $this->segmentType = 'flight';
+        $this->segmentTravelerId = $travelerId;
         $this->showAddSegment = true;
     }
 
@@ -158,6 +162,7 @@ class TripDetail extends Component
     public function saveSegment(): void
     {
         $this->validate([
+            'segmentTravelerId' => 'required|exists:users,id',
             'segmentType' => 'required|in:flight,train,bus,rental_car,rideshare,ferry,other_transport',
             'segmentDepartureLocation' => 'required|string|max:100',
             'segmentDepartureDatetime' => 'required|date',
@@ -166,6 +171,7 @@ class TripDetail extends Component
         ]);
 
         $this->trip->segments()->create([
+            'user_id' => $this->segmentTravelerId,
             'type' => $this->segmentType,
             'carrier' => $this->segmentCarrier ?: null,
             'segment_number' => $this->segmentNumber ?: null,
@@ -176,7 +182,7 @@ class TripDetail extends Component
             'confirmation_number' => $this->segmentConfirmation ?: null,
         ]);
 
-        $this->trip->load('segments');
+        $this->trip->load('segments.traveler');
         $this->showAddSegment = false;
         $this->dispatch('notify', type: 'success', message: 'Segment added!');
     }
