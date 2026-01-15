@@ -1,5 +1,25 @@
 <div class="min-h-screen">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {{-- Migration Error Alert --}}
+        @if($hasMigrationError)
+            <div class="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+                <div class="flex items-start gap-3">
+                    <div class="flex-shrink-0">
+                        <svg class="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-amber-800 dark:text-amber-200">Database Setup Required</h3>
+                        <p class="mt-1 text-sm text-amber-700 dark:text-amber-300">{{ $migrationErrorMessage }}</p>
+                        <p class="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                            Run <code class="bg-amber-100 dark:bg-amber-900/40 px-1 py-0.5 rounded">php artisan migrate</code> on the server to fix this issue.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        @endif
+
         {{-- Header --}}
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div>
@@ -32,7 +52,7 @@
                         <p class="text-sm text-gray-500 dark:text-gray-400">Click to view detailed activity</p>
                     </div>
                     <div class="divide-y divide-gray-100 dark:divide-gray-700">
-                        @foreach($teamStats['member_stats'] as $member)
+                        @forelse($teamStats['member_stats'] ?? [] as $member)
                             <a href="{{ route('accomplishments.user', ['userId' => $member['user']->id]) }}" wire:navigate
                                 class="flex items-center gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition group">
                                 {{-- Avatar --}}
@@ -74,15 +94,15 @@
                                 {{-- Quick Stats --}}
                                 <div class="flex items-center gap-4 text-center">
                                     <div>
-                                        <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ $member['stats']->meetings_attended }}</div>
+                                        <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ $member['stats']->meetings_attended ?? 0 }}</div>
                                         <div class="text-xs text-gray-500 dark:text-gray-400">Meetings</div>
                                     </div>
                                     <div>
-                                        <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ $member['stats']->documents_authored }}</div>
+                                        <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ $member['stats']->documents_authored ?? 0 }}</div>
                                         <div class="text-xs text-gray-500 dark:text-gray-400">Docs</div>
                                     </div>
                                     <div>
-                                        <div class="text-lg font-semibold text-yellow-600 dark:text-yellow-400">{{ $member['stats']->recognition_received }}</div>
+                                        <div class="text-lg font-semibold text-yellow-600 dark:text-yellow-400">{{ $member['stats']->recognition_received ?? 0 }}</div>
                                         <div class="text-xs text-gray-500 dark:text-gray-400">Recognition</div>
                                     </div>
                                 </div>
@@ -92,7 +112,15 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                                 </svg>
                             </a>
-                        @endforeach
+                        @empty
+                            <div class="p-8 text-center">
+                                <div class="text-4xl mb-2">👥</div>
+                                <p class="text-gray-500 dark:text-gray-400">No team member data available</p>
+                                @if($hasMigrationError)
+                                    <p class="text-sm text-gray-400 dark:text-gray-500 mt-1">Run database migrations to enable this feature</p>
+                                @endif
+                            </div>
+                        @endforelse
                     </div>
                 </div>
             </div>

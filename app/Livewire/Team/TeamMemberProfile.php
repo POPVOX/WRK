@@ -145,6 +145,11 @@ class TeamMemberProfile extends Component
             ->get();
     }
 
+    public function getTravelProfileProperty()
+    {
+        return $this->member->travelProfile;
+    }
+
     public function render()
     {
         return view('livewire.team.team-member-profile')->layout('layouts.app');

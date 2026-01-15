@@ -42,6 +42,8 @@ class Dashboard extends Component
 
     public ?string $calendarWarning = null;
 
+    public ?string $passportWarning = null;
+
     // Task creation state
     public bool $showAddTask = false;
 
@@ -92,6 +94,16 @@ class Dashboard extends Component
             $this->calendarWarning = 'Calendar is not connected. Connect to keep meetings in sync.';
         } elseif ($this->user->calendar_import_date && $this->user->calendar_import_date->lt(now()->subDays(7))) {
             $this->calendarWarning = 'Calendar has not synced in over a week.';
+        }
+
+        // Check passport expiration
+        $travelProfile = $this->user->travelProfile;
+        if ($travelProfile) {
+            if ($travelProfile->isPassportExpired()) {
+                $this->passportWarning = 'Your passport has expired. Update your travel profile.';
+            } elseif ($travelProfile->isPassportExpiringSoon(6)) {
+                $this->passportWarning = 'Your passport expires '.$travelProfile->passport_expiration->diffForHumans().'. Consider renewing soon.';
+            }
         }
 
         // Check if we should prompt for timezone (no timezone set, or not confirmed in 7 days)

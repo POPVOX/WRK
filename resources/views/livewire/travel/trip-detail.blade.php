@@ -359,12 +359,21 @@
                                         @endif
                                     </div>
                                     @if($canEdit)
-                                        <button wire:click="openAddSegment({{ $traveler->id }})" class="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                                            </svg>
-                                            Add Segment
-                                        </button>
+                                        <div class="flex items-center gap-2">
+                                            <button wire:click="openSmartImport({{ $traveler->id }})" class="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1" title="Paste itinerary text or upload document">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                                                </svg>
+                                                Smart Import
+                                            </button>
+                                            <span class="text-gray-300 dark:text-gray-600">|</span>
+                                            <button wire:click="openAddSegment({{ $traveler->id }})" class="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                                </svg>
+                                                Manual
+                                            </button>
+                                        </div>
                                     @endif
                                 </div>
                                 
@@ -751,6 +760,270 @@
                 <div class="flex justify-end gap-3 mt-6">
                     <button wire:click="closeAddDestination" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
                     <button wire:click="saveDestination" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add Destination</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Smart Import Modal -->
+    @if($showSmartImport)
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                                </svg>
+                                Smart Import
+                            </h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Paste itinerary text or upload a confirmation document. AI will extract all travel segments.</p>
+                        </div>
+                        <button wire:click="closeSmartImport" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-6">
+                    @if(empty($extractedSegments))
+                        <!-- Input Phase -->
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Traveler *</label>
+                                <select wire:model="smartImportTravelerId" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                    <option value="">Select traveler...</option>
+                                    @foreach($trip->travelers as $traveler)
+                                        <option value="{{ $traveler->id }}">{{ $traveler->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Paste Itinerary Text
+                                </label>
+                                <textarea wire:model="smartImportText" 
+                                          rows="10"
+                                          placeholder="Paste your itinerary confirmation email, booking details, or travel schedule here...
+
+Example:
+United Airlines Confirmation: ABC123
+Flight UA 234
+Departs: Washington DCA - Jan 20, 2026 at 8:30 AM
+Arrives: San Francisco SFO - Jan 20, 2026 at 11:45 AM
+Seat: 12A (Economy)"
+                                          class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm"></textarea>
+                            </div>
+
+                            <div class="relative">
+                                <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                                    <div class="w-full border-t border-gray-300 dark:border-gray-600"></div>
+                                </div>
+                                <div class="relative flex justify-center">
+                                    <span class="bg-white dark:bg-gray-800 px-3 text-sm text-gray-500">or upload a file</span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Upload Document (PDF, TXT, HTML)
+                                </label>
+                                <input type="file" wire:model="smartImportFile" 
+                                       accept=".pdf,.txt,.html,.htm"
+                                       class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 dark:file:bg-purple-900/50 dark:file:text-purple-300">
+                                @if($smartImportFile)
+                                    <p class="mt-1 text-sm text-green-600 dark:text-green-400">
+                                        File selected: {{ $smartImportFile->getClientOriginalName() }}
+                                    </p>
+                                @endif
+                            </div>
+
+                            @if($smartImportError)
+                                <div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
+                                    {{ $smartImportError }}
+                                </div>
+                            @endif
+                        </div>
+                    @else
+                        <!-- Review Phase -->
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <h4 class="font-medium text-gray-900 dark:text-white">
+                                    Extracted {{ count($extractedSegments) }} Segment(s)
+                                </h4>
+                                <button wire:click="$set('extractedSegments', [])" class="text-sm text-gray-500 hover:text-gray-700">
+                                    Start Over
+                                </button>
+                            </div>
+
+                            @if($smartImportNotes)
+                                <div class="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-blue-700 dark:text-blue-400 text-sm">
+                                    <strong>Note:</strong> {{ $smartImportNotes }}
+                                </div>
+                            @endif
+
+                            <div class="space-y-3">
+                                @foreach($extractedSegments as $index => $segment)
+                                    <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-4 relative">
+                                        <button wire:click="removeExtractedSegment({{ $index }})" 
+                                                class="absolute top-2 right-2 text-gray-400 hover:text-red-600"
+                                                title="Remove this segment">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </button>
+
+                                        <div class="flex items-start gap-3 mb-3">
+                                            <span class="text-2xl">
+                                                @switch($segment['type'])
+                                                    @case('flight') ✈️ @break
+                                                    @case('train') 🚆 @break
+                                                    @case('bus') 🚌 @break
+                                                    @case('rental_car') 🚗 @break
+                                                    @case('rideshare') 🚕 @break
+                                                    @case('ferry') ⛴️ @break
+                                                    @default 🚐
+                                                @endswitch
+                                            </span>
+                                            <div class="flex-1">
+                                                <div class="font-medium text-gray-900 dark:text-white">
+                                                    {{ $segment['departure_location'] }} → {{ $segment['arrival_location'] }}
+                                                </div>
+                                                <div class="text-sm text-gray-600 dark:text-gray-400">
+                                                    @if($segment['carrier'])
+                                                        {{ $segment['carrier'] }}
+                                                        @if($segment['segment_number'])
+                                                            {{ $segment['carrier_code'] }} {{ $segment['segment_number'] }}
+                                                        @endif
+                                                        •
+                                                    @endif
+                                                    {{ \Carbon\Carbon::parse($segment['departure_datetime'])->format('M j, g:i A') }}
+                                                    @if($segment['arrival_datetime'])
+                                                        → {{ \Carbon\Carbon::parse($segment['arrival_datetime'])->format('M j, g:i A') }}
+                                                    @endif
+                                                </div>
+                                                @if($segment['confirmation_number'])
+                                                    <div class="text-sm text-gray-500 dark:text-gray-400">
+                                                        Confirmation: {{ $segment['confirmation_number'] }}
+                                                    </div>
+                                                @endif
+                                            </div>
+                                            @if(isset($segment['confidence']))
+                                                <span class="px-2 py-0.5 text-xs rounded-full {{ $segment['confidence'] >= 0.8 ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400' : ($segment['confidence'] >= 0.5 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-400' : 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400') }}" title="AI confidence in extraction accuracy">
+                                                    {{ round($segment['confidence'] * 100) }}%
+                                                </span>
+                                            @endif
+                                        </div>
+
+                                        <!-- Editable fields (collapsed by default) -->
+                                        <details class="text-sm">
+                                            <summary class="cursor-pointer text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">
+                                                Edit details
+                                            </summary>
+                                            <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                                <div>
+                                                    <label class="block text-xs text-gray-500 mb-1">Type</label>
+                                                    <select wire:change="updateExtractedSegment({{ $index }}, 'type', $event.target.value)"
+                                                            class="w-full text-sm border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700">
+                                                        @foreach(\App\Models\TripSegment::getTypeOptions() as $value => $label)
+                                                            <option value="{{ $value }}" {{ $segment['type'] === $value ? 'selected' : '' }}>{{ $label }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-500 mb-1">Carrier</label>
+                                                    <input type="text" value="{{ $segment['carrier'] ?? '' }}"
+                                                           wire:change="updateExtractedSegment({{ $index }}, 'carrier', $event.target.value)"
+                                                           class="w-full text-sm border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-500 mb-1">Flight/Train #</label>
+                                                    <input type="text" value="{{ $segment['segment_number'] ?? '' }}"
+                                                           wire:change="updateExtractedSegment({{ $index }}, 'segment_number', $event.target.value)"
+                                                           class="w-full text-sm border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-500 mb-1">From</label>
+                                                    <input type="text" value="{{ $segment['departure_location'] }}"
+                                                           wire:change="updateExtractedSegment({{ $index }}, 'departure_location', $event.target.value)"
+                                                           class="w-full text-sm border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-500 mb-1">To</label>
+                                                    <input type="text" value="{{ $segment['arrival_location'] }}"
+                                                           wire:change="updateExtractedSegment({{ $index }}, 'arrival_location', $event.target.value)"
+                                                           class="w-full text-sm border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-500 mb-1">Confirmation #</label>
+                                                    <input type="text" value="{{ $segment['confirmation_number'] ?? '' }}"
+                                                           wire:change="updateExtractedSegment({{ $index }}, 'confirmation_number', $event.target.value)"
+                                                           class="w-full text-sm border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-500 mb-1">Departure</label>
+                                                    <input type="datetime-local" value="{{ $segment['departure_datetime'] }}"
+                                                           wire:change="updateExtractedSegment({{ $index }}, 'departure_datetime', $event.target.value)"
+                                                           class="w-full text-sm border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-500 mb-1">Arrival</label>
+                                                    <input type="datetime-local" value="{{ $segment['arrival_datetime'] ?? '' }}"
+                                                           wire:change="updateExtractedSegment({{ $index }}, 'arrival_datetime', $event.target.value)"
+                                                           class="w-full text-sm border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-500 mb-1">Seat</label>
+                                                    <input type="text" value="{{ $segment['seat_assignment'] ?? '' }}"
+                                                           wire:change="updateExtractedSegment({{ $index }}, 'seat_assignment', $event.target.value)"
+                                                           class="w-full text-sm border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700">
+                                                </div>
+                                            </div>
+                                        </details>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+                </div>
+
+                <div class="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                    <div class="flex justify-end gap-3">
+                        <button wire:click="closeSmartImport" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">
+                            Cancel
+                        </button>
+                        @if(empty($extractedSegments))
+                            <button wire:click="parseItinerary" 
+                                    wire:loading.attr="disabled"
+                                    wire:loading.class="opacity-50 cursor-wait"
+                                    class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2">
+                                <span wire:loading wire:target="parseItinerary">
+                                    <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </span>
+                                <span wire:loading.remove wire:target="parseItinerary">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                                    </svg>
+                                </span>
+                                Extract Segments
+                            </button>
+                        @else
+                            <button wire:click="saveExtractedSegments" 
+                                    class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                                Save {{ count($extractedSegments) }} Segment(s)
+                            </button>
+                        @endif
+                    </div>
                 </div>
             </div>
         </div>
