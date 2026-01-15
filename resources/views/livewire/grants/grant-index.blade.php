@@ -2,8 +2,8 @@
     {{-- Header --}}
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Funders & Reporting</h1>
-            <p class="text-gray-600 dark:text-gray-400">Manage funders, grants, and reporting requirements</p>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Funders</h1>
+            <p class="text-gray-600 dark:text-gray-400">Manage funders and grants</p>
         </div>
         <div class="flex items-center gap-3">
             <button wire:click="openCreateGrantModal"
@@ -40,15 +40,6 @@
                 Grants
                 <span class="ml-1.5 px-1.5 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">{{ $stats['total_grants'] }}</span>
             </button>
-            <button wire:click="setTab('reports')"
-                class="pb-3 text-sm font-medium border-b-2 transition whitespace-nowrap {{ $activeTab === 'reports' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400' }}">
-                Reports
-                @if($stats['reports_overdue'] > 0)
-                    <span class="ml-1.5 px-1.5 py-0.5 text-xs bg-red-100 text-red-700 rounded-full">{{ $stats['reports_overdue'] }} overdue</span>
-                @elseif($stats['reports_due_soon'] > 0)
-                    <span class="ml-1.5 px-1.5 py-0.5 text-xs bg-amber-100 text-amber-700 rounded-full">{{ $stats['reports_due_soon'] }} due</span>
-                @endif
-            </button>
         </nav>
     </div>
 
@@ -67,10 +58,6 @@
         @include('livewire.grants.partials.grants-tab')
     @endif
 
-    {{-- Reports Tab --}}
-    @if($activeTab === 'reports')
-        @include('livewire.grants.partials.reports-tab')
-    @endif
 
     {{-- Create/Edit Funder Modal --}}
     @if($showFunderModal)
