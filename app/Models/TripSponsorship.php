@@ -37,11 +37,27 @@ class TripSponsorship extends Model
         'payment_received_date',
         'amount_received',
         'notes',
+        // Agreement parsing
+        'agreement_text',
+        'agreement_file_path',
+        'agreement_file_name',
+        'extracted_terms',
+        'terms_extracted_at',
+        'line_items',
+        'total_consulting_fees',
+        'total_reimbursable',
+        'exchange_rate_note',
+        'payment_terms',
+        'invoice_deadline',
+        'deliverables',
+        'covered_travelers',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'amount_received' => 'decimal:2',
+        'total_consulting_fees' => 'decimal:2',
+        'total_reimbursable' => 'decimal:2',
         'covers_airfare' => 'boolean',
         'covers_lodging' => 'boolean',
         'covers_ground_transport' => 'boolean',
@@ -50,6 +66,12 @@ class TripSponsorship extends Model
         'invoice_sent_date' => 'date',
         'payment_due_date' => 'date',
         'payment_received_date' => 'date',
+        'invoice_deadline' => 'date',
+        'terms_extracted_at' => 'datetime',
+        'extracted_terms' => 'array',
+        'line_items' => 'array',
+        'deliverables' => 'array',
+        'covered_travelers' => 'array',
     ];
 
     public function trip(): BelongsTo
@@ -136,5 +158,114 @@ class TripSponsorship extends Model
             'paid' => 'bg-green-100 text-green-800',
             'overdue' => 'bg-red-100 text-red-800',
         ];
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(TripSponsorshipDocument::class);
+    }
+
+    /**
+     * Get deliverables completion status
+     */
+    public function getDeliverablesProgressAttribute(): array
+    {
+        $deliverables = $this->deliverables ?? [];
+        $total = count($deliverables);
+        $completed = collect($deliverables)->where('is_completed', true)->count();
+
+        return [
+            'total' => $total,
+            'completed' => $completed,
+            'pending' => $total - $completed,
+            'percent' => $total > 0 ? round(($completed / $total) * 100) : 0,
+        ];
+    }
+
+    /**
+     * Check if all deliverables are complete
+     */
+    public function allDeliverablesComplete(): bool
+    {
+        $progress = $this->deliverables_progress;
+
+        return $progress['total'] > 0 && $progress['completed'] === $progress['total'];
+    }
+
+    /**
+     * Mark a deliverable as complete
+     */
+    public function markDeliverableComplete(int $index): void
+    {
+        $deliverables = $this->deliverables ?? [];
+        
+        if (isset($deliverables[$index])) {
+            $deliverables[$index]['is_completed'] = true;
+            $deliverables[$index]['completed_at'] = now()->toISOString();
+            $this->deliverables = $deliverables;
+            $this->save();
+        }
+    }
+
+    /**
+     * Mark a deliverable as incomplete
+     */
+    public function markDeliverableIncomplete(int $index): void
+    {
+        $deliverables = $this->deliverables ?? [];
+        
+        if (isset($deliverables[$index])) {
+            $deliverables[$index]['is_completed'] = false;
+            $deliverables[$index]['completed_at'] = null;
+            $this->deliverables = $deliverables;
+            $this->save();
+        }
+    }
+
+    /**
+     * Check if ready to invoice (all deliverables complete)
+     */
+    public function isReadyToInvoice(): bool
+    {
+        if ($this->payment_status !== 'pending') {
+            return false;
+        }
+
+        return $this->allDeliverablesComplete() || empty($this->deliverables);
+    }
+
+    /**
+     * Get line items by category
+     */
+    public function getLineItemsByCategory(): array
+    {
+        $items = $this->line_items ?? [];
+        $grouped = [];
+
+        foreach ($items as $item) {
+            $category = $item['category'] ?? 'other';
+            if (! isset($grouped[$category])) {
+                $grouped[$category] = [];
+            }
+            $grouped[$category][] = $item;
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * Get the currency symbol
+     */
+    public function getCurrencySymbolAttribute(): string
+    {
+        $symbols = [
+            'USD' => '$',
+            'GBP' => '£',
+            'EUR' => '€',
+            'CAD' => 'C$',
+            'AUD' => 'A$',
+        ];
+
+        return $symbols[$this->currency ?? 'USD'] ?? $this->currency ?? '$';
     }
 }

@@ -643,34 +643,219 @@
 
         @elseif($activeTab === 'sponsorship')
             <!-- Sponsorship Tab -->
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                <h3 class="font-semibold text-gray-900 dark:text-white mb-4">Sponsorships</h3>
+            <div class="space-y-6">
+                {{-- Header with Add button --}}
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Sponsorships & Reimbursements</h3>
+                    @if($canEdit)
+                        <button wire:click="openAddSponsorship" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            Add Sponsorship
+                        </button>
+                    @endif
+                </div>
+
                 @if($trip->sponsorships->isEmpty())
-                    <div class="text-center py-8 text-gray-500 dark:text-gray-400">
-                        <div class="text-4xl mb-2">🤝</div>
-                        <p>No sponsorships added yet</p>
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 text-center">
+                        <div class="text-5xl mb-3">🤝</div>
+                        <p class="text-gray-600 dark:text-gray-400 mb-4">No sponsorships added yet</p>
+                        @if($canEdit)
+                            <button wire:click="openAddSponsorship" class="text-indigo-600 hover:underline">
+                                + Add a sponsorship agreement
+                            </button>
+                        @endif
                     </div>
                 @else
-                    <div class="space-y-4">
+                    <div class="space-y-6">
                         @foreach($trip->sponsorships as $sponsorship)
-                            <div class="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                                <div class="flex items-start justify-between mb-2">
-                                    <div>
-                                        <h4 class="font-medium text-gray-900 dark:text-white">{{ $sponsorship->organization->name }}</h4>
-                                        <p class="text-sm text-gray-600 dark:text-gray-400">
-                                            {{ \App\Models\TripSponsorship::getTypeOptions()[$sponsorship->type] ?? $sponsorship->type }}
-                                        </p>
+                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                {{-- Sponsorship Header --}}
+                                <div class="p-5 border-b border-gray-200 dark:border-gray-700">
+                                    <div class="flex items-start justify-between">
+                                        <div>
+                                            <h4 class="text-lg font-semibold text-gray-900 dark:text-white">{{ $sponsorship->organization->name ?? 'Unknown Organization' }}</h4>
+                                            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                                {{ \App\Models\TripSponsorship::getTypeOptions()[$sponsorship->type] ?? $sponsorship->type }}
+                                                @if($sponsorship->terms_extracted_at)
+                                                    <span class="text-green-600 dark:text-green-400">✓ Terms extracted</span>
+                                                @endif
+                                            </p>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="px-3 py-1 text-xs font-medium rounded-full {{ \App\Models\TripSponsorship::getPaymentStatusColors()[$sponsorship->payment_status] ?? 'bg-gray-100' }}">
+                                                {{ \App\Models\TripSponsorship::getPaymentStatusOptions()[$sponsorship->payment_status] ?? $sponsorship->payment_status }}
+                                            </span>
+                                            @if($canEdit)
+                                                <button wire:click="deleteSponsorship({{ $sponsorship->id }})" 
+                                                    wire:confirm="Delete this sponsorship?"
+                                                    class="text-gray-400 hover:text-red-500 p-1">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                    </svg>
+                                                </button>
+                                            @endif
+                                        </div>
                                     </div>
-                                    <span class="px-2 py-1 text-xs rounded-full {{ \App\Models\TripSponsorship::getPaymentStatusColors()[$sponsorship->payment_status] ?? 'bg-gray-100' }}">
-                                        {{ \App\Models\TripSponsorship::getPaymentStatusOptions()[$sponsorship->payment_status] ?? $sponsorship->payment_status }}
-                                    </span>
+
+                                    {{-- Financial Summary --}}
+                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                                        <div>
+                                            <span class="text-sm text-gray-500 dark:text-gray-400">Total Value</span>
+                                            <p class="text-xl font-bold text-gray-900 dark:text-white">
+                                                {{ $sponsorship->currency_symbol }}{{ number_format($sponsorship->amount ?? 0, 2) }}
+                                            </p>
+                                        </div>
+                                        @if($sponsorship->total_consulting_fees)
+                                            <div>
+                                                <span class="text-sm text-gray-500 dark:text-gray-400">Consulting Fees</span>
+                                                <p class="text-lg font-semibold text-gray-900 dark:text-white">
+                                                    {{ $sponsorship->currency_symbol }}{{ number_format($sponsorship->total_consulting_fees, 2) }}
+                                                </p>
+                                            </div>
+                                        @endif
+                                        @if($sponsorship->total_reimbursable)
+                                            <div>
+                                                <span class="text-sm text-gray-500 dark:text-gray-400">Reimbursable</span>
+                                                <p class="text-lg font-semibold text-green-600 dark:text-green-400">
+                                                    {{ $sponsorship->currency_symbol }}{{ number_format($sponsorship->total_reimbursable, 2) }}
+                                                </p>
+                                            </div>
+                                        @endif
+                                        @if($sponsorship->amount_received > 0)
+                                            <div>
+                                                <span class="text-sm text-gray-500 dark:text-gray-400">Received</span>
+                                                <p class="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                                                    {{ $sponsorship->currency_symbol }}{{ number_format($sponsorship->amount_received, 2) }}
+                                                </p>
+                                            </div>
+                                        @endif
+                                    </div>
+
+                                    @if($sponsorship->exchange_rate_note)
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">💱 {{ $sponsorship->exchange_rate_note }}</p>
+                                    @endif
                                 </div>
-                                <div class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                                    ${{ number_format($sponsorship->amount, 2) }}
+
+                                {{-- Coverage --}}
+                                @if(!empty($sponsorship->coverage_list))
+                                    <div class="px-5 py-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+                                        <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Covers:</span>
+                                        <div class="flex flex-wrap gap-2 mt-2">
+                                            @foreach($sponsorship->coverage_list as $coverage)
+                                                <span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs rounded-full">✓ {{ $coverage }}</span>
+                                            @endforeach
+                                        </div>
+                                        @if(!empty($sponsorship->covered_travelers))
+                                            <p class="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                                                <span class="font-medium">For:</span> {{ implode(', ', $sponsorship->covered_travelers) }}
+                                            </p>
+                                        @endif
+                                    </div>
+                                @endif
+
+                                {{-- Line Items --}}
+                                @if(!empty($sponsorship->line_items))
+                                    <div class="p-5 border-b border-gray-200 dark:border-gray-700">
+                                        <h5 class="font-medium text-gray-900 dark:text-white mb-3">Line Items</h5>
+                                        <div class="space-y-2">
+                                            @foreach($sponsorship->line_items as $item)
+                                                <div class="flex items-center justify-between text-sm py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                                                    <div class="flex-1">
+                                                        <span class="text-gray-900 dark:text-white">{{ $item['description'] ?? 'Item' }}</span>
+                                                        @if(!empty($item['rate']))
+                                                            <span class="text-gray-500 text-xs ml-2">({{ $item['rate'] }})</span>
+                                                        @endif
+                                                        @if(!empty($item['notes']))
+                                                            <p class="text-xs text-gray-500">{{ $item['notes'] }}</p>
+                                                        @endif
+                                                    </div>
+                                                    <div class="text-right">
+                                                        <span class="font-medium {{ ($item['is_reimbursable'] ?? false) ? 'text-green-600' : 'text-gray-900 dark:text-white' }}">
+                                                            {{ $item['currency'] ?? $sponsorship->currency ?? '' }} {{ number_format($item['amount'] ?? 0, 2) }}
+                                                        </span>
+                                                        @if($item['is_reimbursable'] ?? false)
+                                                            <span class="text-xs text-green-600 block">reimbursable</span>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @endif
+
+                                {{-- Deliverables (Requirements for Payment) --}}
+                                @if(!empty($sponsorship->deliverables))
+                                    <div class="p-5 border-b border-gray-200 dark:border-gray-700 bg-amber-50 dark:bg-amber-900/10">
+                                        <div class="flex items-center justify-between mb-3">
+                                            <h5 class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                                                📋 Required for Payment
+                                            </h5>
+                                            @php $progress = $sponsorship->deliverables_progress; @endphp
+                                            <span class="text-sm {{ $progress['percent'] === 100 ? 'text-green-600' : 'text-amber-600' }}">
+                                                {{ $progress['completed'] }}/{{ $progress['total'] }} complete
+                                            </span>
+                                        </div>
+                                        <div class="space-y-2">
+                                            @foreach($sponsorship->deliverables as $index => $deliverable)
+                                                <label class="flex items-start gap-3 cursor-pointer group">
+                                                    <input type="checkbox" 
+                                                        wire:click="toggleDeliverable({{ $sponsorship->id }}, {{ $index }})"
+                                                        {{ ($deliverable['is_completed'] ?? false) ? 'checked' : '' }}
+                                                        class="mt-1 w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                                    <span class="text-sm {{ ($deliverable['is_completed'] ?? false) ? 'text-gray-400 line-through' : 'text-gray-700 dark:text-gray-300' }}">
+                                                        {{ $deliverable['description'] ?? $deliverable }}
+                                                    </span>
+                                                </label>
+                                            @endforeach
+                                        </div>
+                                        @if($progress['percent'] === 100)
+                                            <div class="mt-3 p-2 bg-green-100 dark:bg-green-900/30 rounded text-green-700 dark:text-green-400 text-sm">
+                                                ✅ All deliverables complete! Ready to invoice.
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endif
+
+                                {{-- Payment Terms --}}
+                                <div class="p-5 text-sm">
+                                    <div class="flex flex-wrap gap-x-6 gap-y-2 text-gray-600 dark:text-gray-400">
+                                        @if($sponsorship->payment_terms)
+                                            <span><strong>Terms:</strong> {{ $sponsorship->payment_terms }}</span>
+                                        @endif
+                                        @if($sponsorship->invoice_deadline)
+                                            <span><strong>Invoice By:</strong> {{ $sponsorship->invoice_deadline->format('M j, Y') }}</span>
+                                        @endif
+                                        @if($sponsorship->payment_due_date)
+                                            <span><strong>Payment Due:</strong> {{ $sponsorship->payment_due_date->format('M j, Y') }}</span>
+                                        @endif
+                                    </div>
+                                    
+                                    {{-- Billing Info --}}
+                                    @if($sponsorship->billing_contact_name || $sponsorship->billing_contact_email)
+                                        <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                            <span class="font-medium text-gray-700 dark:text-gray-300">Billing Contact:</span>
+                                            {{ $sponsorship->billing_contact_name }}
+                                            @if($sponsorship->billing_contact_email)
+                                                <a href="mailto:{{ $sponsorship->billing_contact_email }}" class="text-indigo-600 hover:underline">{{ $sponsorship->billing_contact_email }}</a>
+                                            @endif
+                                        </div>
+                                    @endif
+                                    
+                                    @if($sponsorship->billing_instructions)
+                                        <div class="mt-2 text-gray-600 dark:text-gray-400">
+                                            <span class="font-medium">Instructions:</span> {{ $sponsorship->billing_instructions }}
+                                        </div>
+                                    @endif
                                 </div>
-                                @if($sponsorship->coverage_list)
-                                    <div class="text-sm text-gray-600 dark:text-gray-400">
-                                        Covers: {{ implode(', ', $sponsorship->coverage_list) }}
+
+                                {{-- Actions --}}
+                                @if($canEdit && $sponsorship->agreement_text)
+                                    <div class="px-5 py-3 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+                                        <button wire:click="reparseSponsorship({{ $sponsorship->id }})" class="text-sm text-indigo-600 hover:underline">
+                                            🔄 Re-extract terms
+                                        </button>
                                     </div>
                                 @endif
                             </div>
@@ -896,6 +1081,123 @@
                 <div class="flex justify-end gap-3 mt-6">
                     <button wire:click="$set('showAddGuest', false)" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
                     <button wire:click="saveGuest" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add Guest</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Add Sponsorship Modal -->
+    @if($showAddSponsorship)
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                🤝 Add Sponsorship
+                            </h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                Paste agreement text or upload a document to automatically extract terms
+                            </p>
+                        </div>
+                        <button wire:click="closeAddSponsorship" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-6 space-y-5">
+                    {{-- Sponsor Organization --}}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sponsor Organization *</label>
+                        <select wire:model="sponsorshipOrgId" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            <option value="">Select organization...</option>
+                            @foreach($organizations as $org)
+                                <option value="{{ $org->id }}">{{ $org->name }}</option>
+                            @endforeach
+                        </select>
+                        @error('sponsorshipOrgId') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+
+                    {{-- Type --}}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sponsorship Type</label>
+                        <select wire:model="sponsorshipType" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            @foreach(\App\Models\TripSponsorship::getTypeOptions() as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    {{-- Description --}}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                        <input type="text" wire:model="sponsorshipDescription" placeholder="e.g., Travel reimbursement for Berlin conference"
+                            class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                    </div>
+
+                    {{-- Agreement Text --}}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            <span class="flex items-center gap-2">
+                                <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                                </svg>
+                                Agreement/Contract Text (AI will extract terms)
+                            </span>
+                        </label>
+                        <textarea wire:model="sponsorshipAgreementText" rows="10" 
+                            placeholder="Paste the sponsorship agreement, contract text, or email with terms here...
+
+Example:
+WFD will cover the costs of Dr Marci Harris for international travel including:
+- Flights: $1,030.13 (MKL-SUN)
+- Accommodation: 1/6 of team AirBnB @ $5,558.01 = $926.34
+- Subsistence: $40/day × 5 days = $200
+
+Payment: Net 30 from valid invoice after completion of deliverables."
+                            class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm"></textarea>
+                        <p class="text-xs text-gray-500 mt-1">✨ AI will analyze this text to extract line items, amounts, payment terms, and deliverables</p>
+                    </div>
+
+                    {{-- Or Upload File --}}
+                    <div class="relative">
+                        <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                            <div class="w-full border-t border-gray-300 dark:border-gray-600"></div>
+                        </div>
+                        <div class="relative flex justify-center">
+                            <span class="px-2 bg-white dark:bg-gray-800 text-sm text-gray-500">or upload a document</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Upload Contract/Agreement (PDF or TXT)</label>
+                        <input type="file" wire:model="sponsorshipFile" accept=".pdf,.txt,.doc,.docx"
+                            class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                        @if($sponsorshipFile)
+                            <p class="text-sm text-green-600 mt-1">✓ {{ $sponsorshipFile->getClientOriginalName() }}</p>
+                        @endif
+                    </div>
+
+                    @if($sponsorshipParseError)
+                        <div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
+                            {{ $sponsorshipParseError }}
+                        </div>
+                    @endif
+                </div>
+
+                <div class="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end gap-3">
+                    <button wire:click="closeAddSponsorship" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
+                    <button wire:click="parseAndCreateSponsorship" 
+                        class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                        wire:loading.attr="disabled"
+                        wire:target="parseAndCreateSponsorship">
+                        <span wire:loading wire:target="parseAndCreateSponsorship" class="animate-spin">⏳</span>
+                        <span wire:loading.remove wire:target="parseAndCreateSponsorship">✨</span>
+                        Create & Extract Terms
+                    </button>
                 </div>
             </div>
         </div>
