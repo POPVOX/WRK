@@ -38,29 +38,21 @@
         </p>
     </div>
 
-    {{-- Reports Due --}}
-    <div class="{{ $stats['reports_overdue'] > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : ($stats['reports_due_soon'] > 0 ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700') }} rounded-xl border p-5">
+    {{-- Current Funders --}}
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-sm font-medium {{ $stats['reports_overdue'] > 0 ? 'text-red-600 dark:text-red-400' : ($stats['reports_due_soon'] > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400') }}">
-                    Reports Due
-                </p>
-                <p class="text-3xl font-bold {{ $stats['reports_overdue'] > 0 ? 'text-red-700 dark:text-red-300' : ($stats['reports_due_soon'] > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-gray-900 dark:text-white') }} mt-1">
-                    {{ $stats['reports_due_soon'] }}
-                </p>
+                <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Current Funders</p>
+                <p class="text-3xl font-bold text-gray-900 dark:text-white mt-1">{{ $stats['current_funders'] }}</p>
             </div>
-            <div class="w-12 h-12 {{ $stats['reports_overdue'] > 0 ? 'bg-red-100 dark:bg-red-900/40' : ($stats['reports_due_soon'] > 0 ? 'bg-amber-100 dark:bg-amber-900/40' : 'bg-gray-50 dark:bg-gray-700') }} rounded-lg flex items-center justify-center">
-                <svg class="w-6 h-6 {{ $stats['reports_overdue'] > 0 ? 'text-red-500' : ($stats['reports_due_soon'] > 0 ? 'text-amber-500' : 'text-gray-400') }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center">
+                <svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
             </div>
         </div>
-        <p class="text-xs mt-2 {{ $stats['reports_overdue'] > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400' }}">
-            @if($stats['reports_overdue'] > 0)
-                {{ $stats['reports_overdue'] }} overdue!
-            @else
-                this quarter
-            @endif
+        <p class="text-xs mt-2 text-gray-500 dark:text-gray-400">
+            with active grants
         </p>
     </div>
 
@@ -97,61 +89,22 @@
             Needs Attention
         </h3>
 
-        @if($needsAttention['reports_overdue']->isNotEmpty() || $needsAttention['reports_due_soon']->isNotEmpty() || $needsAttention['grants_ending_soon']->isNotEmpty())
+        @if($needsAttention['grants_ending_soon']->isNotEmpty())
             <div class="space-y-3">
-                {{-- Overdue Reports --}}
-                @if($needsAttention['reports_overdue']->isNotEmpty())
-                    <div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-lg">
-                        <div class="flex items-center gap-2 text-sm font-medium text-red-700 dark:text-red-400">
-                            <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                            {{ $needsAttention['reports_overdue']->count() }} overdue report{{ $needsAttention['reports_overdue']->count() !== 1 ? 's' : '' }}
-                        </div>
-                        <div class="mt-2 space-y-1">
-                            @foreach($needsAttention['reports_overdue']->take(2) as $report)
-                                <a href="{{ route('grants.show', $report->grant) }}" wire:navigate
-                                   class="block text-sm text-red-600 dark:text-red-400 hover:text-red-800 truncate">
-                                    → {{ $report->name }} ({{ $report->grant->funder->name ?? 'Unknown' }})
-                                </a>
-                            @endforeach
-                        </div>
+                <div class="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg">
+                    <div class="flex items-center gap-2 text-sm font-medium text-blue-700 dark:text-blue-400">
+                        <span class="w-2 h-2 bg-blue-500 rounded-full"></span>
+                        {{ $needsAttention['grants_ending_soon']->count() }} grant{{ $needsAttention['grants_ending_soon']->count() !== 1 ? 's' : '' }} ending soon
                     </div>
-                @endif
-
-                {{-- Reports Due Soon --}}
-                @if($needsAttention['reports_due_soon']->isNotEmpty())
-                    <div class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-lg">
-                        <div class="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
-                            <span class="w-2 h-2 bg-amber-500 rounded-full"></span>
-                            {{ $needsAttention['reports_due_soon']->count() }} report{{ $needsAttention['reports_due_soon']->count() !== 1 ? 's' : '' }} due soon
-                        </div>
-                        <div class="mt-2 space-y-1">
-                            @foreach($needsAttention['reports_due_soon']->take(2) as $report)
-                                <a href="{{ route('grants.show', $report->grant) }}" wire:navigate
-                                   class="block text-sm text-amber-600 dark:text-amber-400 hover:text-amber-800 truncate">
-                                    → {{ $report->name }} ({{ $report->due_date->format('M j') }})
-                                </a>
-                            @endforeach
-                        </div>
+                    <div class="mt-2 space-y-1">
+                        @foreach($needsAttention['grants_ending_soon']->take(3) as $grant)
+                            <a href="{{ route('grants.show', $grant) }}" wire:navigate
+                               class="block text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 truncate">
+                                → {{ $grant->name }} ({{ $grant->end_date->format('M j') }})
+                            </a>
+                        @endforeach
                     </div>
-                @endif
-
-                {{-- Grants Ending Soon --}}
-                @if($needsAttention['grants_ending_soon']->isNotEmpty())
-                    <div class="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg">
-                        <div class="flex items-center gap-2 text-sm font-medium text-blue-700 dark:text-blue-400">
-                            <span class="w-2 h-2 bg-blue-500 rounded-full"></span>
-                            {{ $needsAttention['grants_ending_soon']->count() }} grant{{ $needsAttention['grants_ending_soon']->count() !== 1 ? 's' : '' }} ending soon
-                        </div>
-                        <div class="mt-2 space-y-1">
-                            @foreach($needsAttention['grants_ending_soon']->take(2) as $grant)
-                                <a href="{{ route('grants.show', $grant) }}" wire:navigate
-                                   class="block text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 truncate">
-                                    → {{ $grant->name }} ({{ $grant->end_date->format('M j') }})
-                                </a>
-                            @endforeach
-                        </div>
-                    </div>
-                @endif
+                </div>
             </div>
         @else
             {{-- All Clear --}}
@@ -160,19 +113,7 @@
                     <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span>No overdue reports</span>
-                </div>
-                <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                    <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
                     <span>All grants in good standing</span>
-                </div>
-                <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                    <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Reporting on track</span>
                 </div>
             </div>
         @endif
@@ -315,9 +256,6 @@
                     
                     <div class="flex items-center justify-between text-sm">
                         <span class="text-gray-600 dark:text-gray-400">${{ number_format($funder->total_funding / 1000) }}K active</span>
-                        @if($funder->reports_due_count > 0)
-                            <span class="text-amber-600 dark:text-amber-400">{{ $funder->reports_due_count }} due</span>
-                        @endif
                     </div>
                 </div>
             @endforeach

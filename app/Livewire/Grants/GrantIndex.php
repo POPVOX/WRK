@@ -5,7 +5,6 @@ namespace App\Livewire\Grants;
 use App\Models\Grant;
 use App\Models\Organization;
 use App\Models\Project;
-use App\Models\ReportingRequirement;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -343,8 +342,6 @@ class GrantIndex extends Component
     public function getStatsProperty(): array
     {
         $activeGrants = Grant::where('status', 'active')->get();
-        $reportsUpcoming = ReportingRequirement::upcoming()->count();
-        $reportsOverdue = ReportingRequirement::overdue()->count();
 
         return [
             'total_funders' => Organization::where('is_funder', true)->count(),
@@ -358,8 +355,6 @@ class GrantIndex extends Component
             'active_grants' => $activeGrants->count(),
             'completed_grants' => Grant::where('status', 'completed')->count(),
             'active_funding' => $activeGrants->sum('amount'),
-            'reports_due_soon' => $reportsUpcoming,
-            'reports_overdue' => $reportsOverdue,
             'pipeline_value' => Grant::where('status', 'prospective')->sum('amount') ?? 0,
         ];
     }
@@ -369,17 +364,6 @@ class GrantIndex extends Component
      */
     public function getNeedsAttentionProperty(): array
     {
-        $reportsOverdue = ReportingRequirement::with(['grant.funder'])
-            ->overdue()
-            ->orderBy('due_date')
-            ->get();
-
-        $reportsDueSoon = ReportingRequirement::with(['grant.funder'])
-            ->where('status', '!=', 'submitted')
-            ->whereBetween('due_date', [now(), now()->addWeeks(2)])
-            ->orderBy('due_date')
-            ->get();
-
         $grantsEndingSoon = Grant::with('funder')
             ->where('status', 'active')
             ->where('end_date', '<=', now()->addMonths(2))
@@ -387,21 +371,18 @@ class GrantIndex extends Component
             ->get();
 
         // Generate suggestion
+        $prospectiveCount = Organization::where('is_funder', true)
+            ->whereDoesntHave('grants', fn ($q) => $q->where('status', 'active'))
+            ->count();
+        
         $suggestion = null;
-        if ($reportsOverdue->isEmpty() && $reportsDueSoon->isEmpty()) {
-            $prospectiveCount = Organization::where('is_funder', true)
-                ->whereDoesntHave('grants', fn ($q) => $q->where('status', 'active'))
-                ->count();
-            if ($prospectiveCount > 0) {
-                $suggestion = "You have {$prospectiveCount} prospective funder".($prospectiveCount > 1 ? 's' : '').' in your pipeline. Consider scheduling outreach.';
-            } else {
-                $suggestion = 'All reports are on track. Consider researching new funding opportunities.';
-            }
+        if ($prospectiveCount > 0) {
+            $suggestion = "You have {$prospectiveCount} prospective funder".($prospectiveCount > 1 ? 's' : '').' in your pipeline. Consider scheduling outreach.';
+        } elseif ($grantsEndingSoon->isEmpty()) {
+            $suggestion = 'All grants are on track. Consider researching new funding opportunities.';
         }
 
         return [
-            'reports_overdue' => $reportsOverdue,
-            'reports_due_soon' => $reportsDueSoon,
             'grants_ending_soon' => $grantsEndingSoon,
             'suggestion' => $suggestion,
         ];
@@ -414,26 +395,10 @@ class GrantIndex extends Component
     {
         $deadlines = collect();
 
-        // Reports
-        ReportingRequirement::with(['grant.funder'])
-            ->where('status', '!=', 'submitted')
-            ->where('due_date', '>=', now()->subWeek())
-            ->where('due_date', '<=', now()->addMonths(3))
-            ->orderBy('due_date')
-            ->get()
-            ->each(function ($report) use ($deadlines) {
-                $deadlines->push([
-                    'date' => $report->due_date,
-                    'title' => $report->name,
-                    'funder' => $report->grant->funder->name ?? 'Unknown',
-                    'type' => 'Report',
-                    'url' => route('grants.show', $report->grant),
-                ]);
-            });
-
         // Grant end dates
         Grant::with('funder')
             ->where('status', 'active')
+            ->whereNotNull('end_date')
             ->where('end_date', '<=', now()->addMonths(3))
             ->orderBy('end_date')
             ->get()
@@ -467,41 +432,6 @@ class GrantIndex extends Component
             });
     }
 
-    /**
-     * Get reports grouped by status
-     */
-    public function getReportsByStatusProperty(): array
-    {
-        return [
-            'overdue' => ReportingRequirement::with(['grant.funder'])
-                ->overdue()
-                ->orderBy('due_date')
-                ->get(),
-
-            'due_soon' => ReportingRequirement::with(['grant.funder'])
-                ->where('status', '!=', 'submitted')
-                ->whereBetween('due_date', [now(), now()->addWeeks(2)])
-                ->orderBy('due_date')
-                ->get(),
-
-            'in_progress' => ReportingRequirement::with(['grant.funder'])
-                ->where('status', 'in_progress')
-                ->where('due_date', '>', now()->addWeeks(2))
-                ->orderBy('due_date')
-                ->get(),
-
-            'upcoming' => ReportingRequirement::with(['grant.funder'])
-                ->whereNotIn('status', ['submitted', 'in_progress'])
-                ->where('due_date', '>', now()->addWeeks(2))
-                ->orderBy('due_date')
-                ->get(),
-
-            'submitted' => ReportingRequirement::with(['grant.funder'])
-                ->where('status', 'submitted')
-                ->latest('submitted_at')
-                ->get(),
-        ];
-    }
 
     public function render()
     {
@@ -517,12 +447,6 @@ class GrantIndex extends Component
 
         $funders = $fundersQuery->orderBy('name')->get()->map(function ($funder) {
             $funder->total_funding = $funder->grants_sum_amount ?? 0;
-            // Count reports due for this funder
-            $funder->reports_due_count = ReportingRequirement::whereHas('grant', fn ($q) => $q->where('organization_id', $funder->id))
-                ->where('status', '!=', 'submitted')
-                ->where('due_date', '<=', now()->addMonth())
-                ->count();
-
             return $funder;
         });
 
@@ -531,8 +455,7 @@ class GrantIndex extends Component
         $prospectiveFunders = $funders->filter(fn ($f) => $f->active_grants_count === 0);
 
         // Grants for table view (with filters)
-        $grants = Grant::with(['funder', 'reportingRequirements', 'projects'])
-            ->withCount(['reportingRequirements', 'reportingRequirements as reports_due_count' => fn ($q) => $q->where('status', '!=', 'submitted')->where('due_date', '<=', now()->addMonth())])
+        $grants = Grant::with(['funder', 'projects'])
             ->when($this->grantSearch, fn ($q) => $q->where('name', 'like', '%'.$this->grantSearch.'%'))
             ->when($this->grantStatusFilter, fn ($q) => $q->where('status', $this->grantStatusFilter))
             ->when($this->grantFunderFilter, fn ($q) => $q->where('organization_id', $this->grantFunderFilter))
@@ -551,7 +474,6 @@ class GrantIndex extends Component
             'needsAttention' => $this->needsAttention,
             'upcomingDeadlines' => $this->upcomingDeadlines,
             'funderBreakdown' => $this->funderBreakdown,
-            'reportsByStatus' => $this->reportsByStatus,
-        ])->title('Funders & Reporting');
+        ])->title('Funders');
     }
 }

@@ -30,7 +30,7 @@
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Amount</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Period</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Reports</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Scope</th>
                 <th class="px-4 py-3"></th>
             </tr>
         </thead>
@@ -90,12 +90,8 @@
                             {{ ucfirst($grant->status) }}
                         </span>
                     </td>
-                    <td class="px-4 py-4 text-sm">
-                        @if($grant->reports_due_count > 0)
-                            <span class="text-amber-600 dark:text-amber-400">{{ $grant->reports_due_count }} due</span>
-                        @else
-                            <span class="text-gray-400">{{ $grant->reporting_requirements_count }} total</span>
-                        @endif
+                    <td class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                        {{ ucfirst($grant->scope ?? 'all') }}
                     </td>
                     <td class="px-4 py-4 text-right">
                         <a href="{{ route('grants.show', $grant) }}" wire:navigate
