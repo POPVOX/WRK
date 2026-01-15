@@ -232,12 +232,13 @@ class SyncCalendarEvents implements ShouldQueue
                 $imported++;
             }
 
-            // Update last sync time
-            $this->user->update(['calendar_import_date' => now()]);
-
             Log::info("Calendar sync completed for user {$this->user->id}: {$imported} new, {$updated} updated");
         } catch (\Exception $e) {
             Log::error("Calendar sync failed for user {$this->user->id}: ".$e->getMessage());
+        } finally {
+            // Always update last sync time - even if partial sync or errors occurred
+            // This prevents the "hasn't synced" warning from showing incorrectly
+            $this->user->update(['calendar_import_date' => now()]);
         }
     }
 
