@@ -13,6 +13,7 @@ class TripEvent extends Model
     protected $fillable = [
         'trip_id',
         'meeting_id',
+        'project_event_id',
         'title',
         'description',
         'start_datetime',
@@ -21,11 +22,13 @@ class TripEvent extends Model
         'address',
         'type',
         'notes',
+        'ai_extracted',
     ];
 
     protected $casts = [
         'start_datetime' => 'datetime',
         'end_datetime' => 'datetime',
+        'ai_extracted' => 'boolean',
     ];
 
     public function trip(): BelongsTo
@@ -36,6 +39,11 @@ class TripEvent extends Model
     public function meeting(): BelongsTo
     {
         return $this->belongsTo(Meeting::class);
+    }
+
+    public function projectEvent(): BelongsTo
+    {
+        return $this->belongsTo(ProjectEvent::class);
     }
 
     public function getTypeIconAttribute(): string
@@ -53,20 +61,20 @@ class TripEvent extends Model
 
     public function getDurationAttribute(): ?string
     {
-        if (! $this->start_datetime || ! $this->end_datetime) {
+        if (!$this->start_datetime || !$this->end_datetime) {
             return null;
         }
 
         $diff = $this->start_datetime->diff($this->end_datetime);
 
         if ($diff->h > 0 && $diff->i > 0) {
-            return $diff->h.'h '.$diff->i.'m';
+            return $diff->h . 'h ' . $diff->i . 'm';
         }
         if ($diff->h > 0) {
-            return $diff->h.'h';
+            return $diff->h . 'h';
         }
 
-        return $diff->i.'m';
+        return $diff->i . 'm';
     }
 
     public static function getTypeOptions(): array
