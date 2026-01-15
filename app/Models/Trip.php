@@ -70,6 +70,13 @@ class Trip extends Model
         return $this->belongsTo(Project::class);
     }
 
+    // Many-to-many relationship for multiple projects
+    public function projects(): BelongsToMany
+    {
+        return $this->belongsToMany(Project::class, 'project_trip')
+            ->withTimestamps();
+    }
+
     public function partnerOrganization(): BelongsTo
     {
         return $this->belongsTo(Organization::class, 'partner_organization_id');

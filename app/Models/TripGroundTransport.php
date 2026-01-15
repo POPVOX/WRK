@@ -14,6 +14,7 @@ class TripGroundTransport extends Model
 
     protected $fillable = [
         'trip_id',
+        'user_id',
         'trip_destination_id',
         'type',
         'provider',
@@ -40,6 +41,11 @@ class TripGroundTransport extends Model
     public function trip(): BelongsTo
     {
         return $this->belongsTo(Trip::class);
+    }
+
+    public function traveler(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     public function destination(): BelongsTo

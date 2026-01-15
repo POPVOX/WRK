@@ -171,13 +171,15 @@
                             <dt class="text-gray-500 dark:text-gray-400">Hotels</dt>
                             <dd class="text-gray-900 dark:text-white">{{ $trip->lodging->count() }}</dd>
                         </div>
-                        @if($trip->project)
-                            <div class="flex justify-between">
-                                <dt class="text-gray-500 dark:text-gray-400">Project</dt>
-                                <dd class="text-gray-900 dark:text-white">
-                                    <a href="{{ route('projects.show', $trip->project) }}" class="text-indigo-600 hover:underline">
-                                        {{ $trip->project->name }}
-                                    </a>
+                        @if($trip->projects->isNotEmpty())
+                            <div>
+                                <dt class="text-gray-500 dark:text-gray-400 mb-1">{{ $trip->projects->count() > 1 ? 'Projects' : 'Project' }}</dt>
+                                <dd class="space-y-1">
+                                    @foreach($trip->projects as $project)
+                                        <a href="{{ route('projects.show', $project) }}" class="block text-indigo-600 hover:underline text-sm">
+                                            {{ $project->name }}
+                                        </a>
+                                    @endforeach
                                 </dd>
                             </div>
                         @endif
@@ -328,57 +330,88 @@
                 @endif
             </div>
 
-            <!-- Travel Segments -->
+            <!-- Travel Segments (Grouped by Traveler) -->
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                 <div class="flex items-center justify-between mb-6">
                     <h3 class="font-semibold text-gray-900 dark:text-white">✈️ Travel Segments</h3>
-                    @if($canEdit)
-                        <button wire:click="openAddSegment" class="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                            </svg>
-                            Add Segment
-                        </button>
-                    @endif
                 </div>
 
-                @if($trip->segments->isEmpty())
+                @php
+                    $segmentsByTraveler = $trip->segments->groupBy('user_id');
+                @endphp
+
+                @if($trip->travelers->isEmpty())
                     <div class="text-center py-8 text-gray-500 dark:text-gray-400">
-                        <div class="text-4xl mb-2">✈️</div>
-                        <p>No travel segments added yet</p>
+                        <p>Add travelers to manage their itineraries</p>
                     </div>
                 @else
-                    <div class="space-y-4">
-                        @foreach($trip->segments as $segment)
-                            <div class="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                                <span class="text-2xl">{{ $segment->type_icon }}</span>
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-2 mb-1">
-                                        <span class="font-medium text-gray-900 dark:text-white">{{ $segment->route }}</span>
-                                        @if($segment->flight_number)
-                                            <span class="text-sm text-gray-500 dark:text-gray-400">{{ $segment->flight_number }}</span>
-                                        @endif
-                                    </div>
-                                    <div class="text-sm text-gray-600 dark:text-gray-400">
-                                        {{ $segment->departure_datetime->format('M j, g:i A') }} → {{ $segment->arrival_datetime->format('M j, g:i A') }}
-                                        @if($segment->duration)
-                                            <span class="text-gray-400">({{ $segment->duration }})</span>
-                                        @endif
-                                    </div>
-                                    @if($segment->confirmation_number)
-                                        <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                            Confirmation: {{ $segment->confirmation_number }}
+                    <div class="space-y-6">
+                        @foreach($trip->travelers as $traveler)
+                            <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+                                <div class="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-medium text-sm">
+                                            {{ substr($traveler->name, 0, 1) }}
                                         </div>
+                                        <span class="font-medium text-gray-900 dark:text-white">{{ $traveler->name }}</span>
+                                        @if($traveler->pivot->role === 'lead')
+                                            <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">Lead</span>
+                                        @endif
+                                    </div>
+                                    @if($canEdit)
+                                        <button wire:click="openAddSegment({{ $traveler->id }})" class="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                            </svg>
+                                            Add Segment
+                                        </button>
                                     @endif
                                 </div>
-                                @if($canEdit)
-                                    <button wire:click="deleteSegment({{ $segment->id }})" 
-                                            wire:confirm="Delete this segment?"
-                                            class="text-gray-400 hover:text-red-600">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                        </svg>
-                                    </button>
+                                
+                                @php
+                                    $travelerSegments = $segmentsByTraveler->get($traveler->id, collect());
+                                @endphp
+
+                                @if($travelerSegments->isEmpty())
+                                    <div class="px-4 py-6 text-center text-gray-500 dark:text-gray-400 text-sm">
+                                        No travel segments yet
+                                    </div>
+                                @else
+                                    <div class="divide-y divide-gray-200 dark:divide-gray-600">
+                                        @foreach($travelerSegments as $segment)
+                                            <div class="flex items-start gap-4 p-4">
+                                                <span class="text-xl">{{ $segment->type_icon }}</span>
+                                                <div class="flex-1">
+                                                    <div class="flex items-center gap-2 mb-1">
+                                                        <span class="font-medium text-gray-900 dark:text-white">{{ $segment->route }}</span>
+                                                        @if($segment->flight_number)
+                                                            <span class="text-sm text-gray-500 dark:text-gray-400">{{ $segment->flight_number }}</span>
+                                                        @endif
+                                                    </div>
+                                                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                                                        {{ $segment->departure_datetime->format('M j, g:i A') }} → {{ $segment->arrival_datetime->format('M j, g:i A') }}
+                                                        @if($segment->duration)
+                                                            <span class="text-gray-400">({{ $segment->duration }})</span>
+                                                        @endif
+                                                    </div>
+                                                    @if($segment->confirmation_number)
+                                                        <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                                            Confirmation: {{ $segment->confirmation_number }}
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                                @if($canEdit)
+                                                    <button wire:click="deleteSegment({{ $segment->id }})" 
+                                                            wire:confirm="Delete this segment?"
+                                                            class="text-gray-400 hover:text-red-600">
+                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                        </svg>
+                                                    </button>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    </div>
                                 @endif
                             </div>
                         @endforeach
@@ -606,8 +639,19 @@
                 
                 <div class="space-y-4">
                     <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Traveler *</label>
+                        <select wire:model="segmentTravelerId" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            <option value="">Select traveler...</option>
+                            @foreach($trip->travelers as $traveler)
+                                <option value="{{ $traveler->id }}">{{ $traveler->name }}</option>
+                            @endforeach
+                        </select>
+                        @error('segmentTravelerId') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type</label>
-                        <select wire:model="segmentType" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
+                        <select wire:model="segmentType" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                             @foreach(\App\Models\TripSegment::getTypeOptions() as $value => $label)
                                 <option value="{{ $value }}">{{ $label }}</option>
                             @endforeach
@@ -617,11 +661,11 @@
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Carrier</label>
-                            <input type="text" wire:model="segmentCarrier" placeholder="e.g., United" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
+                            <input type="text" wire:model="segmentCarrier" placeholder="e.g., United" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Flight/Train #</label>
-                            <input type="text" wire:model="segmentNumber" placeholder="e.g., UA 234" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
+                            <input type="text" wire:model="segmentNumber" placeholder="e.g., UA 234" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                         </div>
                     </div>
 
