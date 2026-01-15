@@ -4,6 +4,7 @@ namespace App\Livewire\Travel;
 
 use App\Models\Trip;
 use App\Models\TripChecklist;
+use App\Models\TripGuest;
 use App\Models\TripSegment;
 use App\Models\User;
 use App\Services\ItineraryParserService;
@@ -88,10 +89,28 @@ class TripDetail extends Component
 
     public string $destDepartureDate = '';
 
+    // Add guest modal
+    public bool $showAddGuest = false;
+
+    public string $guestName = '';
+
+    public string $guestEmail = '';
+
+    public string $guestPhone = '';
+
+    public string $guestOrganization = '';
+
+    public string $guestRole = 'guest';
+
+    public string $guestNotes = '';
+
+    public string $guestHomeAirport = '';
+
     public function mount(Trip $trip): void
     {
         $this->trip = $trip->load([
-            'travelers',
+            'travelers.travelProfile',
+            'guests',
             'destinations',
             'segments.traveler',
             'lodging.traveler',
@@ -452,6 +471,50 @@ class TripDetail extends Component
         }
 
         $this->trip->load('destinations');
+    }
+
+    // Guest management
+    public function openAddGuest(): void
+    {
+        $this->showAddGuest = true;
+    }
+
+    public function saveGuest(): void
+    {
+        $this->validate([
+            'guestName' => 'required|string|max:255',
+            'guestEmail' => 'nullable|email|max:255',
+            'guestPhone' => 'nullable|string|max:50',
+            'guestOrganization' => 'nullable|string|max:255',
+            'guestRole' => 'nullable|string|max:50',
+            'guestNotes' => 'nullable|string',
+            'guestHomeAirport' => 'nullable|string|max:5',
+        ]);
+
+        $this->trip->guests()->create([
+            'name' => $this->guestName,
+            'email' => $this->guestEmail ?: null,
+            'phone' => $this->guestPhone ?: null,
+            'organization' => $this->guestOrganization ?: null,
+            'role' => $this->guestRole ?: null,
+            'notes' => $this->guestNotes ?: null,
+            'home_airport_code' => $this->guestHomeAirport ? strtoupper($this->guestHomeAirport) : null,
+        ]);
+
+        $this->showAddGuest = false;
+        $this->reset(['guestName', 'guestEmail', 'guestPhone', 'guestOrganization', 'guestRole', 'guestNotes', 'guestHomeAirport']);
+        $this->trip->load('guests');
+        $this->dispatch('notify', type: 'success', message: 'Guest added to trip!');
+    }
+
+    public function deleteGuest(int $guestId): void
+    {
+        TripGuest::where('id', $guestId)
+            ->where('trip_id', $this->trip->id)
+            ->delete();
+
+        $this->trip->load('guests');
+        $this->dispatch('notify', type: 'success', message: 'Guest removed from trip.');
     }
 
     // Checklists

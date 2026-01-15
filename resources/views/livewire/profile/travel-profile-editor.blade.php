@@ -13,6 +13,33 @@
     </div>
 
     <form wire:submit="save" class="space-y-8">
+        {{-- Home Airport --}}
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+                Home Airport
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Airport Code</label>
+                    <input type="text" wire:model="homeAirportCode" placeholder="e.g., MKL, JFK, LAX" maxlength="5"
+                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white uppercase"
+                        style="text-transform: uppercase;">
+                    <p class="text-xs text-gray-500 mt-1">Your primary departure airport (3-4 letter code)</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Airport Name</label>
+                    <input type="text" wire:model="homeAirportName" placeholder="e.g., McKellar-Sipes Regional Airport"
+                        class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    <p class="text-xs text-gray-500 mt-1">Full airport name for reference</p>
+                </div>
+            </div>
+        </div>
+
         {{-- Passport & Documents --}}
         <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">

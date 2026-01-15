@@ -60,22 +60,46 @@
                 </div>
             </div>
 
-            <!-- Travelers -->
-            @if($trip->travelers->isNotEmpty())
-                <div class="flex items-center gap-3 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <!-- Travelers (Staff & Guests) -->
+            @if($trip->travelers->isNotEmpty() || $trip->guests->isNotEmpty())
+                <div class="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <span class="text-sm text-gray-500 dark:text-gray-400">Travelers:</span>
                     <div class="flex -space-x-2">
+                        {{-- Staff Travelers --}}
                         @foreach($trip->travelers as $traveler)
                             <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-sm font-medium border-2 border-white dark:border-gray-800"
-                                 title="{{ $traveler->name }} {{ $traveler->pivot->role === 'lead' ? '(Lead)' : '' }}">
+                                 title="{{ $traveler->name }} (Staff) {{ $traveler->pivot->role === 'lead' ? '- Lead' : '' }}{{ $traveler->travelProfile?->home_airport_code ? ' - '.$traveler->travelProfile->home_airport_code : '' }}">
                                 {{ substr($traveler->name, 0, 1) }}
+                            </div>
+                        @endforeach
+                        {{-- Guest Travelers --}}
+                        @foreach($trip->guests as $guest)
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-sm font-medium border-2 border-white dark:border-gray-800"
+                                 title="{{ $guest->name }} (Guest{{ $guest->organization ? ' - '.$guest->organization : '' }}){{ $guest->home_airport_code ? ' - '.$guest->home_airport_code : '' }}">
+                                {{ substr($guest->name, 0, 1) }}
                             </div>
                         @endforeach
                     </div>
                     <span class="text-sm text-gray-600 dark:text-gray-400">
-                        {{ $trip->travelers->pluck('name')->join(', ') }}
+                        @php
+                            $allNames = $trip->travelers->pluck('name')->concat($trip->guests->pluck('name'));
+                        @endphp
+                        {{ $allNames->join(', ') }}
                     </span>
+                    @if($canEdit)
+                        <button wire:click="openAddGuest" class="ml-2 text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
+                            + Add Guest
+                        </button>
+                    @endif
                 </div>
+            @else
+                @if($canEdit)
+                    <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <button wire:click="openAddGuest" class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+                            + Add a guest traveler
+                        </button>
+                    </div>
+                @endif
             @endif
 
             <!-- Compliance Warnings -->
@@ -161,7 +185,11 @@
                         </div>
                         <div class="flex justify-between">
                             <dt class="text-gray-500 dark:text-gray-400">Travelers</dt>
-                            <dd class="text-gray-900 dark:text-white">{{ $trip->travelers->count() }}</dd>
+                            <dd class="text-gray-900 dark:text-white">{{ $trip->travelers->count() + $trip->guests->count() }}
+                                @if($trip->guests->count() > 0)
+                                    <span class="text-xs text-gray-500">({{ $trip->travelers->count() }} staff, {{ $trip->guests->count() }} guests)</span>
+                                @endif
+                            </dd>
                         </div>
                         <div class="flex justify-between">
                             <dt class="text-gray-500 dark:text-gray-400">Flights</dt>
@@ -179,6 +207,40 @@
                                         <a href="{{ route('projects.show', $project) }}" class="block text-indigo-600 hover:underline text-sm">
                                             {{ $project->name }}
                                         </a>
+                                    @endforeach
+                                </dd>
+                            </div>
+                        @endif
+                        @if($trip->guests->isNotEmpty())
+                            <div class="pt-3 mt-3 border-t border-gray-200 dark:border-gray-700">
+                                <dt class="text-gray-500 dark:text-gray-400 mb-2">Guest Travelers</dt>
+                                <dd class="space-y-2">
+                                    @foreach($trip->guests as $guest)
+                                        <div class="flex items-center justify-between text-sm">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-6 h-6 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-xs font-medium">
+                                                    {{ substr($guest->name, 0, 1) }}
+                                                </div>
+                                                <div>
+                                                    <span class="text-gray-900 dark:text-white">{{ $guest->name }}</span>
+                                                    @if($guest->organization)
+                                                        <span class="text-gray-500 text-xs">({{ $guest->organization }})</span>
+                                                    @endif
+                                                    @if($guest->home_airport_code)
+                                                        <span class="text-gray-400 text-xs ml-1">✈️ {{ $guest->home_airport_code }}</span>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                            @if($canEdit)
+                                                <button wire:click="deleteGuest({{ $guest->id }})" 
+                                                    wire:confirm="Remove {{ $guest->name }} from this trip?"
+                                                    class="text-gray-400 hover:text-red-500">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                    </svg>
+                                                </button>
+                                            @endif
+                                        </div>
                                     @endforeach
                                 </dd>
                             </div>
@@ -760,6 +822,80 @@
                 <div class="flex justify-end gap-3 mt-6">
                     <button wire:click="closeAddDestination" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
                     <button wire:click="saveDestination" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add Destination</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Add Guest Modal -->
+    @if($showAddGuest)
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full mx-4 p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+                        </svg>
+                    </span>
+                    Add Guest Traveler
+                </h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Add a non-staff traveler (speaker, partner, family member, etc.)</p>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
+                        <input type="text" wire:model="guestName" placeholder="Full name" 
+                            class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                        @error('guestName') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+                            <input type="email" wire:model="guestEmail" placeholder="email@example.com" 
+                                class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            @error('guestEmail') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
+                            <input type="text" wire:model="guestPhone" placeholder="+1 555-123-4567" 
+                                class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Organization</label>
+                            <input type="text" wire:model="guestOrganization" placeholder="Company or affiliation" 
+                                class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
+                            <select wire:model="guestRole" class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                @foreach(\App\Models\TripGuest::getRoleOptions() as $value => $label)
+                                    <option value="{{ $value }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Home Airport Code</label>
+                        <input type="text" wire:model="guestHomeAirport" placeholder="e.g., JFK, LAX, ORD" maxlength="5"
+                            class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white uppercase" style="text-transform: uppercase;">
+                        <p class="text-xs text-gray-500 mt-1">Their preferred departure airport</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
+                        <textarea wire:model="guestNotes" rows="2" placeholder="Any special requirements or notes..." 
+                            class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button wire:click="$set('showAddGuest', false)" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
+                    <button wire:click="saveGuest" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add Guest</button>
                 </div>
             </div>
         </div>
