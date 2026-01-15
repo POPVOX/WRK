@@ -1,17 +1,17 @@
-<div class="min-h-screen">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <!-- Header -->
-    <div class="mb-6">
-        <div class="flex items-center justify-between">
+    <div class="mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-                <h1 class="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    🌍 Travel
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                    <span class="text-3xl">🌍</span> Travel
                 </h1>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                <p class="text-gray-500 dark:text-gray-400 mt-1">
                     Manage team travel, itineraries, and expenses
                 </p>
             </div>
             <a href="{{ route('travel.create') }}" 
-               class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+               class="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium shadow-sm">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                 </svg>
@@ -21,8 +21,8 @@
     </div>
 
     <!-- Tab Navigation -->
-    <div class="border-b border-gray-200 dark:border-gray-700 mb-6">
-        <nav class="flex gap-6" aria-label="Tabs">
+    <div class="border-b border-gray-200 dark:border-gray-700 mb-8">
+        <nav class="flex gap-8 overflow-x-auto" aria-label="Tabs">
             @foreach([
                 'all' => ['label' => 'All Trips', 'count' => $stats['all']],
                 'upcoming' => ['label' => 'Upcoming', 'count' => $stats['upcoming']],
@@ -46,7 +46,7 @@
     </div>
 
     <!-- Filters Bar -->
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 mb-8">
         <div class="flex flex-wrap items-center gap-4">
             <!-- Search -->
             <div class="flex-1 min-w-[200px]">
@@ -135,41 +135,41 @@
         </div>
     @elseif($view === 'cards')
         <!-- Cards View -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             @foreach($trips as $trip)
                 <a href="{{ route('travel.show', $trip) }}" 
-                   class="block bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-600 transition group">
-                    <div class="p-5">
+                   class="block bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-600 transition-all duration-200 group">
+                    <div class="p-6">
                         <!-- Header -->
-                        <div class="flex items-start justify-between mb-3">
-                            <div class="flex items-center gap-2">
-                                <span class="text-2xl">{{ $trip->country_flag }}</span>
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <span class="text-3xl">{{ $trip->country_flag }}</span>
                                 <div>
-                                    <h3 class="font-semibold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 line-clamp-1">
+                                    <h3 class="font-semibold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 line-clamp-1 text-lg">
                                         {{ $trip->name }}
                                     </h3>
-                                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                                         {{ $trip->primary_destination_city }}, {{ $trip->primary_destination_country }}
                                     </p>
                                 </div>
                             </div>
-                            <span class="px-2 py-1 text-xs font-medium rounded-full {{ \App\Models\Trip::getStatusColors()[$trip->status] ?? 'bg-gray-100 text-gray-800' }}">
+                            <span class="px-2.5 py-1 text-xs font-medium rounded-full {{ \App\Models\Trip::getStatusColors()[$trip->status] ?? 'bg-gray-100 text-gray-800' }}">
                                 {{ \App\Models\Trip::getStatusOptions()[$trip->status] ?? $trip->status }}
                             </span>
                         </div>
 
                         <!-- Dates -->
-                        <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-3">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-4">
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                             </svg>
-                            {{ $trip->start_date->format('M j') }} - {{ $trip->end_date->format('M j, Y') }}
-                            <span class="text-gray-400">({{ $trip->duration }} days)</span>
+                            <span>{{ $trip->start_date->format('M j') }} - {{ $trip->end_date->format('M j, Y') }}</span>
+                            <span class="text-gray-400 dark:text-gray-500">({{ $trip->duration }} days)</span>
                         </div>
 
                         <!-- Type Badge -->
-                        <div class="flex items-center gap-2 mb-3">
-                            <span class="text-sm">{{ \App\Models\Trip::getTypeIcons()[$trip->type] ?? '✈️' }}</span>
+                        <div class="flex items-center gap-2 mb-4">
+                            <span class="text-lg">{{ \App\Models\Trip::getTypeIcons()[$trip->type] ?? '✈️' }}</span>
                             <span class="text-sm text-gray-600 dark:text-gray-400">
                                 {{ \App\Models\Trip::getTypeOptions()[$trip->type] ?? $trip->type }}
                             </span>
@@ -177,16 +177,16 @@
 
                         <!-- Travelers -->
                         @if($trip->travelers->isNotEmpty())
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
                                 <div class="flex -space-x-2">
                                     @foreach($trip->travelers->take(4) as $traveler)
-                                        <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-xs font-medium border-2 border-white dark:border-gray-800"
+                                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-xs font-medium border-2 border-white dark:border-gray-800"
                                              title="{{ $traveler->name }}">
                                             {{ substr($traveler->name, 0, 1) }}
                                         </div>
                                     @endforeach
                                     @if($trip->travelers->count() > 4)
-                                        <div class="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 text-xs font-medium border-2 border-white dark:border-gray-800">
+                                        <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 text-xs font-medium border-2 border-white dark:border-gray-800">
                                             +{{ $trip->travelers->count() - 4 }}
                                         </div>
                                     @endif
@@ -199,8 +199,8 @@
 
                         <!-- Compliance Warning -->
                         @if($trip->hasComplianceIssues())
-                            <div class="mt-3 flex items-center gap-1 text-amber-600 dark:text-amber-400 text-sm">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div class="mt-4 flex items-center gap-2 text-amber-600 dark:text-amber-400 text-sm bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-lg">
+                                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                                 </svg>
                                 Action required
