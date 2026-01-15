@@ -2,12 +2,15 @@
 
 namespace App\Livewire\Travel;
 
+use App\Models\Organization;
 use App\Models\Trip;
 use App\Models\TripChecklist;
 use App\Models\TripGuest;
 use App\Models\TripSegment;
+use App\Models\TripSponsorship;
 use App\Models\User;
 use App\Services\ItineraryParserService;
+use App\Services\SponsorshipParserService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
@@ -105,6 +108,27 @@ class TripDetail extends Component
     public string $guestNotes = '';
 
     public string $guestHomeAirport = '';
+
+    // Sponsorship modal
+    public bool $showAddSponsorship = false;
+
+    public bool $showSponsorshipDetail = false;
+
+    public ?int $selectedSponsorshipId = null;
+
+    public ?int $sponsorshipOrgId = null;
+
+    public string $sponsorshipType = 'partial_sponsorship';
+
+    public string $sponsorshipDescription = '';
+
+    public string $sponsorshipAgreementText = '';
+
+    public $sponsorshipFile = null;
+
+    public bool $parsingSponsorship = false;
+
+    public ?string $sponsorshipParseError = null;
 
     public function mount(Trip $trip): void
     {
@@ -593,6 +617,159 @@ class TripDetail extends Component
         ];
     }
 
+    // Sponsorship Management
+    public function openAddSponsorship(): void
+    {
+        $this->showAddSponsorship = true;
+        $this->reset(['sponsorshipOrgId', 'sponsorshipType', 'sponsorshipDescription', 'sponsorshipAgreementText', 'sponsorshipFile', 'sponsorshipParseError']);
+    }
+
+    public function closeAddSponsorship(): void
+    {
+        $this->showAddSponsorship = false;
+    }
+
+    public function parseAndCreateSponsorship(): void
+    {
+        $this->validate([
+            'sponsorshipOrgId' => 'required|exists:organizations,id',
+            'sponsorshipType' => 'required|string',
+        ]);
+
+        $text = $this->sponsorshipAgreementText;
+        
+        // If file uploaded, extract text from it
+        if ($this->sponsorshipFile) {
+            $filePath = $this->sponsorshipFile->store('sponsorship-docs', 'local');
+            $fullPath = storage_path('app/'.$filePath);
+            
+            if (str_ends_with(strtolower($this->sponsorshipFile->getClientOriginalName()), '.pdf')) {
+                $parser = new SponsorshipParserService();
+                $extractedText = $parser->extractTextFromPdf($fullPath);
+                if ($extractedText) {
+                    $text = $extractedText;
+                }
+            } else {
+                // For text files, read directly
+                $text = file_get_contents($fullPath);
+            }
+        }
+
+        // Create the sponsorship record first
+        $sponsorship = $this->trip->sponsorships()->create([
+            'organization_id' => $this->sponsorshipOrgId,
+            'type' => $this->sponsorshipType,
+            'description' => $this->sponsorshipDescription,
+            'agreement_text' => $text,
+            'agreement_file_path' => isset($filePath) ? $filePath : null,
+            'agreement_file_name' => $this->sponsorshipFile?->getClientOriginalName(),
+            'payment_status' => 'pending',
+            'currency' => 'USD',
+        ]);
+
+        // If we have agreement text, parse it with AI
+        if (! empty($text)) {
+            $this->parsingSponsorship = true;
+            
+            try {
+                $parser = new SponsorshipParserService();
+                $result = $parser->parseAgreement($text, $sponsorship);
+                
+                if ($result['success']) {
+                    $parser->applyToSponsorship($sponsorship, $result);
+                    $this->dispatch('notify', type: 'success', message: 'Sponsorship created and terms extracted!');
+                } else {
+                    $this->dispatch('notify', type: 'warning', message: 'Sponsorship created but AI extraction failed. You can add details manually.');
+                }
+            } catch (\Exception $e) {
+                $this->dispatch('notify', type: 'warning', message: 'Sponsorship created but parsing failed: '.$e->getMessage());
+            }
+            
+            $this->parsingSponsorship = false;
+        } else {
+            $this->dispatch('notify', type: 'success', message: 'Sponsorship added!');
+        }
+
+        $this->trip->load('sponsorships.organization');
+        $this->showAddSponsorship = false;
+        $this->reset(['sponsorshipOrgId', 'sponsorshipType', 'sponsorshipDescription', 'sponsorshipAgreementText', 'sponsorshipFile']);
+    }
+
+    public function viewSponsorshipDetail(int $sponsorshipId): void
+    {
+        $this->selectedSponsorshipId = $sponsorshipId;
+        $this->showSponsorshipDetail = true;
+    }
+
+    public function closeSponsorshipDetail(): void
+    {
+        $this->showSponsorshipDetail = false;
+        $this->selectedSponsorshipId = null;
+    }
+
+    public function toggleDeliverable(int $sponsorshipId, int $index): void
+    {
+        $sponsorship = TripSponsorship::find($sponsorshipId);
+        if (! $sponsorship || $sponsorship->trip_id !== $this->trip->id) {
+            return;
+        }
+
+        $deliverables = $sponsorship->deliverables ?? [];
+        if (isset($deliverables[$index])) {
+            if ($deliverables[$index]['is_completed']) {
+                $sponsorship->markDeliverableIncomplete($index);
+            } else {
+                $sponsorship->markDeliverableComplete($index);
+            }
+        }
+
+        $this->trip->load('sponsorships.organization');
+    }
+
+    public function reparseSponsorship(int $sponsorshipId): void
+    {
+        $sponsorship = TripSponsorship::find($sponsorshipId);
+        if (! $sponsorship || $sponsorship->trip_id !== $this->trip->id) {
+            return;
+        }
+
+        if (empty($sponsorship->agreement_text)) {
+            $this->dispatch('notify', type: 'error', message: 'No agreement text to parse');
+            return;
+        }
+
+        try {
+            $parser = new SponsorshipParserService();
+            $result = $parser->parseAgreement($sponsorship->agreement_text, $sponsorship);
+            
+            if ($result['success']) {
+                $parser->applyToSponsorship($sponsorship, $result);
+                $this->dispatch('notify', type: 'success', message: 'Terms re-extracted successfully!');
+            } else {
+                $this->dispatch('notify', type: 'error', message: 'Extraction failed: '.($result['error'] ?? 'Unknown error'));
+            }
+        } catch (\Exception $e) {
+            $this->dispatch('notify', type: 'error', message: 'Parsing error: '.$e->getMessage());
+        }
+
+        $this->trip->load('sponsorships.organization');
+    }
+
+    public function deleteSponsorship(int $sponsorshipId): void
+    {
+        TripSponsorship::where('id', $sponsorshipId)
+            ->where('trip_id', $this->trip->id)
+            ->delete();
+
+        $this->trip->load('sponsorships.organization');
+        $this->dispatch('notify', type: 'success', message: 'Sponsorship removed.');
+    }
+
+    public function getOrganizationsProperty()
+    {
+        return Organization::orderBy('name')->get();
+    }
+
     public function getTimelineProperty(): array
     {
         $events = collect();
@@ -667,6 +844,7 @@ class TripDetail extends Component
             'timeline' => $this->timeline,
             'canEdit' => $this->canEdit(),
             'countries' => $this->countries,
+            'organizations' => $this->organizations,
         ])->title($this->title);
     }
 }
