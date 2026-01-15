@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TripGuest extends Model
 {
@@ -27,6 +28,11 @@ class TripGuest extends Model
     public function trip(): BelongsTo
     {
         return $this->belongsTo(Trip::class);
+    }
+
+    public function segments(): HasMany
+    {
+        return $this->hasMany(TripSegment::class)->orderBy('departure_datetime');
     }
 
     /**

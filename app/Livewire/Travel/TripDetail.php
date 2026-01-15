@@ -41,6 +41,8 @@ class TripDetail extends Component
 
     public ?int $segmentTravelerId = null;
 
+    public ?int $segmentGuestId = null;
+
     public string $segmentType = 'flight';
 
     public string $segmentCarrier = '';
@@ -61,6 +63,8 @@ class TripDetail extends Component
     public bool $showSmartImport = false;
 
     public ?int $smartImportTravelerId = null;
+
+    public ?int $smartImportGuestId = null;
 
     public string $smartImportText = '';
 
@@ -277,14 +281,15 @@ class TripDetail extends Component
     {
         $this->trip = $trip->load([
             'travelers.travelProfile',
-            'guests',
+            'guests.segments',
             'destinations',
             'segments.traveler',
+            'segments.guest',
             'lodging.traveler',
             'groundTransport.traveler',
-            'expenses',
+            'expenses.user',
             'sponsorships.organization',
-            'events',
+            'events.projectEvent',
             'documents',
             'checklists',
             'projects',
@@ -347,6 +352,7 @@ class TripDetail extends Component
     {
         $this->reset([
             'segmentTravelerId',
+            'segmentGuestId',
             'segmentType',
             'segmentCarrier',
             'segmentNumber',
@@ -358,6 +364,27 @@ class TripDetail extends Component
         ]);
         $this->segmentType = 'flight';
         $this->segmentTravelerId = $travelerId;
+        $this->segmentGuestId = null;
+        $this->showAddSegment = true;
+    }
+
+    public function openAddSegmentForGuest(int $guestId): void
+    {
+        $this->reset([
+            'segmentTravelerId',
+            'segmentGuestId',
+            'segmentType',
+            'segmentCarrier',
+            'segmentNumber',
+            'segmentDepartureLocation',
+            'segmentDepartureDatetime',
+            'segmentArrivalLocation',
+            'segmentArrivalDatetime',
+            'segmentConfirmation',
+        ]);
+        $this->segmentType = 'flight';
+        $this->segmentTravelerId = null;
+        $this->segmentGuestId = $guestId;
         $this->showAddSegment = true;
     }
 
@@ -368,17 +395,32 @@ class TripDetail extends Component
 
     public function saveSegment(): void
     {
-        $this->validate([
-            'segmentTravelerId' => 'required|exists:users,id',
+        // Either traveler or guest must be set
+        if (!$this->segmentTravelerId && !$this->segmentGuestId) {
+            $this->dispatch('notify', type: 'error', message: 'Please select a traveler.');
+            return;
+        }
+
+        $rules = [
             'segmentType' => 'required|in:flight,train,bus,rental_car,rideshare,ferry,other_transport',
             'segmentDepartureLocation' => 'required|string|max:100',
             'segmentDepartureDatetime' => 'required|date',
             'segmentArrivalLocation' => 'required|string|max:100',
             'segmentArrivalDatetime' => 'required|date|after:segmentDepartureDatetime',
-        ]);
+        ];
+
+        if ($this->segmentTravelerId) {
+            $rules['segmentTravelerId'] = 'required|exists:users,id';
+        }
+        if ($this->segmentGuestId) {
+            $rules['segmentGuestId'] = 'required|exists:trip_guests,id';
+        }
+
+        $this->validate($rules);
 
         $this->trip->segments()->create([
             'user_id' => $this->segmentTravelerId,
+            'trip_guest_id' => $this->segmentGuestId,
             'type' => $this->segmentType,
             'carrier' => $this->segmentCarrier ?: null,
             'segment_number' => $this->segmentNumber ?: null,
@@ -389,7 +431,7 @@ class TripDetail extends Component
             'confirmation_number' => $this->segmentConfirmation ?: null,
         ]);
 
-        $this->trip->load('segments.traveler');
+        $this->trip->load('segments.traveler', 'segments.guest');
         $this->showAddSegment = false;
         $this->dispatch('notify', type: 'success', message: 'Segment added!');
     }
@@ -409,6 +451,7 @@ class TripDetail extends Component
     {
         $this->reset([
             'smartImportTravelerId',
+            'smartImportGuestId',
             'smartImportText',
             'smartImportFile',
             'smartImportParsing',
@@ -417,6 +460,24 @@ class TripDetail extends Component
             'smartImportNotes',
         ]);
         $this->smartImportTravelerId = $travelerId;
+        $this->smartImportGuestId = null;
+        $this->showSmartImport = true;
+    }
+
+    public function openSmartImportForGuest(int $guestId): void
+    {
+        $this->reset([
+            'smartImportTravelerId',
+            'smartImportGuestId',
+            'smartImportText',
+            'smartImportFile',
+            'smartImportParsing',
+            'extractedSegments',
+            'smartImportError',
+            'smartImportNotes',
+        ]);
+        $this->smartImportTravelerId = null;
+        $this->smartImportGuestId = $guestId;
         $this->showSmartImport = true;
     }
 
@@ -490,8 +551,8 @@ class TripDetail extends Component
 
     public function saveExtractedSegments(): void
     {
-        if (!$this->smartImportTravelerId) {
-            $this->smartImportError = 'Please select a traveler.';
+        if (!$this->smartImportTravelerId && !$this->smartImportGuestId) {
+            $this->smartImportError = 'Please select a traveler or guest.';
 
             return;
         }
@@ -511,6 +572,7 @@ class TripDetail extends Component
 
             $this->trip->segments()->create([
                 'user_id' => $this->smartImportTravelerId,
+                'trip_guest_id' => $this->smartImportGuestId,
                 'type' => $segment['type'] ?? 'flight',
                 'carrier' => $segment['carrier'] ?? null,
                 'carrier_code' => $segment['carrier_code'] ?? null,
@@ -535,7 +597,7 @@ class TripDetail extends Component
             $savedCount++;
         }
 
-        $this->trip->load('segments.traveler');
+        $this->trip->load('segments.traveler', 'segments.guest');
         $this->closeSmartImport();
         $this->dispatch('notify', type: 'success', message: "{$savedCount} segment(s) imported successfully!");
     }

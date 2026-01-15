@@ -486,6 +486,97 @@
                                 @endif
                             </div>
                         @endforeach
+
+                        {{-- Guest Travelers Section --}}
+                        @if($trip->guests->isNotEmpty())
+                            <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                <h4 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 flex items-center gap-2">
+                                    <span class="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded">Guests</span>
+                                    Guest Travelers
+                                </h4>
+                            </div>
+
+                            @foreach($trip->guests as $guest)
+                                @php
+                                    $guestSegments = $trip->segments->where('trip_guest_id', $guest->id);
+                                @endphp
+                                <div class="border border-amber-200 dark:border-amber-800 rounded-lg overflow-hidden">
+                                    <div class="bg-amber-50 dark:bg-amber-900/30 px-4 py-3 flex items-center justify-between">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-8 h-8 bg-amber-100 dark:bg-amber-800 rounded-full flex items-center justify-center text-amber-600 dark:text-amber-400 font-medium text-sm">
+                                                {{ substr($guest->name, 0, 1) }}
+                                            </div>
+                                            <div>
+                                                <span class="font-medium text-gray-900 dark:text-white">{{ $guest->name }}</span>
+                                                <span class="text-xs text-amber-600 dark:text-amber-400 ml-1">(Guest)</span>
+                                            </div>
+                                            @if($guest->organization)
+                                                <span class="text-xs text-gray-500 dark:text-gray-400">{{ $guest->organization }}</span>
+                                            @endif
+                                        </div>
+                                        @if($canEdit)
+                                            <div class="flex items-center gap-2">
+                                                <button wire:click="openSmartImportForGuest({{ $guest->id }})" class="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1" title="Paste itinerary text">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                                                    </svg>
+                                                    Smart Import
+                                                </button>
+                                                <span class="text-gray-300 dark:text-gray-600">|</span>
+                                                <button wire:click="openAddSegmentForGuest({{ $guest->id }})" class="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                                    </svg>
+                                                    Manual
+                                                </button>
+                                            </div>
+                                        @endif
+                                    </div>
+                                    
+                                    @if($guestSegments->isEmpty())
+                                        <div class="px-4 py-6 text-center text-gray-500 dark:text-gray-400 text-sm">
+                                            No travel segments yet
+                                        </div>
+                                    @else
+                                        <div class="divide-y divide-gray-200 dark:divide-gray-600">
+                                            @foreach($guestSegments as $segment)
+                                                <div class="flex items-start gap-4 p-4">
+                                                    <span class="text-xl">{{ $segment->type_icon }}</span>
+                                                    <div class="flex-1">
+                                                        <div class="flex items-center gap-2 mb-1">
+                                                            <span class="font-medium text-gray-900 dark:text-white">{{ $segment->route }}</span>
+                                                            @if($segment->flight_number)
+                                                                <span class="text-sm text-gray-500 dark:text-gray-400">{{ $segment->flight_number }}</span>
+                                                            @endif
+                                                        </div>
+                                                        <div class="text-sm text-gray-600 dark:text-gray-400">
+                                                            {{ $segment->departure_datetime->format('M j, g:i A') }} → {{ $segment->arrival_datetime->format('M j, g:i A') }}
+                                                            @if($segment->duration)
+                                                                <span class="text-gray-400">({{ $segment->duration }})</span>
+                                                            @endif
+                                                        </div>
+                                                        @if($segment->confirmation_number)
+                                                            <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                                                Confirmation: {{ $segment->confirmation_number }}
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                                    @if($canEdit)
+                                                        <button wire:click="deleteSegment({{ $segment->id }})" 
+                                                                wire:confirm="Delete this segment?"
+                                                                class="text-gray-400 hover:text-red-600">
+                                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                            </svg>
+                                                        </button>
+                                                    @endif
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                </div>
+                            @endforeach
+                        @endif
                     </div>
                 @endif
             </div>
