@@ -3,36 +3,45 @@
 namespace App\Services;
 
 use App\Models\TripSponsorship;
+use App\Support\AI\AnthropicClient;
 use Illuminate\Support\Facades\Log;
 
 class SponsorshipParserService
 {
-    protected $anthropic;
-
-    public function __construct()
-    {
-        $this->anthropic = new \Anthropic\Anthropic(config('services.anthropic.api_key'));
-    }
-
     /**
      * Parse sponsorship agreement text and extract terms
      */
     public function parseAgreement(string $text, ?TripSponsorship $sponsorship = null): array
     {
+        if (!config('ai.enabled', true)) {
+            return [
+                'success' => false,
+                'error' => 'AI features are disabled',
+            ];
+        }
+
         try {
-            $response = $this->anthropic->messages()->create([
-                'model' => 'claude-sonnet-4-20250514',
-                'max_tokens' => 4000,
+            $response = AnthropicClient::send([
                 'messages' => [
                     [
                         'role' => 'user',
                         'content' => $this->buildPrompt($text),
                     ],
                 ],
+                'max_tokens' => 4000,
             ]);
 
-            $content = $response->content[0]->text ?? '';
-            
+            if (isset($response['error']) && $response['error']) {
+                Log::error('SponsorshipParser AI error', ['response' => $response]);
+
+                return [
+                    'success' => false,
+                    'error' => 'Failed to connect to AI service',
+                ];
+            }
+
+            $content = $response['content'][0]['text'] ?? '';
+
             // Parse JSON from response
             if (preg_match('/```json\s*(.*?)\s*```/s', $content, $matches)) {
                 $jsonString = $matches[1];
@@ -82,7 +91,7 @@ class SponsorshipParserService
         $sponsorship->terms_extracted_at = now();
 
         // Apply line items
-        if (! empty($data['line_items'])) {
+        if (!empty($data['line_items'])) {
             $sponsorship->line_items = $data['line_items'];
         }
 
@@ -91,28 +100,28 @@ class SponsorshipParserService
             $totals = $data['totals'];
             $sponsorship->total_consulting_fees = $totals['consulting_fees'] ?? null;
             $sponsorship->total_reimbursable = $totals['reimbursable'] ?? null;
-            
-            if (! empty($totals['total']) && empty($sponsorship->amount)) {
+
+            if (!empty($totals['total']) && empty($sponsorship->amount)) {
                 $sponsorship->amount = $totals['total'];
             }
-            
-            if (! empty($totals['currency']) && empty($sponsorship->currency)) {
+
+            if (!empty($totals['currency']) && empty($sponsorship->currency)) {
                 $sponsorship->currency = $totals['currency'];
             }
         }
 
         // Apply exchange rate
-        if (! empty($data['exchange_rate'])) {
+        if (!empty($data['exchange_rate'])) {
             $sponsorship->exchange_rate_note = $data['exchange_rate'];
         }
 
         // Apply payment terms
-        if (! empty($data['payment_terms'])) {
+        if (!empty($data['payment_terms'])) {
             $sponsorship->payment_terms = $data['payment_terms'];
         }
 
         // Apply deliverables
-        if (! empty($data['deliverables'])) {
+        if (!empty($data['deliverables'])) {
             $deliverables = array_map(function ($d) {
                 return [
                     'description' => is_string($d) ? $d : ($d['description'] ?? $d),
@@ -125,7 +134,7 @@ class SponsorshipParserService
         }
 
         // Apply coverage flags
-        if (! empty($data['covers'])) {
+        if (!empty($data['covers'])) {
             $covers = $data['covers'];
             $sponsorship->covers_airfare = $covers['airfare'] ?? false;
             $sponsorship->covers_lodging = $covers['lodging'] ?? false;
@@ -135,29 +144,29 @@ class SponsorshipParserService
         }
 
         // Apply covered travelers
-        if (! empty($data['covered_travelers'])) {
+        if (!empty($data['covered_travelers'])) {
             $sponsorship->covered_travelers = $data['covered_travelers'];
         }
 
         // Apply billing info if available
-        if (! empty($data['billing'])) {
+        if (!empty($data['billing'])) {
             $billing = $data['billing'];
-            if (! empty($billing['contact_name'])) {
+            if (!empty($billing['contact_name'])) {
                 $sponsorship->billing_contact_name = $billing['contact_name'];
             }
-            if (! empty($billing['contact_email'])) {
+            if (!empty($billing['contact_email'])) {
                 $sponsorship->billing_contact_email = $billing['contact_email'];
             }
-            if (! empty($billing['address'])) {
+            if (!empty($billing['address'])) {
                 $sponsorship->billing_address = $billing['address'];
             }
-            if (! empty($billing['instructions'])) {
+            if (!empty($billing['instructions'])) {
                 $sponsorship->billing_instructions = $billing['instructions'];
             }
         }
 
         // Apply notes/summary
-        if (! empty($data['summary'])) {
+        if (!empty($data['summary'])) {
             $sponsorship->coverage_notes = $data['summary'];
         }
 
