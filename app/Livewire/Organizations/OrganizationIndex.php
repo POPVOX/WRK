@@ -94,6 +94,15 @@ class OrganizationIndex extends Component
         $this->editingName = '';
     }
 
+    public function applySuggestedName(int $orgId): void
+    {
+        $org = Organization::find($orgId);
+        if ($org && $org->suggested_name) {
+            $org->update(['name' => $org->suggested_name]);
+            $this->dispatch('notify', type: 'success', message: 'Name updated!');
+        }
+    }
+
     public function updatingSearch()
     {
         $this->resetPage();

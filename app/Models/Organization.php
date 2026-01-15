@@ -188,4 +188,62 @@ class Organization extends Model
 
         return $url;
     }
+
+    /**
+     * Check if the organization name looks like concatenated words.
+     * Returns true if the name appears to be CamelCase or run-together words.
+     */
+    public function hasCondensedName(): bool
+    {
+        $name = $this->name;
+
+        // Already has spaces - probably fine
+        if (str_contains($name, ' ')) {
+            return false;
+        }
+
+        // Check for camelCase or PascalCase patterns (lowercase followed by uppercase)
+        if (preg_match('/[a-z][A-Z]/', $name)) {
+            return true;
+        }
+
+        // Check if it's a long word (15+ chars) with no spaces - likely concatenated
+        if (strlen($name) >= 15 && !str_contains($name, ' ') && !str_contains($name, '-')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Suggest a corrected name by adding spaces between concatenated words.
+     */
+    public function getSuggestedNameAttribute(): ?string
+    {
+        if (!$this->hasCondensedName()) {
+            return null;
+        }
+
+        $name = $this->name;
+
+        // Split on camelCase boundaries (lowercase followed by uppercase)
+        $spaced = preg_replace('/([a-z])([A-Z])/', '$1 $2', $name);
+
+        // Also split on number boundaries
+        $spaced = preg_replace('/([a-zA-Z])(\d)/', '$1 $2', $spaced);
+        $spaced = preg_replace('/(\d)([a-zA-Z])/', '$1 $2', $spaced);
+
+        // Capitalize first letter of each word
+        $spaced = ucwords(strtolower($spaced));
+
+        // Fix common acronyms that should stay uppercase
+        $acronyms = ['Usa', 'Us', 'Dc', 'Nyc', 'La', 'Ai', 'It', 'Hr', 'Pr', 'Tv', 'Uk', 'Eu', 'Un', 'Nato', 'Ngo', 'Ceo', 'Cfo', 'Cto'];
+        foreach ($acronyms as $acronym) {
+            $spaced = str_replace(' '.$acronym.' ', ' '.strtoupper($acronym).' ', $spaced);
+            $spaced = preg_replace('/^'.preg_quote($acronym, '/').' /', strtoupper($acronym).' ', $spaced);
+            $spaced = preg_replace('/ '.preg_quote($acronym, '/').'$/', ' '.strtoupper($acronym), $spaced);
+        }
+
+        return $spaced !== $name ? $spaced : null;
+    }
 }

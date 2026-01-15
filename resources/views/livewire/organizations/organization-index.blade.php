@@ -154,6 +154,13 @@
                                         @else
                                             <div class="flex items-center gap-2 group">
                                                 <a href="{{ route('organizations.show', $org) }}" class="font-medium text-gray-900 dark:text-white hover:text-indigo-600">{{ $org->name }}</a>
+                                                @if($org->suggested_name)
+                                                    <button wire:click="applySuggestedName({{ $org->id }})" 
+                                                            class="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 transition-colors"
+                                                            title="Fix to: {{ $org->suggested_name }}">
+                                                        Fix: {{ $org->suggested_name }}
+                                                    </button>
+                                                @endif
                                                 <button wire:click="startEditing({{ $org->id }}, '{{ addslashes($org->name) }}')" 
                                                         class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-indigo-600 transition-opacity"
                                                         title="Quick edit name">
