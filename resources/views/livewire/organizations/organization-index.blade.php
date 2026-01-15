@@ -208,8 +208,6 @@
                     {{ $organizations->links() }}
                 </div>
             @endif
-        </div>
-    </div>
 
     {{-- Add Organization Modal --}}
     @if($showAddModal)
