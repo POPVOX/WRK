@@ -70,6 +70,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/accomplishments/team', \App\Livewire\Accomplishments\ManagementDashboard::class)->name('accomplishments.team');
     Route::get('/accomplishments/user/{userId}', \App\Livewire\Accomplishments\AccomplishmentsIndex::class)->name('accomplishments.user');
 
+    // Travel
+    Route::get('/travel', \App\Livewire\Travel\TripIndex::class)->name('travel.index');
+    Route::get('/travel/create', \App\Livewire\Travel\TripCreate::class)->name('travel.create');
+    Route::get('/travel/{trip}', \App\Livewire\Travel\TripDetail::class)->name('travel.show');
+
     // Admin routes
     Route::middleware(['admin'])->prefix('admin')->group(function () {
         Route::get('/staff', \App\Livewire\Admin\StaffManagement::class)->name('admin.staff');
