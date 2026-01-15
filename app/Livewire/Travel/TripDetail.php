@@ -142,6 +142,8 @@ class TripDetail extends Component
     // Add Lodging modal
     public bool $showAddLodging = false;
 
+    public ?int $editingLodgingId = null;
+
     public string $lodgingMode = 'manual'; // 'manual', 'smart', 'url'
 
     // Manual form fields
@@ -744,6 +746,7 @@ class TripDetail extends Component
     protected function resetLodgingForm(): void
     {
         $this->reset([
+            'editingLodgingId',
             'lodgingMode',
             'lodgingPropertyName',
             'lodgingChain',
@@ -775,6 +778,46 @@ class TripDetail extends Component
         // Default dates based on trip
         $this->lodgingCheckInDate = $this->trip->start_date->format('Y-m-d');
         $this->lodgingCheckOutDate = $this->trip->end_date->format('Y-m-d');
+    }
+
+    public function editLodging(int $lodgingId): void
+    {
+        $lodging = \App\Models\TripLodging::where('id', $lodgingId)
+            ->where('trip_id', $this->trip->id)
+            ->first();
+
+        if (!$lodging) {
+            return;
+        }
+
+        $this->editingLodgingId = $lodgingId;
+        $this->lodgingMode = 'manual';
+        $this->lodgingPropertyName = $lodging->property_name ?? '';
+        $this->lodgingChain = $lodging->chain ?? '';
+        $this->lodgingAddress = $lodging->address ?? '';
+        $this->lodgingCity = $lodging->city ?? '';
+        $this->lodgingCountry = $lodging->country ?? '';
+        $this->lodgingCheckInDate = $lodging->check_in_date?->format('Y-m-d') ?? '';
+        $this->lodgingCheckInTime = $lodging->check_in_time ?? '';
+        $this->lodgingCheckOutDate = $lodging->check_out_date?->format('Y-m-d') ?? '';
+        $this->lodgingCheckOutTime = $lodging->check_out_time ?? '';
+        $this->lodgingRoomType = $lodging->room_type ?? '';
+        $this->lodgingNightlyRate = $lodging->nightly_rate;
+        $this->lodgingTotalCost = $lodging->total_cost;
+        $this->lodgingCurrency = $lodging->currency ?? 'USD';
+        $this->lodgingConfirmation = $lodging->confirmation_number ?? '';
+        $this->lodgingNotes = $lodging->notes ?? '';
+
+        // Set traveler assignment
+        if ($lodging->user_id) {
+            $this->lodgingAssignTo = 'specific';
+            $this->lodgingSelectedTravelers = [$lodging->user_id];
+        } else {
+            $this->lodgingAssignTo = 'all';
+            $this->lodgingSelectedTravelers = [];
+        }
+
+        $this->showAddLodging = true;
     }
 
     public function parseLodgingText(): void
@@ -868,6 +911,48 @@ class TripDetail extends Component
             'lodgingCheckOutDate' => 'required|date|after:lodgingCheckInDate',
         ]);
 
+        $data = [
+            'property_name' => $this->lodgingPropertyName,
+            'chain' => $this->lodgingChain ?: null,
+            'address' => $this->lodgingAddress ?: null,
+            'city' => $this->lodgingCity,
+            'country' => strtoupper($this->lodgingCountry),
+            'confirmation_number' => $this->lodgingConfirmation ?: null,
+            'check_in_date' => $this->lodgingCheckInDate,
+            'check_in_time' => $this->lodgingCheckInTime ?: null,
+            'check_out_date' => $this->lodgingCheckOutDate,
+            'check_out_time' => $this->lodgingCheckOutTime ?: null,
+            'room_type' => $this->lodgingRoomType ?: null,
+            'nightly_rate' => $this->lodgingNightlyRate,
+            'total_cost' => $this->lodgingTotalCost,
+            'currency' => $this->lodgingCurrency ?: 'USD',
+            'notes' => $this->lodgingNotes ?: null,
+        ];
+
+        // Editing existing lodging
+        if ($this->editingLodgingId) {
+            $lodging = \App\Models\TripLodging::where('id', $this->editingLodgingId)
+                ->where('trip_id', $this->trip->id)
+                ->first();
+
+            if ($lodging) {
+                // Update the user_id based on traveler selection
+                if ($this->lodgingAssignTo === 'specific' && !empty($this->lodgingSelectedTravelers)) {
+                    $data['user_id'] = $this->lodgingSelectedTravelers[0];
+                } else {
+                    $data['user_id'] = null;
+                }
+
+                $lodging->update($data);
+            }
+
+            $this->trip->load('lodging.traveler');
+            $this->closeAddLodging();
+            $this->dispatch('notify', type: 'success', message: 'Lodging updated!');
+            return;
+        }
+
+        // Creating new lodging
         // Determine which travelers to assign
         $travelerIds = [];
         if ($this->lodgingAssignTo === 'all') {
@@ -883,25 +968,10 @@ class TripDetail extends Component
 
         $savedCount = 0;
         foreach ($travelerIds as $userId) {
-            $this->trip->lodging()->create([
+            $this->trip->lodging()->create(array_merge($data, [
                 'user_id' => $userId,
-                'property_name' => $this->lodgingPropertyName,
-                'chain' => $this->lodgingChain ?: null,
-                'address' => $this->lodgingAddress ?: null,
-                'city' => $this->lodgingCity,
-                'country' => strtoupper($this->lodgingCountry),
-                'confirmation_number' => $this->lodgingConfirmation ?: null,
-                'check_in_date' => $this->lodgingCheckInDate,
-                'check_in_time' => $this->lodgingCheckInTime ?: null,
-                'check_out_date' => $this->lodgingCheckOutDate,
-                'check_out_time' => $this->lodgingCheckOutTime ?: null,
-                'room_type' => $this->lodgingRoomType ?: null,
-                'nightly_rate' => $this->lodgingNightlyRate,
-                'total_cost' => $this->lodgingTotalCost,
-                'currency' => $this->lodgingCurrency ?: 'USD',
-                'notes' => $this->lodgingNotes ?: null,
                 'ai_extracted' => $this->extractedLodging !== null,
-            ]);
+            ]));
             $savedCount++;
         }
 

@@ -520,13 +520,23 @@
                                                 <div class="text-xs text-gray-500 dark:text-gray-400">{{ $lodging->chain }}</div>
                                             @endif
                                         </div>
-                                        <button wire:click="deleteLodging({{ $lodging->id }})" 
-                                            wire:confirm="Remove this lodging?"
-                                            class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600 transition-all p-1">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        </button>
+                                        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                            <button wire:click="editLodging({{ $lodging->id }})" 
+                                                class="text-gray-400 hover:text-indigo-600 p-1"
+                                                title="Edit">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </button>
+                                            <button wire:click="deleteLodging({{ $lodging->id }})" 
+                                                wire:confirm="Remove this lodging?"
+                                                class="text-gray-400 hover:text-red-600 p-1"
+                                                title="Delete">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </div>
                                     <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                                         {{ $lodging->city }}, {{ $lodging->country }}
@@ -1293,10 +1303,10 @@ Payment: Net 30 from valid invoice after completion of deliverables."
                     <div class="flex items-center justify-between">
                         <div>
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                                🏨 Add Lodging
+                                🏨 {{ $editingLodgingId ? 'Edit Lodging' : 'Add Lodging' }}
                             </h3>
                             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                Add hotel, Airbnb, or other accommodation
+                                {{ $editingLodgingId ? 'Update accommodation details' : 'Add hotel, Airbnb, or other accommodation' }}
                             </p>
                         </div>
                         <button wire:click="closeAddLodging" class="text-gray-400 hover:text-gray-600">
@@ -1307,7 +1317,8 @@ Payment: Net 30 from valid invoice after completion of deliverables."
                     </div>
                 </div>
 
-                {{-- Mode Tabs --}}
+                {{-- Mode Tabs - only show when adding, not editing --}}
+                @if(!$editingLodgingId)
                 <div class="flex border-b border-gray-200 dark:border-gray-700 px-6">
                     <button wire:click="setLodgingMode('manual')" 
                         class="px-4 py-3 text-sm font-medium {{ $lodgingMode === 'manual' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700' }}">
@@ -1322,10 +1333,11 @@ Payment: Net 30 from valid invoice after completion of deliverables."
                         🔗 From URL
                     </button>
                 </div>
+                @endif
 
                 <div class="flex-1 overflow-y-auto p-6 space-y-5">
                     {{-- Smart Import Text Area --}}
-                    @if($lodgingMode === 'smart')
+                    @if($lodgingMode === 'smart' && !$editingLodgingId)
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -1357,7 +1369,7 @@ Total: $867 + $112.71 tax = $979.71"
                     @endif
 
                     {{-- URL Input --}}
-                    @if($lodgingMode === 'url')
+                    @if($lodgingMode === 'url' && !$editingLodgingId)
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -1398,7 +1410,7 @@ Total: $867 + $112.71 tax = $979.71"
                     @endif
 
                     {{-- Manual Form Fields --}}
-                    @if($lodgingMode === 'manual' || $extractedLodging)
+                    @if($lodgingMode === 'manual' || $extractedLodging || $editingLodgingId)
                         <div class="space-y-4">
                             {{-- Property Name & Chain --}}
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1553,12 +1565,12 @@ Total: $867 + $112.71 tax = $979.71"
                 {{-- Footer --}}
                 <div class="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end gap-3">
                     <button wire:click="closeAddLodging" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
-                    @if($lodgingMode === 'manual' || $extractedLodging)
+                    @if($lodgingMode === 'manual' || $extractedLodging || $editingLodgingId)
                         <button wire:click="saveLodging" 
                             class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
                             wire:loading.attr="disabled">
                             <span wire:loading wire:target="saveLodging" class="animate-spin">⏳</span>
-                            Save Lodging
+                            {{ $editingLodgingId ? 'Update Lodging' : 'Save Lodging' }}
                         </button>
                     @endif
                 </div>
