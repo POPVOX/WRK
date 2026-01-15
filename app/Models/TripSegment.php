@@ -13,6 +13,7 @@ class TripSegment extends Model
     protected $fillable = [
         'trip_id',
         'user_id',
+        'trip_guest_id',
         'trip_destination_id',
         'type',
         'carrier',
@@ -61,9 +62,28 @@ class TripSegment extends Model
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    public function guest(): BelongsTo
+    {
+        return $this->belongsTo(TripGuest::class, 'trip_guest_id');
+    }
+
     public function destination(): BelongsTo
     {
         return $this->belongsTo(TripDestination::class, 'trip_destination_id');
+    }
+
+    /**
+     * Get the traveler name (either user or guest)
+     */
+    public function getTravelerNameAttribute(): ?string
+    {
+        if ($this->traveler) {
+            return $this->traveler->name;
+        }
+        if ($this->guest) {
+            return $this->guest->name . ' (Guest)';
+        }
+        return null;
     }
 
     // Helpers
@@ -73,12 +93,12 @@ class TripSegment extends Model
             return null;
         }
 
-        return trim(($this->carrier_code ?? '').' '.($this->segment_number ?? ''));
+        return trim(($this->carrier_code ?? '') . ' ' . ($this->segment_number ?? ''));
     }
 
     public function getDurationAttribute(): ?string
     {
-        if (! $this->departure_datetime || ! $this->arrival_datetime) {
+        if (!$this->departure_datetime || !$this->arrival_datetime) {
             return null;
         }
 
@@ -86,13 +106,13 @@ class TripSegment extends Model
 
         $parts = [];
         if ($diff->d > 0) {
-            $parts[] = $diff->d.'d';
+            $parts[] = $diff->d . 'd';
         }
         if ($diff->h > 0) {
-            $parts[] = $diff->h.'h';
+            $parts[] = $diff->h . 'h';
         }
         if ($diff->i > 0) {
-            $parts[] = $diff->i.'m';
+            $parts[] = $diff->i . 'm';
         }
 
         return implode(' ', $parts);
@@ -100,7 +120,7 @@ class TripSegment extends Model
 
     public function getRouteAttribute(): string
     {
-        return $this->departure_location.' → '.$this->arrival_location;
+        return $this->departure_location . ' → ' . $this->arrival_location;
     }
 
     public function getTypeIconAttribute(): string
