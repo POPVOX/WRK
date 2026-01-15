@@ -52,6 +52,19 @@ class TripDetail extends Component
 
     public string $newChecklistCategory = 'other';
 
+    // Add destination modal
+    public bool $showAddDestination = false;
+
+    public string $destCity = '';
+
+    public string $destStateProvince = '';
+
+    public string $destCountry = '';
+
+    public string $destArrivalDate = '';
+
+    public string $destDepartureDate = '';
+
     public function mount(Trip $trip): void
     {
         $this->trip = $trip->load([
@@ -176,6 +189,106 @@ class TripDetail extends Component
 
         $this->trip->load('segments');
         $this->dispatch('notify', type: 'success', message: 'Segment removed.');
+    }
+
+    // Destinations
+    public function openAddDestination(): void
+    {
+        $this->reset([
+            'destCity',
+            'destStateProvince',
+            'destCountry',
+            'destArrivalDate',
+            'destDepartureDate',
+        ]);
+        // Default dates based on trip
+        $this->destArrivalDate = $this->trip->start_date->format('Y-m-d');
+        $this->destDepartureDate = $this->trip->end_date->format('Y-m-d');
+        $this->showAddDestination = true;
+    }
+
+    public function closeAddDestination(): void
+    {
+        $this->showAddDestination = false;
+    }
+
+    public function saveDestination(): void
+    {
+        $this->validate([
+            'destCity' => 'required|string|max:100',
+            'destCountry' => 'required|string|size:2',
+            'destArrivalDate' => 'required|date',
+            'destDepartureDate' => 'required|date|after_or_equal:destArrivalDate',
+        ]);
+
+        // Get next order
+        $nextOrder = ($this->trip->destinations->max('order') ?? 0) + 1;
+
+        // Check for travel advisory
+        $advisory = \App\Models\CountryTravelAdvisory::findByCountryCode($this->destCountry);
+
+        $this->trip->destinations()->create([
+            'order' => $nextOrder,
+            'city' => $this->destCity,
+            'state_province' => $this->destStateProvince ?: null,
+            'country' => $this->destCountry,
+            'arrival_date' => $this->destArrivalDate,
+            'departure_date' => $this->destDepartureDate,
+            'state_dept_level' => $advisory?->advisory_level,
+            'is_prohibited_destination' => $advisory?->is_prohibited ?? false,
+        ]);
+
+        $this->trip->load('destinations');
+        $this->showAddDestination = false;
+        $this->dispatch('notify', type: 'success', message: 'Destination added!');
+    }
+
+    public function deleteDestination(int $destinationId): void
+    {
+        \App\Models\TripDestination::where('id', $destinationId)
+            ->where('trip_id', $this->trip->id)
+            ->delete();
+
+        // Reorder remaining destinations
+        $this->trip->destinations()->orderBy('order')->get()->each(function ($dest, $index) {
+            $dest->update(['order' => $index + 1]);
+        });
+
+        $this->trip->load('destinations');
+        $this->dispatch('notify', type: 'success', message: 'Destination removed.');
+    }
+
+    public function moveDestinationUp(int $destinationId): void
+    {
+        $destination = $this->trip->destinations->find($destinationId);
+        if (! $destination || $destination->order <= 1) {
+            return;
+        }
+
+        $previousDest = $this->trip->destinations->where('order', $destination->order - 1)->first();
+        if ($previousDest) {
+            $previousDest->update(['order' => $destination->order]);
+            $destination->update(['order' => $destination->order - 1]);
+        }
+
+        $this->trip->load('destinations');
+    }
+
+    public function moveDestinationDown(int $destinationId): void
+    {
+        $destination = $this->trip->destinations->find($destinationId);
+        $maxOrder = $this->trip->destinations->max('order');
+        if (! $destination || $destination->order >= $maxOrder) {
+            return;
+        }
+
+        $nextDest = $this->trip->destinations->where('order', $destination->order + 1)->first();
+        if ($nextDest) {
+            $nextDest->update(['order' => $destination->order]);
+            $destination->update(['order' => $destination->order + 1]);
+        }
+
+        $this->trip->load('destinations');
     }
 
     // Checklists
@@ -315,6 +428,57 @@ class TripDetail extends Component
             || $this->trip->isUserLead($user);
     }
 
+    public function getCountriesProperty(): array
+    {
+        return [
+            'US' => 'United States',
+            'GB' => 'United Kingdom',
+            'CA' => 'Canada',
+            'DE' => 'Germany',
+            'FR' => 'France',
+            'BE' => 'Belgium',
+            'NL' => 'Netherlands',
+            'CH' => 'Switzerland',
+            'MX' => 'Mexico',
+            'BR' => 'Brazil',
+            'AR' => 'Argentina',
+            'CO' => 'Colombia',
+            'CL' => 'Chile',
+            'KE' => 'Kenya',
+            'ZA' => 'South Africa',
+            'NG' => 'Nigeria',
+            'GH' => 'Ghana',
+            'EG' => 'Egypt',
+            'MA' => 'Morocco',
+            'JP' => 'Japan',
+            'KR' => 'South Korea',
+            'TW' => 'Taiwan',
+            'SG' => 'Singapore',
+            'IN' => 'India',
+            'AU' => 'Australia',
+            'NZ' => 'New Zealand',
+            'PH' => 'Philippines',
+            'ID' => 'Indonesia',
+            'TH' => 'Thailand',
+            'VN' => 'Vietnam',
+            'AE' => 'United Arab Emirates',
+            'IL' => 'Israel',
+            'JO' => 'Jordan',
+            'ES' => 'Spain',
+            'IT' => 'Italy',
+            'PT' => 'Portugal',
+            'PL' => 'Poland',
+            'CZ' => 'Czech Republic',
+            'AT' => 'Austria',
+            'SE' => 'Sweden',
+            'NO' => 'Norway',
+            'DK' => 'Denmark',
+            'FI' => 'Finland',
+            'IE' => 'Ireland',
+            'GR' => 'Greece',
+        ];
+    }
+
     public function render()
     {
         return view('livewire.travel.trip-detail', [
@@ -322,6 +486,7 @@ class TripDetail extends Component
             'sponsorshipStats' => $this->sponsorshipStats,
             'timeline' => $this->timeline,
             'canEdit' => $this->canEdit(),
+            'countries' => $this->countries,
         ])->title($this->title);
     }
 }
