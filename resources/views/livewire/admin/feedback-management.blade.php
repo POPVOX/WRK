@@ -413,19 +413,11 @@
                                             {{ $item->resolved_at->format('M j, Y') }}
                                             <span class="text-xs block text-gray-400">{{ $item->resolved_at->format('g:i A') }}</span>
                                         </td>
-                                        <td class="px-4 py-3">
-                                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
-                                                ⏱ {{ $item->time_to_resolution }}
-                                            </span>
+                                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                                            {{ $item->time_to_resolution }}
                                         </td>
-                                        <td class="px-4 py-3">
-                                            @if($item->effort_display)
-                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
-                                                    🔧 {{ $item->effort_display }}
-                                                </span>
-                                            @else
-                                                <span class="text-xs text-gray-400">—</span>
-                                            @endif
+                                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                                            {{ $item->effort_display ?? '—' }}
                                         </td>
                                         <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                                             {{ $item->resolver?->name ?? '—' }}
