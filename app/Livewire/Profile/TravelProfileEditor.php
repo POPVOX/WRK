@@ -13,6 +13,8 @@ class TravelProfileEditor extends Component
 {
     // Personal Info
     public ?string $birthday = null;
+    public ?string $homeAirportCode = null;
+    public ?string $homeAirportName = null;
     public ?string $passportNumber = null;
     public ?string $passportCountry = null;
     public ?string $passportExpiration = null;
@@ -56,6 +58,8 @@ class TravelProfileEditor extends Component
 
         if ($profile) {
             $this->birthday = $profile->birthday?->format('Y-m-d');
+            $this->homeAirportCode = $profile->home_airport_code;
+            $this->homeAirportName = $profile->home_airport_name;
             $this->passportNumber = $profile->passport_number;
             $this->passportCountry = $profile->passport_country;
             $this->passportExpiration = $profile->passport_expiration?->format('Y-m-d');
@@ -132,6 +136,8 @@ class TravelProfileEditor extends Component
     {
         $this->validate([
             'birthday' => 'nullable|date',
+            'homeAirportCode' => 'nullable|string|max:5',
+            'homeAirportName' => 'nullable|string|max:255',
             'passportNumber' => 'nullable|string|max:50',
             'passportCountry' => 'nullable|string|size:2',
             'passportExpiration' => 'nullable|date',
@@ -150,6 +156,8 @@ class TravelProfileEditor extends Component
         $profile = $user->travelProfile ?? new TravelProfile(['user_id' => $user->id]);
 
         $profile->birthday = $this->birthday ?: null;
+        $profile->home_airport_code = $this->homeAirportCode ? strtoupper($this->homeAirportCode) : null;
+        $profile->home_airport_name = $this->homeAirportName ?: null;
         $profile->passport_number = $this->passportNumber ?: null;
         $profile->passport_country = $this->passportCountry ?: null;
         $profile->passport_expiration = $this->passportExpiration ?: null;

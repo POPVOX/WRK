@@ -99,6 +99,38 @@ class Trip extends Model
             ->withTimestamps();
     }
 
+    public function guests(): HasMany
+    {
+        return $this->hasMany(TripGuest::class);
+    }
+
+    /**
+     * Get all travelers including guests (for display purposes)
+     */
+    public function getAllTravelersAttribute(): \Illuminate\Support\Collection
+    {
+        $staffTravelers = $this->travelers->map(fn ($user) => [
+            'type' => 'staff',
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->pivot->role ?? null,
+            'home_airport' => $user->travelProfile?->home_airport_code,
+        ]);
+
+        $guestTravelers = $this->guests->map(fn ($guest) => [
+            'type' => 'guest',
+            'id' => $guest->id,
+            'name' => $guest->name,
+            'email' => $guest->email,
+            'role' => $guest->role,
+            'organization' => $guest->organization,
+            'home_airport' => $guest->home_airport_code,
+        ]);
+
+        return $staffTravelers->concat($guestTravelers);
+    }
+
     public function destinations(): HasMany
     {
         return $this->hasMany(TripDestination::class)->orderBy('order');

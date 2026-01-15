@@ -15,6 +15,8 @@ class TravelProfile extends Model
     protected $fillable = [
         'user_id',
         'birthday',
+        'home_airport_code',
+        'home_airport_name',
         'passport_number_encrypted',
         'passport_country',
         'passport_expiration',
