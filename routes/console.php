@@ -8,8 +8,17 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Sync Google Calendar events every 10 minutes
+// Morning calendar sync at 6 AM (catches overnight changes before workday)
 Schedule::command('calendars:sync')
-    ->everyTenMinutes()
+    ->dailyAt('06:00')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground()
+    ->description('Morning calendar sync');
+
+// Regular sync every 30 minutes during business hours
+Schedule::command('calendars:sync')
+    ->everyThirtyMinutes()
+    ->between('07:00', '20:00')
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->description('Regular calendar sync');

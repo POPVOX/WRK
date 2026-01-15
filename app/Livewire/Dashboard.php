@@ -422,12 +422,24 @@ class Dashboard extends Component
 
         $this->isSyncing = true;
 
-        // Dispatch sync job (runs immediately in sync mode for development)
-        SyncCalendarEvents::dispatchSync($this->user);
+        try {
+            // Dispatch sync job synchronously for immediate feedback
+            SyncCalendarEvents::dispatchSync($this->user);
+        } catch (\Exception $e) {
+            // Log but don't throw - we still want to update UI
+            \Log::warning('Calendar sync from dashboard failed: '.$e->getMessage());
+        }
 
-        // Refresh data
+        // Refresh user data from database to get updated calendar_import_date
         $this->user->refresh();
-        $this->lastSyncAt = 'just now';
+        
+        // Update display from actual database value
+        $this->lastSyncAt = $this->user->calendar_import_date 
+            ? $this->user->calendar_import_date->diffForHumans() 
+            : 'just now';
+        
+        // Clear the calendar warning since we just synced
+        $this->calendarWarning = null;
 
         $this->isSyncing = false;
     }
