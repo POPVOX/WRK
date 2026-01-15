@@ -56,6 +56,11 @@
                         <button wire:click="startEditing" class="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 border border-gray-300 dark:border-gray-600 rounded-lg">
                             Edit
                         </button>
+                        <button wire:click="deleteTrip" 
+                            wire:confirm="Are you sure you want to delete this trip? This action cannot be undone."
+                            class="px-3 py-1.5 text-sm text-red-600 hover:text-red-800 border border-red-300 hover:border-red-400 rounded-lg">
+                            Delete
+                        </button>
                     @endif
                 </div>
             </div>

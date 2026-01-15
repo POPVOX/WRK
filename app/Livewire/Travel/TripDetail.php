@@ -1874,6 +1874,20 @@ class TripDetail extends Component
             || $this->trip->isUserLead($user);
     }
 
+    public function deleteTrip(): void
+    {
+        if (!$this->canEdit()) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to delete this trip.');
+            return;
+        }
+
+        $tripName = $this->trip->name;
+        $this->trip->delete();
+
+        session()->flash('success', "Trip '{$tripName}' has been deleted.");
+        $this->redirect(route('travel'), navigate: true);
+    }
+
     public function getCountriesProperty(): array
     {
         return \App\Support\Countries::all();
