@@ -1,8 +1,8 @@
-<div class="min-h-screen">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <!-- Back Link -->
-    <div class="mb-4">
-        <a href="{{ route('travel.index') }}" class="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div class="mb-6">
+        <a href="{{ route('travel.index') }}" class="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
             Back to Travel
@@ -10,7 +10,7 @@
     </div>
 
     <!-- Header Card -->
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 mb-8">
         @if($editing)
             <!-- Edit Mode -->
             <div class="space-y-4">
@@ -110,8 +110,8 @@
     </div>
 
     <!-- Tab Navigation -->
-    <div class="border-b border-gray-200 dark:border-gray-700 mb-6">
-        <nav class="flex gap-6 overflow-x-auto" aria-label="Tabs">
+    <div class="border-b border-gray-200 dark:border-gray-700 mb-8">
+        <nav class="flex gap-8 overflow-x-auto" aria-label="Tabs">
             @foreach([
                 'overview' => 'Overview',
                 'itinerary' => 'Itinerary',
@@ -123,7 +123,7 @@
                 'notes' => 'Notes',
             ] as $key => $label)
                 <button wire:click="setTab('{{ $key }}')"
-                        class="pb-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition {{ $activeTab === $key 
+                        class="pb-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition {{ $activeTab === $key 
                             ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' 
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400' }}">
                     {{ $label }}
@@ -133,13 +133,13 @@
     </div>
 
     <!-- Tab Content -->
-    <div class="space-y-6">
+    <div class="space-y-8">
         @if($activeTab === 'overview')
             <!-- Overview Tab -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <!-- Quick Stats -->
                 <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                    <h3 class="font-semibold text-gray-900 dark:text-white mb-4">Trip Summary</h3>
+                    <h3 class="font-semibold text-gray-900 dark:text-white mb-5 text-lg">Trip Summary</h3>
                     <dl class="space-y-3 text-sm">
                         <div>
                             <dt class="text-gray-500 dark:text-gray-400 mb-1">{{ $trip->destinations->count() > 1 ? 'Destinations' : 'Destination' }}</dt>
@@ -188,7 +188,7 @@
 
                 <!-- Expenses Summary -->
                 <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                    <h3 class="font-semibold text-gray-900 dark:text-white mb-4">Expenses</h3>
+                    <h3 class="font-semibold text-gray-900 dark:text-white mb-5 text-lg">Expenses</h3>
                     <div class="text-3xl font-bold text-gray-900 dark:text-white mb-4">
                         ${{ number_format($expenseStats['total'], 2) }}
                     </div>
@@ -204,7 +204,7 @@
 
                 <!-- Sponsorship Summary -->
                 <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                    <h3 class="font-semibold text-gray-900 dark:text-white mb-4">Sponsorship</h3>
+                    <h3 class="font-semibold text-gray-900 dark:text-white mb-5 text-lg">Sponsorship</h3>
                     <div class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
                         ${{ number_format($sponsorshipStats['total_expected'], 2) }}
                     </div>
