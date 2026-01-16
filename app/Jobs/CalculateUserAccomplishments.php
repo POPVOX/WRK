@@ -6,7 +6,6 @@ use App\Models\Accomplishment;
 use App\Models\Meeting;
 use App\Models\Project;
 use App\Models\ProjectDocument;
-use App\Models\ReportingRequirement;
 use App\Models\User;
 use App\Models\UserActivityStats;
 use Carbon\Carbon;
@@ -16,6 +15,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class CalculateUserAccomplishments implements ShouldQueue
 {
@@ -26,13 +26,14 @@ class CalculateUserAccomplishments implements ShouldQueue
         public string $startDate,
         public string $endDate,
         public bool $forceRecalculate = false
-    ) {}
+    ) {
+    }
 
     public function handle(): UserActivityStats
     {
         try {
             $user = User::find($this->userId);
-            if (! $user) {
+            if (!$user) {
                 Log::warning("CalculateUserAccomplishments: User {$this->userId} not found.");
 
                 return new UserActivityStats;
@@ -47,7 +48,7 @@ class CalculateUserAccomplishments implements ShouldQueue
                 ->where('period_end', $endDate->toDateString())
                 ->first();
 
-            if ($stats && ! $this->forceRecalculate) {
+            if ($stats && !$this->forceRecalculate) {
                 // Return cached stats if recent enough (within 1 hour)
                 if ($stats->last_calculated_at && $stats->last_calculated_at->diffInMinutes(now()) < 60) {
                     return $stats;
@@ -57,7 +58,7 @@ class CalculateUserAccomplishments implements ShouldQueue
             // Calculate meetings attended
             $meetingsAttended = Meeting::where(function ($q) use ($user) {
                 $q->where('user_id', $user->id)
-                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $user->id));
+                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $user->id));
             })
                 ->whereBetween('meeting_date', [$startDate, $endDate])
                 ->count();
@@ -95,7 +96,7 @@ class CalculateUserAccomplishments implements ShouldQueue
                 ->count();
 
             // Calculate projects contributed
-            $projectsContributed = Project::whereHas('staff', fn ($q) => $q->where('user_id', $user->id))
+            $projectsContributed = Project::whereHas('staff', fn($q) => $q->where('user_id', $user->id))
                 ->whereBetween('created_at', [$startDate, $endDate])
                 ->count();
 
@@ -112,15 +113,29 @@ class CalculateUserAccomplishments implements ShouldQueue
             }
 
             // Calculate grant deliverables
-            $grantDeliverables = ReportingRequirement::where('status', 'submitted')
-                ->whereBetween('submitted_at', [$startDate, $endDate])
-                ->count();
+            $grantDeliverables = 0;
+            try {
+                if (class_exists(\App\Models\ReportingRequirement::class) && Schema::hasTable('reporting_requirements')) {
+                    $grantDeliverables = \App\Models\ReportingRequirement::where('status', 'submitted')
+                        ->whereBetween('submitted_at', [$startDate, $endDate])
+                        ->count();
+                }
+            } catch (\Exception $e) {
+                // ReportingRequirement table or column might not exist
+            }
 
             // Calculate grant reports
-            $grantReports = ReportingRequirement::whereIn('type', ['progress_report', 'narrative_report', 'financial_report', 'final_report'])
-                ->where('status', 'submitted')
-                ->whereBetween('submitted_at', [$startDate, $endDate])
-                ->count();
+            $grantReports = 0;
+            try {
+                if (class_exists(\App\Models\ReportingRequirement::class) && Schema::hasTable('reporting_requirements')) {
+                    $grantReports = \App\Models\ReportingRequirement::whereIn('type', ['progress_report', 'narrative_report', 'financial_report', 'final_report'])
+                        ->where('status', 'submitted')
+                        ->whereBetween('submitted_at', [$startDate, $endDate])
+                        ->count();
+                }
+            } catch (\Exception $e) {
+                // ReportingRequirement table or column might not exist
+            }
 
             // Calculate manual accomplishments added
             $accomplishmentsAdded = Accomplishment::where('user_id', $user->id)
@@ -182,7 +197,7 @@ class CalculateUserAccomplishments implements ShouldQueue
 
             return $stats;
         } catch (\Exception $e) {
-            Log::error('CalculateUserAccomplishments error: '.$e->getMessage(), [
+            Log::error('CalculateUserAccomplishments error: ' . $e->getMessage(), [
                 'user_id' => $this->userId,
                 'trace' => $e->getTraceAsString(),
             ]);
