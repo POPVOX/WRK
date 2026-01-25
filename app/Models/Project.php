@@ -274,7 +274,7 @@ class Project extends Model
     public function needsStatusRefresh(): bool
     {
         // Refresh if: never generated
-        if (! $this->ai_status_generated_at) {
+        if (!$this->ai_status_generated_at) {
             return true;
         }
 
@@ -315,5 +315,25 @@ class Project extends Model
     public function getCompletedMilestonesCountAttribute(): int
     {
         return $this->milestones()->where('status', 'completed')->count();
+    }
+
+    /**
+     * Get the project lead for display - checks both the lead field and staff relations.
+     * This ensures leads display consistently regardless of how they were set.
+     */
+    public function getLeadDisplayAttribute(): ?string
+    {
+        // First, check if lead field is set
+        if (!empty($this->lead)) {
+            return $this->lead;
+        }
+
+        // Fall back to staff with 'lead' role
+        $leadStaff = $this->staff()->wherePivot('role', 'lead')->first();
+        if ($leadStaff) {
+            return $leadStaff->name;
+        }
+
+        return null;
     }
 }

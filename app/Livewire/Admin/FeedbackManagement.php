@@ -3,6 +3,9 @@
 namespace App\Livewire\Admin;
 
 use App\Jobs\AnalyzeFeedback;
+use App\Jobs\GenerateAiFix;
+use App\Models\AiFixAuditLog;
+use App\Models\AiFixProposal;
 use App\Models\Feedback;
 use App\Models\User;
 use App\Support\AI\AnthropicClient;
@@ -66,6 +69,15 @@ class FeedbackManagement extends Component
 
     public bool $isGeneratingInsights = false;
 
+    // AI Fix Proposals
+    public bool $showFixModal = false;
+
+    public ?int $viewingProposalId = null;
+
+    public ?AiFixProposal $viewingProposal = null;
+
+    public string $rejectionReason = '';
+
     public function updatingSearch()
     {
         $this->resetPage();
@@ -90,7 +102,7 @@ class FeedbackManagement extends Component
     public function viewFeedback(int $id): void
     {
         $this->viewingFeedback = Feedback::with(['user', 'assignee'])->find($id);
-        if (! $this->viewingFeedback) {
+        if (!$this->viewingFeedback) {
             return;
         }
 
@@ -111,7 +123,7 @@ class FeedbackManagement extends Component
 
     public function saveFeedbackChanges(): void
     {
-        if (! $this->viewingFeedback) {
+        if (!$this->viewingFeedback) {
             return;
         }
 
@@ -220,7 +232,7 @@ class FeedbackManagement extends Component
             ];
         } catch (\Exception $e) {
             $this->aiInsights = [
-                'error' => 'AI analysis failed: '.$e->getMessage(),
+                'error' => 'AI analysis failed: ' . $e->getMessage(),
             ];
         }
 
@@ -309,7 +321,7 @@ PROMPT;
     public function createGitHubIssue(int $id): void
     {
         $feedback = Feedback::with('user')->find($id);
-        if (! $feedback) {
+        if (!$feedback) {
             $this->dispatch('notify', type: 'error', message: 'Feedback not found.');
 
             return;
@@ -337,7 +349,7 @@ PROMPT;
                 default => '[Feedback]',
             };
 
-            $title = $typeLabel.' '.Str::limit($feedback->message, 60);
+            $title = $typeLabel . ' ' . Str::limit($feedback->message, 60);
 
             $body = $this->formatGitHubIssueBody($feedback);
 
@@ -356,10 +368,10 @@ PROMPT;
 
             $response = Http::withToken($token)
                 ->post("https://api.github.com/repos/{$repo}/issues", [
-                    'title' => $title,
-                    'body' => $body,
-                    'labels' => $labels,
-                ]);
+                        'title' => $title,
+                        'body' => $body,
+                        'labels' => $labels,
+                    ]);
 
             if ($response->successful()) {
                 $issueData = $response->json();
@@ -375,10 +387,10 @@ PROMPT;
                     $this->viewingFeedback->refresh();
                 }
             } else {
-                $this->dispatch('notify', type: 'error', message: 'GitHub API error: '.$response->json('message', 'Unknown error'));
+                $this->dispatch('notify', type: 'error', message: 'GitHub API error: ' . $response->json('message', 'Unknown error'));
             }
         } catch (\Exception $e) {
-            $this->dispatch('notify', type: 'error', message: 'Error: '.$e->getMessage());
+            $this->dispatch('notify', type: 'error', message: 'Error: ' . $e->getMessage());
         }
     }
 
@@ -397,7 +409,7 @@ PROMPT;
 
         $screenshotSection = '';
         if ($feedback->screenshot_path) {
-            $screenshotUrl = url('storage/'.$feedback->screenshot_path);
+            $screenshotUrl = url('storage/' . $feedback->screenshot_path);
             $screenshotSection = "\n## Screenshot\n![Screenshot]({$screenshotUrl})\n";
         }
 
@@ -445,7 +457,7 @@ BODY;
      */
     public function getGithubConfiguredProperty(): bool
     {
-        return ! empty(config('services.github.token')) && ! empty(config('services.github.repo'));
+        return !empty(config('services.github.token')) && !empty(config('services.github.repo'));
     }
 
     /**
@@ -478,7 +490,7 @@ BODY;
                     'admin_notes' => $f->admin_notes,
                     'ai_analysis' => $f->ai_analysis,
                     'ai_tags' => $f->ai_tags,
-                    'screenshot_path' => $f->screenshot_path ? url('storage/'.$f->screenshot_path) : null,
+                    'screenshot_path' => $f->screenshot_path ? url('storage/' . $f->screenshot_path) : null,
                 ];
             });
 
@@ -493,7 +505,7 @@ BODY;
             'feedback' => $feedback->toArray(),
         ];
 
-        $filename = 'feedback-export-'.now()->format('Y-m-d-His').'.json';
+        $filename = 'feedback-export-' . now()->format('Y-m-d-His') . '.json';
         $content = json_encode($exportData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 
         return response()->streamDownload(function () use ($content) {
@@ -512,7 +524,7 @@ BODY;
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $filename = 'feedback-export-'.now()->format('Y-m-d-His').'.csv';
+        $filename = 'feedback-export-' . now()->format('Y-m-d-His') . '.csv';
 
         return response()->streamDownload(function () use ($feedback) {
             $handle = fopen('php://output', 'w');
@@ -572,13 +584,13 @@ BODY;
             ->with(['user', 'assignee'])
             ->when($this->search, function ($q) {
                 $q->where(function ($q) {
-                    $q->where('message', 'like', '%'.$this->search.'%')
-                        ->orWhere('page_url', 'like', '%'.$this->search.'%');
+                    $q->where('message', 'like', '%' . $this->search . '%')
+                        ->orWhere('page_url', 'like', '%' . $this->search . '%');
                 });
             })
-            ->when($this->filterStatus, fn ($q) => $q->where('status', $this->filterStatus))
-            ->when($this->filterType, fn ($q) => $q->where('feedback_type', $this->filterType))
-            ->when($this->filterPriority, fn ($q) => $q->where('priority', $this->filterPriority))
+            ->when($this->filterStatus, fn($q) => $q->where('status', $this->filterStatus))
+            ->when($this->filterType, fn($q) => $q->where('feedback_type', $this->filterType))
+            ->when($this->filterPriority, fn($q) => $q->where('priority', $this->filterPriority))
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($f) {
@@ -615,7 +627,7 @@ BODY;
             'feedback' => $feedback->toArray(),
         ];
 
-        $filename = 'feedback-filtered-'.now()->format('Y-m-d-His').'.json';
+        $filename = 'feedback-filtered-' . now()->format('Y-m-d-His') . '.json';
         $content = json_encode($exportData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 
         return response()->streamDownload(function () use ($content) {
@@ -688,10 +700,10 @@ BODY;
         $resolved = Feedback::resolved()->get();
 
         $totalEffort = $resolved->sum('resolution_effort_minutes') ?? 0;
-        $avgTimeToResolution = $resolved->count() > 0 
+        $avgTimeToResolution = $resolved->count() > 0
             ? $resolved->map(function ($f) {
                 return $f->created_at->diffInMinutes($f->resolved_at);
-            })->avg() 
+            })->avg()
             : 0;
 
         return [
@@ -699,24 +711,213 @@ BODY;
             'total_effort_hours' => round(($totalEffort ?? 0) / 60, 1),
             'avg_resolution_time_hours' => round(($avgTimeToResolution ?? 0) / 60, 1),
             'by_type' => $resolved->groupBy('resolution_type')->map->count(),
-            'by_month' => $resolved->filter(fn ($f) => $f->resolved_at)->groupBy(fn ($f) => $f->resolved_at->format('Y-m'))->map->count(),
+            'by_month' => $resolved->filter(fn($f) => $f->resolved_at)->groupBy(fn($f) => $f->resolved_at->format('Y-m'))->map->count(),
         ];
+    }
+
+    // === AI Fix Proposal Methods ===
+
+    /**
+     * Request an AI-generated fix for feedback.
+     */
+    public function requestAiFix(int $feedbackId): void
+    {
+        $feedback = Feedback::find($feedbackId);
+        if (!$feedback) {
+            $this->dispatch('notify', type: 'error', message: 'Feedback not found.');
+            return;
+        }
+
+        if (!$feedback->canGenerateAiFix()) {
+            $this->dispatch('notify', type: 'error', message: 'AI fixes are only available for bugs and suggestions.');
+            return;
+        }
+
+        // Check if there's already a pending/generating proposal
+        $existingProposal = $feedback->fixProposals()
+            ->whereIn('status', ['pending', 'generating', 'ready'])
+            ->first();
+
+        if ($existingProposal) {
+            $this->dispatch('notify', type: 'info', message: 'A fix proposal is already in progress.');
+            $this->viewFixProposal($existingProposal->id);
+            return;
+        }
+
+        // Create new proposal
+        $proposal = AiFixProposal::create([
+            'feedback_id' => $feedbackId,
+            'requested_by' => auth()->id(),
+            'status' => 'pending',
+        ]);
+
+        // Log the request
+        AiFixAuditLog::logAction($proposal, 'requested', [
+            'feedback_type' => $feedback->feedback_type,
+            'message_preview' => \Illuminate\Support\Str::limit($feedback->message, 100),
+        ]);
+
+        // Dispatch job to generate fix
+        GenerateAiFix::dispatch($proposal);
+
+        $this->dispatch('notify', type: 'info', message: 'AI fix generation started. This may take 30-60 seconds...');
+
+        // Refresh the viewing feedback if modal is open
+        if ($this->viewingFeedback && $this->viewingFeedback->id === $feedbackId) {
+            $this->viewingFeedback->refresh();
+            $this->viewingFeedback->load('latestFixProposal');
+        }
+    }
+
+    /**
+     * View an AI fix proposal.
+     */
+    public function viewFixProposal(int $proposalId): void
+    {
+        $this->viewingProposal = AiFixProposal::with(['feedback', 'requester', 'approver'])->find($proposalId);
+        if (!$this->viewingProposal) {
+            $this->dispatch('notify', type: 'error', message: 'Proposal not found.');
+            return;
+        }
+
+        // Log the view
+        AiFixAuditLog::logAction($this->viewingProposal, 'viewed');
+
+        $this->viewingProposalId = $proposalId;
+        $this->rejectionReason = '';
+        $this->showFixModal = true;
+    }
+
+    /**
+     * Close the fix proposal modal.
+     */
+    public function closeFixModal(): void
+    {
+        $this->showFixModal = false;
+        $this->viewingProposal = null;
+        $this->viewingProposalId = null;
+        $this->rejectionReason = '';
+    }
+
+    /**
+     * Approve and deploy a fix proposal.
+     */
+    public function deployFix(int $proposalId): void
+    {
+        $proposal = AiFixProposal::find($proposalId);
+        if (!$proposal || !$proposal->canDeploy()) {
+            $this->dispatch('notify', type: 'error', message: 'Proposal cannot be deployed.');
+            return;
+        }
+
+        // Mark as approved first
+        $proposal->update([
+            'status' => 'approved',
+            'approved_by' => auth()->id(),
+        ]);
+
+        // Deploy using GitDeployService
+        $gitService = app(\App\Services\GitDeployService::class);
+
+        // Check git status first
+        $status = $gitService->checkStatus();
+        if (!$status['available']) {
+            $proposal->update([
+                'status' => 'ready',
+                'error_message' => 'Git is not available or repository not initialized',
+            ]);
+            $this->dispatch('notify', type: 'error', message: 'Git is not available.');
+            return;
+        }
+
+        if ($status['uncommitted_changes']) {
+            $this->dispatch('notify', type: 'warning', message: 'Warning: There are uncommitted changes in the repository.');
+        }
+
+        // Deploy the proposal
+        $result = $gitService->deployProposal($proposal);
+
+        if ($result['success']) {
+            $proposal->update([
+                'status' => 'deployed',
+                'commit_sha' => $result['commit_sha'] ?? null,
+                'deployed_at' => now(),
+            ]);
+
+            // Log the deployment
+            AiFixAuditLog::logAction($proposal, 'deployed', [
+                'commit_sha' => $result['commit_sha'] ?? null,
+                'files_modified' => $result['files_modified'] ?? 0,
+            ]);
+
+            // Mark the feedback as resolved
+            $proposal->feedback->update([
+                'status' => 'addressed',
+                'resolved_at' => now(),
+                'resolved_by' => auth()->id(),
+                'resolution_type' => 'fix',
+                'resolution_notes' => 'Fixed via AI-generated code change',
+                'resolution_commit' => $result['commit_sha'] ?? null,
+            ]);
+
+            $this->dispatch('notify', type: 'success', message: '🚀 Fix deployed successfully! Commit: ' . Str::limit($result['commit_sha'] ?? '', 7, ''));
+        } else {
+            $proposal->update([
+                'status' => 'ready',
+                'error_message' => $result['error'] ?? 'Deployment failed',
+            ]);
+            $this->dispatch('notify', type: 'error', message: 'Deployment failed: ' . ($result['error'] ?? 'Unknown error'));
+        }
+
+        $this->closeFixModal();
+    }
+
+    /**
+     * Reject a fix proposal.
+     */
+    public function rejectFix(int $proposalId): void
+    {
+        $proposal = AiFixProposal::find($proposalId);
+        if (!$proposal) {
+            return;
+        }
+
+        $proposal->update([
+            'status' => 'rejected',
+            'rejection_reason' => $this->rejectionReason ?: null,
+        ]);
+
+        // Log the rejection
+        AiFixAuditLog::logAction($proposal, 'rejected', [
+            'reason' => $this->rejectionReason ?: null,
+        ]);
+
+        $this->dispatch('notify', type: 'info', message: 'Fix proposal rejected.');
+        $this->closeFixModal();
+    }
+
+    /**
+     * Get the count of pending AI fix proposals.
+     */
+    public function getPendingFixesCountProperty(): int
+    {
+        return AiFixProposal::where('status', 'ready')->count();
     }
 
     public function render()
     {
         $query = Feedback::query()
-            ->with(['user', 'assignee', 'resolver'])
+            ->with(['user', 'assignee', 'resolver', 'latestFixProposal'])
             ->when($this->search, function ($q) {
                 $q->where(function ($q) {
-                    $q->where('message', 'like', '%'.$this->search.'%')
-                        ->orWhere('page_url', 'like', '%'.$this->search.'%')
-                        ->orWhereHas('user', fn ($q) => $q->where('name', 'like', '%'.$this->search.'%'));
+                    $q->where('message', 'like', '%' . $this->search . '%')
+                        ->orWhere('page_url', 'like', '%' . $this->search . '%')
+                        ->orWhereHas('user', fn($q) => $q->where('name', 'like', '%' . $this->search . '%'));
                 });
             })
-            ->when($this->filterStatus, fn ($q) => $q->where('status', $this->filterStatus))
-            ->when($this->filterType, fn ($q) => $q->where('feedback_type', $this->filterType))
-            ->when($this->filterPriority, fn ($q) => $q->where('priority', $this->filterPriority))
+            ->when($this->filterStatus, fn($q) => $q->where('status', $this->filterStatus))
+            ->when($this->filterType, fn($q) => $q->where('feedback_type', $this->filterType))
+            ->when($this->filterPriority, fn($q) => $q->where('priority', $this->filterPriority))
             ->orderBy('created_at', 'desc');
 
         // Get resolved items for the resolution tab
@@ -736,6 +937,7 @@ BODY;
             'resolutionTypes' => Feedback::RESOLUTION_TYPES,
             'staffMembers' => User::orderBy('name')->get(['id', 'name']),
             'githubConfigured' => $this->githubConfigured,
+            'pendingFixesCount' => $this->pendingFixesCount,
         ]);
     }
 }

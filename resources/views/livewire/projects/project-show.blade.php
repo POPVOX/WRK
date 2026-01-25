@@ -63,17 +63,20 @@
                         {{-- Geographic Tags --}}
                         @if($project->geographicTags->isNotEmpty())
                             @foreach($project->regions as $region)
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
+                                <span
+                                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
                                     🌍 {{ $region->name }}
                                 </span>
                             @endforeach
                             @foreach($project->countries as $country)
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">
+                                <span
+                                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">
                                     🏳️ {{ $country->name }}
                                 </span>
                             @endforeach
                             @foreach($project->usStates as $state)
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                                <span
+                                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
                                     🇺🇸 {{ $state->abbreviation }}
                                 </span>
                             @endforeach
@@ -151,13 +154,13 @@
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Geographic Focus</label>
-                                    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-3 max-h-[300px] overflow-y-auto">
-                                        <livewire:components.geographic-tag-selector
-                                            :selectedRegions="$selectedRegions"
-                                            :selectedCountries="$selectedCountries"
-                                            :selectedUsStates="$selectedUsStates"
-                                        />
+                                    <label
+                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Geographic
+                                        Focus</label>
+                                    <div
+                                        class="border border-gray-200 dark:border-gray-700 rounded-lg p-3 max-h-[300px] overflow-y-auto">
+                                        <livewire:components.geographic-tag-selector :selectedRegions="$selectedRegions"
+                                            :selectedCountries="$selectedCountries" :selectedUsStates="$selectedUsStates" />
                                     </div>
                                 </div>
                                 <div class="flex justify-end gap-3 pt-4">
@@ -285,13 +288,14 @@
                     <nav class="flex -mb-px overflow-x-auto">
                         @foreach(['overview' => 'Overview', 'chat' => '✨ AI Chat', 'team' => 'Team', 'meetings' => 'Meetings', 'documents' => 'Documents', 'notes' => 'Notes', 'decisions' => 'Decisions', 'milestones' => 'Milestones', 'questions' => 'Questions'] as $tab => $label)
                             @php $count = $tabBadges[$tab] ?? null; @endphp
-                            <button
-                                wire:click="setTab('{{ $tab }}')"
+                            <button wire:click="setTab('{{ $tab }}')"
                                 class="px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap flex items-center gap-2 {{ $activeTab === $tab ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200' }}"
-                                @if($tab === 'chat' && !config('ai.enabled')) disabled title="AI is disabled by the administrator" @endif>
+                                @if($tab === 'chat' && !config('ai.enabled')) disabled
+                                title="AI is disabled by the administrator" @endif>
                                 <span>{{ $label }}</span>
                                 @if($count)
-                                    <span class="px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">{{ $count }}</span>
+                                    <span
+                                        class="px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">{{ $count }}</span>
                                 @endif
                             </button>
                         @endforeach
@@ -823,8 +827,11 @@
                             </div>
 
                             @if($showMilestoneForm)
-                                <form wire:submit="addMilestone"
+                                <form wire:submit="{{ $editingMilestoneId ? 'updateMilestone' : 'addMilestone' }}"
                                     class="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg space-y-4">
+                                    <h4 class="font-medium text-gray-900 dark:text-white">
+                                        {{ $editingMilestoneId ? 'Edit Milestone' : 'Add New Milestone' }}
+                                    </h4>
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Title
                                             *</label>
@@ -843,10 +850,13 @@
                                         <input type="date" wire:model="milestoneTargetDate"
                                             class="mt-1 w-full rounded-md border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                                     </div>
-                                    <div class="flex justify-end">
+                                    <div class="flex justify-end gap-2">
+                                        <button type="button" wire:click="toggleMilestoneForm"
+                                            class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-md hover:bg-gray-300">Cancel</button>
                                         <button type="submit"
-                                            class="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-md hover:bg-green-700 shadow-sm">Add
-                                            Milestone</button>
+                                            class="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-md hover:bg-green-700 shadow-sm">
+                                            {{ $editingMilestoneId ? 'Update Milestone' : 'Add Milestone' }}
+                                        </button>
                                     </div>
                                 </form>
                             @endif
@@ -862,13 +872,16 @@
                                                 <p class="text-sm text-gray-600 dark:text-gray-400">{{ $milestone->description }}</p>
                                             @endif
                                             <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                Target: {{ $milestone->target_date?->format('M j, Y') ?? 'No date' }}
+                                                Target: {{ $milestone->due_date?->format('M j, Y') ?? 'No date' }}
                                                 @if($milestone->is_overdue)
                                                     <span class="text-red-600 dark:text-red-400 font-medium">OVERDUE</span>
                                                 @endif
                                             </div>
                                         </div>
                                         <div class="flex gap-2">
+                                            <button wire:click="startEditMilestone({{ $milestone->id }})"
+                                                class="px-3 py-1 text-sm text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900 rounded hover:bg-blue-200"
+                                                title="Edit milestone">Edit</button>
                                             <button wire:click="completeMilestone({{ $milestone->id }})"
                                                 class="px-3 py-1 text-sm text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900 rounded hover:bg-green-200">Complete</button>
                                             <button wire:click="deleteMilestone({{ $milestone->id }})" wire:confirm="Delete?"

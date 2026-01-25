@@ -9,18 +9,20 @@
                 @if($aiWarning || $calendarWarning || $passportWarning)
                     <div class="space-y-2 mb-4">
                         @if($aiWarning)
-                            <div class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-300">
+                            <div
+                                class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-300">
                                 {{ $aiWarning }}
                             </div>
                         @endif
                         @if($calendarWarning)
-                            <div class="rounded-lg border border-blue-200 bg-blue-50 text-blue-800 px-4 py-3 text-sm dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300">
+                            <div
+                                class="rounded-lg border border-blue-200 bg-blue-50 text-blue-800 px-4 py-3 text-sm dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300">
                                 {{ $calendarWarning }}
                             </div>
                         @endif
                         @if($passportWarning)
-                            <a href="{{ route('profile.travel') }}" wire:navigate 
-                               class="block rounded-lg border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm dark:bg-red-900/30 dark:border-red-800 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors">
+                            <a href="{{ route('profile.travel') }}" wire:navigate
+                                class="block rounded-lg border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm dark:bg-red-900/30 dark:border-red-800 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors">
                                 ✈️ {{ $passportWarning }}
                             </a>
                         @endif
@@ -171,38 +173,45 @@
                             My Tasks
                         </h2>
                         <div class="flex items-center gap-2">
-                            <button wire:click="toggleAiSuggestions" 
+                            <button wire:click="toggleAiSuggestions"
                                 class="text-sm text-purple-600 dark:text-purple-400 hover:text-purple-800 flex items-center gap-1"
                                 title="AI Task Suggestions">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                 </svg>
                                 AI
                             </button>
-                            <button wire:click="toggleAddTask" 
+                            <button wire:click="toggleAddTask"
                                 class="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 flex items-center gap-1">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 4v16m8-8H4" />
                                 </svg>
                                 Add
                             </button>
                         </div>
                     </div>
 
-                    {{-- Add Task Form --}}
+                    {{-- Add/Edit Task Form --}}
                     @if($showAddTask)
-                        <div class="mb-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
-                            <form wire:submit="createTask" class="space-y-3">
+                        <div
+                            class="mb-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                            <h4 class="text-sm font-medium text-gray-900 dark:text-white mb-3">
+                                {{ $editingTaskId ? 'Edit Task' : 'Add New Task' }}
+                            </h4>
+                            <form wire:submit="{{ $editingTaskId ? 'updateTask' : 'createTask' }}" class="space-y-3">
                                 <div>
-                                    <input type="text" wire:model="newTaskTitle" placeholder="What needs to be done?" 
+                                    <input type="text" wire:model="newTaskTitle" placeholder="What needs to be done?"
                                         class="w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm focus:ring-indigo-500 focus:border-indigo-500"
                                         autofocus>
-                                    @error('newTaskTitle') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                                    @error('newTaskTitle') <span class="text-red-500 text-xs">{{ $message }}</span>
+                                    @enderror
                                 </div>
                                 <div class="grid grid-cols-2 gap-2">
-                                    <input type="date" wire:model="newTaskDueDate" 
+                                    <input type="date" wire:model="newTaskDueDate"
                                         class="rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm">
-                                    <select wire:model="newTaskPriority" 
+                                    <select wire:model="newTaskPriority"
                                         class="rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm">
                                         <option value="low">Low Priority</option>
                                         <option value="medium">Medium Priority</option>
@@ -210,7 +219,7 @@
                                     </select>
                                 </div>
                                 @if($availableProjects->isNotEmpty())
-                                    <select wire:model="newTaskProjectId" 
+                                    <select wire:model="newTaskProjectId"
                                         class="w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm">
                                         <option value="">No project (standalone task)</option>
                                         @foreach($availableProjects as $project)
@@ -221,13 +230,13 @@
                                 <textarea wire:model="newTaskDescription" placeholder="Add notes (optional)..." rows="2"
                                     class="w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"></textarea>
                                 <div class="flex justify-end gap-2">
-                                    <button type="button" wire:click="toggleAddTask" 
+                                    <button type="button" wire:click="{{ $editingTaskId ? 'cancelEditTask' : 'toggleAddTask' }}"
                                         class="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800">
                                         Cancel
                                     </button>
-                                    <button type="submit" 
+                                    <button type="submit"
                                         class="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">
-                                        Add Task
+                                        {{ $editingTaskId ? 'Update Task' : 'Add Task' }}
                                     </button>
                                 </div>
                             </form>
@@ -236,16 +245,20 @@
 
                     {{-- AI Suggestions --}}
                     @if($showAiSuggestions)
-                        <div class="mb-4 p-4 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                        <div
+                            class="mb-4 p-4 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
                             <div class="flex items-center justify-between mb-3">
-                                <h3 class="text-sm font-medium text-purple-900 dark:text-purple-300 flex items-center gap-2">
+                                <h3
+                                    class="text-sm font-medium text-purple-900 dark:text-purple-300 flex items-center gap-2">
                                     <span>✨</span> AI Suggested Tasks
                                 </h3>
-                                <button wire:click="loadAiSuggestions" 
+                                <button wire:click="loadAiSuggestions"
                                     class="text-xs text-purple-600 dark:text-purple-400 hover:text-purple-800 flex items-center gap-1"
                                     wire:loading.attr="disabled">
-                                    <svg class="w-3 h-3 {{ $isLoadingSuggestions ? 'animate-spin' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    <svg class="w-3 h-3 {{ $isLoadingSuggestions ? 'animate-spin' : '' }}" fill="none"
+                                        stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                     </svg>
                                     Refresh
                                 </button>
@@ -254,47 +267,61 @@
                             @if($isLoadingSuggestions)
                                 <div class="flex items-center justify-center py-4">
                                     <svg class="animate-spin h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24">
-                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                            stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                        </path>
                                     </svg>
-                                    <span class="ml-2 text-sm text-purple-600 dark:text-purple-400">Analyzing your work context...</span>
+                                    <span class="ml-2 text-sm text-purple-600 dark:text-purple-400">Analyzing your work
+                                        context...</span>
                                 </div>
                             @elseif(empty($aiSuggestedTasks))
-                                <p class="text-sm text-purple-600 dark:text-purple-400 text-center py-2">No suggestions available. Try refreshing!</p>
+                                <p class="text-sm text-purple-600 dark:text-purple-400 text-center py-2">No suggestions
+                                    available. Try refreshing!</p>
                             @else
                                 <div class="space-y-2">
                                     @foreach($aiSuggestedTasks as $index => $suggestion)
-                                        <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-purple-100 dark:border-purple-800">
+                                        <div
+                                            class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-purple-100 dark:border-purple-800">
                                             <div class="flex items-start justify-between gap-2">
                                                 <div class="flex-1 min-w-0">
-                                                    <p class="text-sm font-medium text-gray-900 dark:text-white">{{ $suggestion['title'] }}</p>
+                                                    <p class="text-sm font-medium text-gray-900 dark:text-white">
+                                                        {{ $suggestion['title'] }}</p>
                                                     @if(!empty($suggestion['reason']))
-                                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ $suggestion['reason'] }}</p>
+                                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                            {{ $suggestion['reason'] }}</p>
                                                     @endif
                                                     <div class="flex items-center gap-2 mt-1">
                                                         @if(!empty($suggestion['priority']))
-                                                            <span class="px-1.5 py-0.5 text-xs rounded {{ $suggestion['priority'] === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : ($suggestion['priority'] === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400') }}">
+                                                            <span
+                                                                class="px-1.5 py-0.5 text-xs rounded {{ $suggestion['priority'] === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : ($suggestion['priority'] === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400') }}">
                                                                 {{ ucfirst($suggestion['priority']) }}
                                                             </span>
                                                         @endif
                                                         @if(!empty($suggestion['suggested_due_date']))
                                                             <span class="text-xs text-gray-500 dark:text-gray-400">
-                                                                Due: {{ \Carbon\Carbon::parse($suggestion['suggested_due_date'])->format('M j') }}
+                                                                Due:
+                                                                {{ \Carbon\Carbon::parse($suggestion['suggested_due_date'])->format('M j') }}
                                                             </span>
                                                         @endif
                                                     </div>
                                                 </div>
                                                 <div class="flex items-center gap-1">
-                                                    <button wire:click="addSuggestedTask({{ $index }})" 
-                                                        class="p-1 text-green-600 hover:text-green-800 dark:text-green-400" title="Add task">
+                                                    <button wire:click="addSuggestedTask({{ $index }})"
+                                                        class="p-1 text-green-600 hover:text-green-800 dark:text-green-400"
+                                                        title="Add task">
                                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M12 4v16m8-8H4" />
                                                         </svg>
                                                     </button>
-                                                    <button wire:click="dismissSuggestion({{ $index }})" 
-                                                        class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" title="Dismiss">
+                                                    <button wire:click="dismissSuggestion({{ $index }})"
+                                                        class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                                        title="Dismiss">
                                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M6 18L18 6M6 6l12 12" />
                                                         </svg>
                                                     </button>
                                                 </div>
@@ -304,7 +331,7 @@
                                 </div>
                             @endif
 
-                            <button wire:click="toggleAiSuggestions" 
+                            <button wire:click="toggleAiSuggestions"
                                 class="mt-3 w-full text-center text-xs text-purple-600 dark:text-purple-400 hover:text-purple-800">
                                 Hide suggestions
                             </button>
@@ -351,10 +378,31 @@
                                                     class="text-gray-500 dark:text-gray-400 truncate">{{ $action->meeting->organizations->first()->name }}</span>
                                             @elseif($action->project)
                                                 <span class="text-gray-400">•</span>
-                                                <span class="text-gray-500 dark:text-gray-400 truncate">{{ $action->project->name }}</span>
+                                                <span
+                                                    class="text-gray-500 dark:text-gray-400 truncate">{{ $action->project->name }}</span>
                                             @endif
                                         </div>
                                     </div>
+
+                                    {{-- Edit Button --}}
+                                    <button wire:click="startEditTask({{ $action->id }})"
+                                        class="flex-shrink-0 p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition"
+                                        title="Edit task">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                    </button>
+
+                                    {{-- Delete Button --}}
+                                    <button wire:click="deleteTask({{ $action->id }})" wire:confirm="Delete this task?"
+                                        class="flex-shrink-0 p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition"
+                                        title="Delete task">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
                                 </div>
                             @endforeach
                         </div>
@@ -373,12 +421,55 @@
                             </svg>
                             <p class="text-gray-500 dark:text-gray-400">All caught up!</p>
                             <p class="text-sm text-gray-400 dark:text-gray-500 mt-1">No pending tasks</p>
-                            <button wire:click="toggleAddTask" 
+                            <button wire:click="toggleAddTask"
                                 class="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800">
                                 Add a task →
                             </button>
                         </div>
                     @endif
+
+                    {{-- Show/Hide Archived Tasks Toggle --}}
+                    <div class="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+                        <button wire:click="toggleArchivedTasks"
+                            class="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1">
+                            <svg class="w-3 h-3 {{ $showArchivedTasks ? 'rotate-180' : '' }} transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                            {{ $showArchivedTasks ? 'Hide' : 'Show' }} completed & deleted tasks
+                        </button>
+
+                        @if($showArchivedTasks)
+                            <div class="mt-3 space-y-2">
+                                @forelse($archivedActions as $action)
+                                    <div class="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm text-gray-500 dark:text-gray-400 line-through">
+                                                {{ $action->title ?? $action->description }}
+                                            </p>
+                                            <div class="flex items-center gap-2 mt-0.5 text-xs">
+                                                @if($action->deleted_at)
+                                                    <span class="text-red-500 dark:text-red-400">Deleted</span>
+                                                @else
+                                                    <span class="text-green-500 dark:text-green-400">Completed</span>
+                                                @endif
+                                                <span class="text-gray-400">{{ $action->updated_at->diffForHumans() }}</span>
+                                            </div>
+                                        </div>
+                                        <button wire:click="restoreTask({{ $action->id }})"
+                                            class="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                                            title="Restore task">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                @empty
+                                    <p class="text-xs text-gray-400 dark:text-gray-500 text-center py-2">No archived tasks</p>
+                                @endforelse
+                            </div>
+                        @endif
+                    </div>
                 </div>
             </div>
 
@@ -469,21 +560,43 @@
                                     ];
                                     $color = $colors[$item['severity']] ?? $colors['info'];
                                     $dotColor = $dotColors[$item['severity']] ?? $dotColors['info'];
+                                    $itemCount = $item['items']->count();
+                                    $showCount = 3;
                                 @endphp
                                 <div class="p-3 rounded-lg border {{ $color }}">
-                                    <div class="flex items-center gap-2 text-sm font-medium">
-                                        <span
-                                            class="w-2 h-2 {{ $dotColor }} rounded-full {{ $item['severity'] === 'overdue' ? 'animate-pulse' : '' }}"></span>
-                                        {{ $item['title'] }}
+                                    <div class="flex items-center justify-between text-sm font-medium">
+                                        <div class="flex items-center gap-2">
+                                            <span
+                                                class="w-2 h-2 {{ $dotColor }} rounded-full {{ $item['severity'] === 'overdue' ? 'animate-pulse' : '' }}"></span>
+                                            {{ $item['title'] }}
+                                        </div>
+                                        @if($itemCount > $showCount)
+                                            <span class="text-xs opacity-75">{{ $itemCount }} total</span>
+                                        @endif
                                     </div>
                                     @if($item['items']->isNotEmpty())
                                         <div class="mt-2 space-y-1">
-                                            @foreach($item['items']->take(2) as $subitem)
+                                            @foreach($item['items']->take($showCount) as $subitem)
                                                 <a href="{{ $subitem['url'] }}" wire:navigate
-                                                    class="block text-sm hover:underline truncate">
+                                                    class="block text-sm hover:underline truncate cursor-pointer">
                                                     → {{ $subitem['label'] }}
                                                 </a>
                                             @endforeach
+                                            @if($itemCount > $showCount)
+                                                @php
+                                                    // Determine the "see all" link based on severity type
+                                                    $seeAllUrl = match ($item['severity']) {
+                                                        'overdue' => route('dashboard') . '#tasks',
+                                                        'urgent' => route('meetings.index'),
+                                                        'info' => route('grants.index'),
+                                                        default => '#',
+                                                    };
+                                                @endphp
+                                                <a href="{{ $seeAllUrl }}" wire:navigate
+                                                    class="block text-xs mt-2 hover:underline opacity-75 cursor-pointer">
+                                                    See all {{ $itemCount }} items →
+                                                </a>
+                                            @endif
                                         </div>
                                     @endif
                                 </div>
@@ -596,56 +709,56 @@
                 @if($recentCoverage->isNotEmpty())
                     <div class="grid md:grid-cols-2 gap-4">
                         @foreach($recentCoverage->take(4) as $clip)
-                                            <a href="{{ $clip->url }}" target="_blank" rel="noopener"
-                                                class="flex gap-4 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition group">
-                                                {{-- Thumbnail --}}
-                                                @if($clip->image_url)
-                                                    <div class="w-20 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100 dark:bg-gray-700">
-                                                        <img src="{{ $clip->image_url }}" alt="" class="w-full h-full object-cover">
-                                                    </div>
-                                                @endif
+                            <a href="{{ $clip->url }}" target="_blank" rel="noopener"
+                                class="flex gap-4 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition group">
+                                {{-- Thumbnail --}}
+                                @if($clip->image_url)
+                                    <div class="w-20 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100 dark:bg-gray-700">
+                                        <img src="{{ $clip->image_url }}" alt="" class="w-full h-full object-cover">
+                                    </div>
+                                @endif
 
-                                                <div class="flex-1 min-w-0">
-                                                    {{-- Outlet & Date --}}
-                                                    <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
-                                                        <span
-                                                            class="font-medium text-gray-700 dark:text-gray-300">{{ $clip->outlet_display_name }}</span>
-                                                        <span class="text-gray-300 dark:text-gray-600">•</span>
-                                                        <span>{{ $clip->published_at?->format('M j') }}</span>
-                                                    </div>
+                                <div class="flex-1 min-w-0">
+                                    {{-- Outlet & Date --}}
+                                    <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                        <span
+                                            class="font-medium text-gray-700 dark:text-gray-300">{{ $clip->outlet_display_name }}</span>
+                                        <span class="text-gray-300 dark:text-gray-600">•</span>
+                                        <span>{{ $clip->published_at?->format('M j') }}</span>
+                                    </div>
 
-                                                    {{-- Title --}}
-                                                    <p
-                                                        class="text-sm font-medium text-gray-900 dark:text-white group-hover:text-indigo-600 line-clamp-2">
-                                                        {{ $clip->title }}
-                                                    </p>
+                                    {{-- Title --}}
+                                    <p
+                                        class="text-sm font-medium text-gray-900 dark:text-white group-hover:text-indigo-600 line-clamp-2">
+                                        {{ $clip->title }}
+                                    </p>
 
-                                                    {{-- Meta --}}
-                                                    <div class="flex items-center gap-2 mt-1">
-                                                        @if($clip->staffMentioned->isNotEmpty())
-                                                            <span class="text-xs text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
-                                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                                        d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-                                                                </svg>
-                                                                {{ $clip->staffMentioned->first()->name }} quoted
-                                                            </span>
-                                                        @endif
+                                    {{-- Meta --}}
+                                    <div class="flex items-center gap-2 mt-1">
+                                        @if($clip->staffMentioned->isNotEmpty())
+                                            <span class="text-xs text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                                                </svg>
+                                                {{ $clip->staffMentioned->first()->name }} quoted
+                                            </span>
+                                        @endif
 
-                                                        @php
-                                                            $sentimentColors = [
-                                                                'positive' => 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300',
-                                                                'neutral' => 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
-                                                                'negative' => 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
-                                                            ];
-                                                        @endphp
-                             <span
-                                                            class="px-1.5 py-0.5 text-xs rounded {{ $sentimentColors[$clip->sentiment] ?? 'bg-gray-100 text-gray-600' }}">
-                                                            {{ ucfirst($clip->sentiment ?? 'neutral') }}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </a>
+                                        @php
+                                            $sentimentColors = [
+                                                'positive' => 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300',
+                                                'neutral' => 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
+                                                'negative' => 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
+                                            ];
+                                        @endphp
+                                        <span
+                                            class="px-1.5 py-0.5 text-xs rounded {{ $sentimentColors[$clip->sentiment] ?? 'bg-gray-100 text-gray-600' }}">
+                                            {{ ucfirst($clip->sentiment ?? 'neutral') }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </a>
                         @endforeach
                     </div>
                 @else
@@ -671,17 +784,19 @@
                 <div class="lg:col-span-1">
                     <livewire:accomplishments.my-wins-widget />
                 </div>
-                
+
                 {{-- Quick Links for Management (Admin only) --}}
                 @if(auth()->user()->isAdmin())
-                    <div class="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+                    <div
+                        class="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
                         <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                             📊 Team Management
                         </h2>
                         <div class="grid sm:grid-cols-3 gap-4">
                             <a href="{{ route('accomplishments.team') }}" wire:navigate
                                 class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                                <div class="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/40 rounded-lg flex items-center justify-center text-lg">
+                                <div
+                                    class="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/40 rounded-lg flex items-center justify-center text-lg">
                                     📊
                                 </div>
                                 <div>
@@ -691,7 +806,8 @@
                             </a>
                             <a href="{{ route('admin.staff') }}" wire:navigate
                                 class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                                <div class="w-10 h-10 bg-blue-100 dark:bg-blue-900/40 rounded-lg flex items-center justify-center text-lg">
+                                <div
+                                    class="w-10 h-10 bg-blue-100 dark:bg-blue-900/40 rounded-lg flex items-center justify-center text-lg">
                                     👥
                                 </div>
                                 <div>
@@ -701,7 +817,8 @@
                             </a>
                             <a href="{{ route('admin.feedback') }}" wire:navigate
                                 class="flex items-center gap-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                                <div class="w-10 h-10 bg-purple-100 dark:bg-purple-900/40 rounded-lg flex items-center justify-center text-lg">
+                                <div
+                                    class="w-10 h-10 bg-purple-100 dark:bg-purple-900/40 rounded-lg flex items-center justify-center text-lg">
                                     💬
                                 </div>
                                 <div>

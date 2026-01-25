@@ -409,13 +409,22 @@
                             <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Notes taken during or after the
                                 meeting. Use voice dictation or type directly.</p>
 
-                            {{-- Recording Indicator --}}
+                            {{-- Recording Indicator with Stop Button --}}
                             <div x-show="isRecording" x-cloak
                                 class="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                                <div class="flex items-center gap-2">
-                                    <span class="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
-                                    <span class="text-sm font-medium text-red-700 dark:text-red-400">Recording...</span>
-                                    <span class="text-xs text-red-600 dark:text-red-500">Speak clearly. Click Stop when done.</span>
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
+                                        <span class="text-sm font-medium text-red-700 dark:text-red-400">Recording...</span>
+                                        <span class="text-xs text-red-600 dark:text-red-500">Speak clearly into your microphone.</span>
+                                    </div>
+                                    <button type="button" @click="stopRecording()"
+                                        class="px-3 py-1.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm flex items-center gap-1.5 transition">
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <rect x="5" y="5" width="10" height="10" rx="1" />
+                                        </svg>
+                                        Stop
+                                    </button>
                                 </div>
                                 <div x-show="interimTranscript" class="mt-2 text-sm text-red-600 dark:text-red-400 italic">
                                     <span x-text="interimTranscript"></span>
@@ -516,7 +525,7 @@
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Follow-up Actions</h3>
 
                             <!-- Add Action Form -->
-                            <div class="mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                            <form wire:submit.prevent="addAction" class="mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                                     <div class="md:col-span-2">
                                         <input type="text" wire:model="newActionDescription"
@@ -534,13 +543,13 @@
                                             <option value="medium">Medium</option>
                                             <option value="high">High</option>
                                         </select>
-                                        <button wire:click="addAction"
+                                        <button type="submit"
                                             class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
                                             Add
                                         </button>
                                     </div>
                                 </div>
-                            </div>
+                            </form>
 
                             <!-- Actions List -->
                             @if($meeting->actions->isEmpty())

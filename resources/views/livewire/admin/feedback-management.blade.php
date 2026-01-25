@@ -781,6 +781,101 @@
                             </button>
                         @endif
 
+                        {{-- AI Code Fix Assistant --}}
+                        @if($viewingFeedback->canGenerateAiFix())
+                            <div class="mb-4 p-4 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                                <div class="flex items-center gap-2 mb-3">
+                                    <svg class="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                                    </svg>
+                                    <span class="text-sm font-medium text-purple-900 dark:text-purple-300">AI Code Fix Assistant</span>
+                                </div>
+
+                                @if($viewingFeedback->latestFixProposal)
+                                    @php $proposal = $viewingFeedback->latestFixProposal; @endphp
+                                    <div class="flex items-center gap-3">
+                                        @switch($proposal->status)
+                                            @case('pending')
+                                            @case('generating')
+                                                <div class="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                                                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                    <span class="text-sm">Generating fix proposal...</span>
+                                                </div>
+                                                @break
+                                            @case('ready')
+                                                <button 
+                                                    wire:click="viewFixProposal({{ $proposal->id }})"
+                                                    class="px-3 py-1.5 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                                                >
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    </svg>
+                                                    View Proposed Fix
+                                                </button>
+                                                @break
+                                            @case('approved')
+                                            @case('deployed')
+                                                <span class="flex items-center gap-2 text-green-700 dark:text-green-400 text-sm">
+                                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                                                    </svg>
+                                                    Fix {{ $proposal->status === 'deployed' ? 'deployed' : 'approved' }}
+                                                    @if($proposal->commit_sha)
+                                                        <code class="text-xs bg-gray-200 dark:bg-gray-700 px-1 rounded">{{ Str::limit($proposal->commit_sha, 7, '') }}</code>
+                                                    @endif
+                                                </span>
+                                                @break
+                                            @case('rejected')
+                                                <span class="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
+                                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                                    </svg>
+                                                    Proposal rejected
+                                                </span>
+                                                <button 
+                                                    wire:click="requestAiFix({{ $viewingFeedback->id }})"
+                                                    class="text-xs text-purple-600 dark:text-purple-400 hover:underline"
+                                                >
+                                                    Request New Fix
+                                                </button>
+                                                @break
+                                            @case('failed')
+                                                <span class="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
+                                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                                    </svg>
+                                                    Generation failed
+                                                </span>
+                                                <button 
+                                                    wire:click="requestAiFix({{ $viewingFeedback->id }})"
+                                                    class="text-xs text-purple-600 dark:text-purple-400 hover:underline"
+                                                >
+                                                    Retry
+                                                </button>
+                                                @break
+                                        @endswitch
+                                    </div>
+                                @else
+                                    <p class="text-sm text-purple-700 dark:text-purple-400 mb-3">
+                                        Request an AI-generated code fix for this {{ $viewingFeedback->feedback_type }}.
+                                    </p>
+                                    <button 
+                                        wire:click="requestAiFix({{ $viewingFeedback->id }})"
+                                        class="px-3 py-1.5 text-sm font-medium bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg>
+                                        Generate AI Fix
+                                    </button>
+                                @endif
+                            </div>
+                        @endif
+
                         {{-- Admin Controls --}}
                         <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
                             <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Admin Controls</p>
@@ -974,6 +1069,163 @@
                         <button wire:click="closeInsightsModal" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg">
                             Close
                         </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- AI Fix Review Modal --}}
+    @if($showFixModal && $viewingProposal)
+        <div class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" wire:click="closeFixModal"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+                <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gradient-to-r from-purple-600 to-pink-600">
+                        <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                            </svg>
+                            AI Fix Proposal
+                        </h3>
+                        <button wire:click="closeFixModal" class="text-white/80 hover:text-white">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="px-6 py-4 max-h-[70vh] overflow-y-auto">
+                        {{-- Status Badge --}}
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
+                                @switch($viewingProposal->status)
+                                    @case('pending')
+                                    @case('generating')
+                                        bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300
+                                        @break
+                                    @case('ready')
+                                        bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300
+                                        @break
+                                    @case('approved')
+                                    @case('deployed')
+                                        bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300
+                                        @break
+                                    @default
+                                        bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300
+                                @endswitch
+                            ">
+                                {{ $viewingProposal->status_label }}
+                            </span>
+                            @if($viewingProposal->estimated_complexity)
+                                <span class="text-sm text-gray-500 dark:text-gray-400">
+                                    Complexity: {{ $viewingProposal->complexity_label }} ({{ $viewingProposal->estimated_complexity }}/10)
+                                </span>
+                            @endif
+                        </div>
+
+                        {{-- Problem Analysis --}}
+                        @if($viewingProposal->problem_analysis)
+                            <div class="mb-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                                <h4 class="font-semibold text-purple-900 dark:text-purple-300 mb-2">Problem Analysis</h4>
+                                <p class="text-purple-800 dark:text-purple-300">{{ $viewingProposal->problem_analysis }}</p>
+                            </div>
+                        @endif
+
+                        {{-- Affected Files --}}
+                        @if($viewingProposal->affected_files && count($viewingProposal->affected_files) > 0)
+                            <div class="mb-4">
+                                <h4 class="font-semibold text-gray-900 dark:text-white mb-2">Affected Files ({{ count($viewingProposal->affected_files) }})</h4>
+                                <div class="flex flex-wrap gap-2">
+                                    @foreach($viewingProposal->affected_files as $file)
+                                        <span class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded font-mono">
+                                            {{ $file }}
+                                        </span>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+
+                        {{-- Implementation Notes --}}
+                        @if($viewingProposal->implementation_notes)
+                            <div class="mb-4">
+                                <h4 class="font-semibold text-gray-900 dark:text-white mb-2">Suggested Approach</h4>
+                                <p class="text-gray-700 dark:text-gray-300">{{ $viewingProposal->implementation_notes }}</p>
+                            </div>
+                        @endif
+
+                        {{-- Diff Preview --}}
+                        @if($viewingProposal->diff_preview)
+                            <div class="mb-4">
+                                <h4 class="font-semibold text-gray-900 dark:text-white mb-2">Code Changes</h4>
+                                <div class="bg-gray-900 text-gray-100 p-4 rounded-lg font-mono text-sm overflow-x-auto max-h-96 overflow-y-auto">
+                                    <pre class="whitespace-pre-wrap">{!! $viewingProposal->formatted_diff !!}</pre>
+                                </div>
+                            </div>
+                        @else
+                            <div class="mb-4 p-8 bg-gray-100 dark:bg-gray-700 rounded-lg text-center">
+                                <svg class="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <p class="text-gray-500 dark:text-gray-400">No code changes generated yet</p>
+                            </div>
+                        @endif
+
+                        {{-- Error Message --}}
+                        @if($viewingProposal->error_message)
+                            <div class="mb-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                                <h4 class="font-semibold text-red-900 dark:text-red-300 mb-1">Error</h4>
+                                <p class="text-red-700 dark:text-red-400 text-sm">{{ $viewingProposal->error_message }}</p>
+                            </div>
+                        @endif
+
+                        {{-- Rejection Reason Input --}}
+                        @if($viewingProposal->canDeploy())
+                            <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Rejection Reason (optional, only needed if rejecting)
+                                </label>
+                                <textarea
+                                    wire:model="rejectionReason"
+                                    rows="2"
+                                    class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm"
+                                    placeholder="Why are you rejecting this fix..."
+                                ></textarea>
+                            </div>
+                        @endif
+                    </div>
+
+                    <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-700/50">
+                        <div class="text-sm text-gray-500 dark:text-gray-400">
+                            Requested by {{ $viewingProposal->requester?->name ?? 'Unknown' }}
+                            · {{ $viewingProposal->created_at->diffForHumans() }}
+                        </div>
+                        <div class="flex gap-3">
+                            <button 
+                                wire:click="closeFixModal" 
+                                class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                            >
+                                Close
+                            </button>
+                            @if($viewingProposal->canDeploy())
+                                <button 
+                                    wire:click="rejectFix({{ $viewingProposal->id }})"
+                                    class="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                >
+                                    Reject
+                                </button>
+                                <button 
+                                    wire:click="deployFix({{ $viewingProposal->id }})"
+                                    class="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg transition-colors flex items-center gap-2"
+                                >
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Approve & Deploy
+                                </button>
+                            @endif
+                        </div>
                     </div>
                 </div>
             </div>

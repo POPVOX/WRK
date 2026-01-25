@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Feedback extends Model
 {
@@ -106,6 +108,30 @@ class Feedback extends Model
     public function resolver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'resolved_by');
+    }
+
+    /**
+     * Get all AI fix proposals for this feedback.
+     */
+    public function fixProposals(): HasMany
+    {
+        return $this->hasMany(AiFixProposal::class);
+    }
+
+    /**
+     * Get the latest AI fix proposal for this feedback.
+     */
+    public function latestFixProposal(): HasOne
+    {
+        return $this->hasOne(AiFixProposal::class)->latestOfMany();
+    }
+
+    /**
+     * Check if this feedback can have an AI fix generated.
+     */
+    public function canGenerateAiFix(): bool
+    {
+        return in_array($this->feedback_type, ['bug', 'suggestion']);
     }
 
     /**

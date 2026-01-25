@@ -57,6 +57,8 @@ class Dashboard extends Component
 
     public ?int $newTaskProjectId = null;
 
+    public ?int $editingTaskId = null;
+
     // AI Task Suggestions
     public bool $showAiSuggestions = false;
 
@@ -67,12 +69,15 @@ class Dashboard extends Component
     // Timezone prompt
     public bool $showTimezonePrompt = false;
 
+    // Archived tasks toggle
+    public bool $showArchivedTasks = false;
+
     public function mount(GoogleCalendarService $calendarService)
     {
         $this->user = Auth::user();
 
         // Redirect to onboarding if profile not completed
-        if (! $this->user->profile_completed_at) {
+        if (!$this->user->profile_completed_at) {
             return redirect()->route('onboarding');
         }
 
@@ -81,7 +86,7 @@ class Dashboard extends Component
         $this->lastSyncAt = $this->user->calendar_import_date?->diffForHumans();
 
         // Health banners
-        if (! config('ai.enabled')) {
+        if (!config('ai.enabled')) {
             $this->aiWarning = 'AI features are disabled by the administrator.';
         } else {
             $lastError = Cache::get('metrics:ai:last_error_at');
@@ -90,7 +95,7 @@ class Dashboard extends Component
             }
         }
 
-        if (! $this->isCalendarConnected) {
+        if (!$this->isCalendarConnected) {
             $this->calendarWarning = 'Calendar is not connected. Connect to keep meetings in sync.';
         } elseif ($this->user->calendar_import_date && $this->user->calendar_import_date->lt(now()->subDays(7))) {
             $this->calendarWarning = 'Calendar has not synced in over a week.';
@@ -102,13 +107,13 @@ class Dashboard extends Component
             if ($travelProfile->isPassportExpired()) {
                 $this->passportWarning = 'Your passport has expired. Update your travel profile.';
             } elseif ($travelProfile->isPassportExpiringSoon(6)) {
-                $this->passportWarning = 'Your passport expires '.$travelProfile->passport_expiration->diffForHumans().'. Consider renewing soon.';
+                $this->passportWarning = 'Your passport expires ' . $travelProfile->passport_expiration->diffForHumans() . '. Consider renewing soon.';
             }
         }
 
         // Check if we should prompt for timezone (no timezone set, or not confirmed in 7 days)
-        $shouldPromptTimezone = ! $this->user->timezone
-            || ! $this->user->timezone_confirmed_at
+        $shouldPromptTimezone = !$this->user->timezone
+            || !$this->user->timezone_confirmed_at
             || $this->user->timezone_confirmed_at->lt(now()->subDays(7));
 
         if ($shouldPromptTimezone) {
@@ -156,14 +161,14 @@ class Dashboard extends Component
         $meetingsToday = Meeting::whereDate('meeting_date', $today)
             ->where(function ($q) use ($userId) {
                 $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $userId));
+                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
             })
             ->count();
 
         $meetingsTomorrow = Meeting::whereDate('meeting_date', $today->copy()->addDay())
             ->where(function ($q) use ($userId) {
                 $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $userId));
+                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
             })
             ->count();
 
@@ -178,7 +183,7 @@ class Dashboard extends Component
             ->where(function ($query) use ($userId, $firstName) {
                 $query->where('created_by', $userId)
                     ->orWhere('lead', 'like', "%{$firstName}%")
-                    ->orWhereHas('staff', fn ($q) => $q->where('user_id', $userId));
+                    ->orWhereHas('staff', fn($q) => $q->where('user_id', $userId));
             })
             ->count();
 
@@ -209,7 +214,7 @@ class Dashboard extends Component
             ->whereDate('meeting_date', today())
             ->where(function ($q) use ($userId) {
                 $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $userId));
+                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
             })
             ->orderBy('meeting_date')
             ->get();
@@ -225,7 +230,7 @@ class Dashboard extends Component
         return Meeting::whereDate('meeting_date', today()->addDay())
             ->where(function ($q) use ($userId) {
                 $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $userId));
+                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
             })
             ->count();
     }
@@ -242,7 +247,7 @@ class Dashboard extends Component
             ->where('meeting_date', '<=', today()->addWeek())
             ->where(function ($q) use ($userId) {
                 $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $userId));
+                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
             })
             ->orderBy('meeting_date')
             ->limit(10)
@@ -280,11 +285,11 @@ class Dashboard extends Component
             ->where(function ($query) use ($userId, $firstName) {
                 $query->where('created_by', $userId)
                     ->orWhere('lead', 'like', "%{$firstName}%")
-                    ->orWhereHas('staff', fn ($q) => $q->where('user_id', $userId));
+                    ->orWhereHas('staff', fn($q) => $q->where('user_id', $userId));
             })
             ->withCount([
                 'milestones as milestones_total_count',
-                'milestones as milestones_completed_count' => fn ($q) => $q->where('status', 'completed'),
+                'milestones as milestones_completed_count' => fn($q) => $q->where('status', 'completed'),
                 'openQuestions',
             ])
             ->orderBy('updated_at', 'desc')
@@ -319,8 +324,8 @@ class Dashboard extends Component
         if ($overdueActions->isNotEmpty()) {
             $items->push([
                 'severity' => 'overdue',
-                'title' => $overdueActions->count().' task'.($overdueActions->count() > 1 ? 's' : '').' overdue',
-                'items' => $overdueActions->map(fn ($a) => [
+                'title' => $overdueActions->count() . ' task' . ($overdueActions->count() > 1 ? 's' : '') . ' overdue',
+                'items' => $overdueActions->map(fn($a) => [
                     'label' => $a->description,
                     'url' => $a->meeting ? route('meetings.show', $a->meeting) : '#',
                 ]),
@@ -339,9 +344,9 @@ class Dashboard extends Component
         if ($needsNotes->isNotEmpty()) {
             $items->push([
                 'severity' => 'urgent',
-                'title' => $needsNotes->count().' meeting'.($needsNotes->count() > 1 ? 's' : '').' need notes',
-                'items' => $needsNotes->map(fn ($m) => [
-                    'label' => ($m->title ?: $m->organizations->pluck('name')->first() ?: 'Meeting').' ('.$m->meeting_date->format('M j').')',
+                'title' => $needsNotes->count() . ' meeting' . ($needsNotes->count() > 1 ? 's' : '') . ' need notes',
+                'items' => $needsNotes->map(fn($m) => [
+                    'label' => ($m->title ?: $m->organizations->pluck('name')->first() ?: 'Meeting') . ' (' . $m->meeting_date->format('M j') . ')',
                     'url' => route('meetings.show', $m),
                 ]),
             ]);
@@ -359,16 +364,16 @@ class Dashboard extends Component
             if ($grantsEnding->isNotEmpty()) {
                 $items->push([
                     'severity' => 'info',
-                    'title' => $grantsEnding->count().' grant'.($grantsEnding->count() > 1 ? 's' : '').' ending soon',
-                    'items' => $grantsEnding->map(fn ($g) => [
-                        'label' => $g->name.' ('.$g->end_date->format('M j').')',
+                    'title' => $grantsEnding->count() . ' grant' . ($grantsEnding->count() > 1 ? 's' : '') . ' ending soon',
+                    'items' => $grantsEnding->map(fn($g) => [
+                        'label' => $g->name . ' (' . $g->end_date->format('M j') . ')',
                         'url' => route('grants.show', $g),
                     ]),
                 ]);
             }
         }
 
-        return $items->sortBy(fn ($i) => $i['severity'] === 'overdue' ? 0 : ($i['severity'] === 'urgent' ? 1 : 2));
+        return $items->sortBy(fn($i) => $i['severity'] === 'overdue' ? 0 : ($i['severity'] === 'urgent' ? 1 : 2));
     }
 
     /**
@@ -376,7 +381,7 @@ class Dashboard extends Component
      */
     public function getFundingAlertsProperty()
     {
-        if (! $this->user->isAdmin()) {
+        if (!$this->user->isAdmin()) {
             return collect();
         }
 
@@ -424,11 +429,62 @@ class Dashboard extends Component
     }
 
     /**
+     * Soft delete a task
+     */
+    public function deleteTask(int $actionId): void
+    {
+        $action = Action::find($actionId);
+
+        if ($action && $action->assigned_to === $this->user->id) {
+            $action->delete();
+            $this->dispatch('notify', type: 'success', message: 'Task deleted. You can restore it from the archived tasks.');
+        }
+    }
+
+    /**
+     * Restore a soft-deleted or completed task
+     */
+    public function restoreTask(int $actionId): void
+    {
+        $action = Action::withTrashed()->find($actionId);
+
+        if ($action && $action->assigned_to === $this->user->id) {
+            $action->restore();
+            $action->update(['status' => 'pending']);
+            $this->dispatch('notify', type: 'success', message: 'Task restored!');
+        }
+    }
+
+    /**
+     * Toggle archived tasks visibility
+     */
+    public function toggleArchivedTasks(): void
+    {
+        $this->showArchivedTasks = !$this->showArchivedTasks;
+    }
+
+    /**
+     * Get archived (completed or deleted) tasks
+     */
+    public function getArchivedActionsProperty()
+    {
+        return Action::withTrashed()
+            ->where('assigned_to', $this->user->id)
+            ->where(function ($q) {
+                $q->where('status', 'completed')
+                    ->orWhereNotNull('deleted_at');
+            })
+            ->orderBy('updated_at', 'desc')
+            ->limit(10)
+            ->get();
+    }
+
+    /**
      * Sync calendar
      */
     public function syncCalendar()
     {
-        if (! $this->isCalendarConnected) {
+        if (!$this->isCalendarConnected) {
             return;
         }
 
@@ -439,17 +495,17 @@ class Dashboard extends Component
             SyncCalendarEvents::dispatchSync($this->user);
         } catch (\Exception $e) {
             // Log but don't throw - we still want to update UI
-            \Log::warning('Calendar sync from dashboard failed: '.$e->getMessage());
+            \Log::warning('Calendar sync from dashboard failed: ' . $e->getMessage());
         }
 
         // Refresh user data from database to get updated calendar_import_date
         $this->user->refresh();
-        
+
         // Update display from actual database value
-        $this->lastSyncAt = $this->user->calendar_import_date 
-            ? $this->user->calendar_import_date->diffForHumans() 
+        $this->lastSyncAt = $this->user->calendar_import_date
+            ? $this->user->calendar_import_date->diffForHumans()
             : 'just now';
-        
+
         // Clear the calendar warning since we just synced
         $this->calendarWarning = null;
 
@@ -465,7 +521,7 @@ class Dashboard extends Component
             return;
         }
 
-        if (! config('ai.enabled')) {
+        if (!config('ai.enabled')) {
             $this->chatHistory[] = [
                 'role' => 'assistant',
                 'content' => 'AI features are disabled by the administrator.',
@@ -476,7 +532,7 @@ class Dashboard extends Component
         }
 
         $chatLimit = config('ai.limits.chat', ['max' => 30, 'decay_seconds' => 60]);
-        $chatKey = 'ai-dashboard-chat:'.($this->user?->id ?? 'guest');
+        $chatKey = 'ai-dashboard-chat:' . ($this->user?->id ?? 'guest');
         if (RateLimiter::tooManyAttempts($chatKey, $chatLimit['max'])) {
             $this->chatHistory[] = [
                 'role' => 'assistant',
@@ -524,8 +580,8 @@ class Dashboard extends Component
 
     public function toggleAddTask(): void
     {
-        $this->showAddTask = ! $this->showAddTask;
-        if (! $this->showAddTask) {
+        $this->showAddTask = !$this->showAddTask;
+        if (!$this->showAddTask) {
             $this->resetTaskForm();
         }
     }
@@ -537,6 +593,7 @@ class Dashboard extends Component
         $this->newTaskDueDate = null;
         $this->newTaskPriority = 'medium';
         $this->newTaskProjectId = null;
+        $this->editingTaskId = null;
     }
 
     public function createTask(): void
@@ -565,9 +622,61 @@ class Dashboard extends Component
         $this->dispatch('notify', type: 'success', message: 'Task created successfully!');
     }
 
+    public function startEditTask(int $taskId): void
+    {
+        $task = Action::where('id', $taskId)
+            ->where('assigned_to', $this->user->id)
+            ->first();
+
+        if ($task) {
+            $this->editingTaskId = $taskId;
+            $this->newTaskTitle = $task->title ?? $task->description;
+            $this->newTaskDescription = $task->description ?? '';
+            $this->newTaskDueDate = $task->due_date?->format('Y-m-d');
+            $this->newTaskPriority = $task->priority ?? 'medium';
+            $this->newTaskProjectId = $task->project_id;
+            $this->showAddTask = true;
+        }
+    }
+
+    public function updateTask(): void
+    {
+        $this->validate([
+            'newTaskTitle' => 'required|string|max:255',
+            'newTaskDescription' => 'nullable|string|max:1000',
+            'newTaskDueDate' => 'nullable|date',
+            'newTaskPriority' => 'required|in:high,medium,low',
+            'newTaskProjectId' => 'nullable|exists:projects,id',
+        ]);
+
+        $task = Action::where('id', $this->editingTaskId)
+            ->where('assigned_to', $this->user->id)
+            ->first();
+
+        if ($task) {
+            $task->update([
+                'title' => $this->newTaskTitle,
+                'description' => $this->newTaskDescription ?: $this->newTaskTitle,
+                'due_date' => $this->newTaskDueDate,
+                'priority' => $this->newTaskPriority,
+                'project_id' => $this->newTaskProjectId,
+            ]);
+        }
+
+        $this->resetTaskForm();
+        $this->showAddTask = false;
+        $this->dispatch('notify', type: 'success', message: 'Task updated successfully!');
+    }
+
+    public function cancelEditTask(): void
+    {
+        $this->resetTaskForm();
+        $this->showAddTask = false;
+    }
+
     public function toggleAiSuggestions(): void
     {
-        $this->showAiSuggestions = ! $this->showAiSuggestions;
+        $this->showAiSuggestions = !$this->showAiSuggestions;
 
         if ($this->showAiSuggestions && empty($this->aiSuggestedTasks)) {
             $this->loadAiSuggestions();
@@ -576,7 +685,7 @@ class Dashboard extends Component
 
     public function loadAiSuggestions(): void
     {
-        if (! config('ai.enabled')) {
+        if (!config('ai.enabled')) {
             $this->aiSuggestedTasks = [];
 
             return;
@@ -615,7 +724,7 @@ class Dashboard extends Component
                 $this->aiSuggestedTasks = [];
             }
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('AI Task Suggestions Error: '.$e->getMessage());
+            \Illuminate\Support\Facades\Log::error('AI Task Suggestions Error: ' . $e->getMessage());
             $this->aiSuggestedTasks = [];
         }
 
@@ -640,7 +749,7 @@ class Dashboard extends Component
             ->whereBetween('meeting_date', [now(), now()->addWeek()])
             ->where(function ($q) {
                 $q->where('user_id', $this->user->id)
-                    ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', $this->user->id));
+                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $this->user->id));
             })
             ->limit(5)
             ->get();
@@ -677,7 +786,7 @@ class Dashboard extends Component
 
     public function addSuggestedTask(int $index): void
     {
-        if (! isset($this->aiSuggestedTasks[$index])) {
+        if (!isset($this->aiSuggestedTasks[$index])) {
             return;
         }
 
@@ -718,7 +827,7 @@ class Dashboard extends Component
             ->where(function ($query) use ($userId, $firstName) {
                 $query->where('created_by', $userId)
                     ->orWhere('lead', 'like', "%{$firstName}%")
-                    ->orWhereHas('staff', fn ($q) => $q->where('user_id', $userId));
+                    ->orWhereHas('staff', fn($q) => $q->where('user_id', $userId));
             })
             ->orderBy('name')
             ->get(['id', 'name']);
@@ -739,6 +848,7 @@ class Dashboard extends Component
             'fundingAlerts' => $this->fundingAlerts,
             'recentCoverage' => $this->recentCoverage,
             'availableProjects' => $this->availableProjects,
+            'archivedActions' => $this->showArchivedTasks ? $this->archivedActions : collect(),
         ]);
     }
 }

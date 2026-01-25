@@ -1,18 +1,34 @@
 @php
-    $colors = [
-        'update' => 'blue',
-        'decision' => 'green',
-        'blocker' => 'red',
-        'general' => 'gray',
+    $colorClasses = [
+        'update' => [
+            'bg' => 'bg-blue-50 dark:bg-blue-900/20',
+            'border' => 'border-blue-500',
+            'text' => 'text-blue-700 dark:text-blue-300',
+        ],
+        'decision' => [
+            'bg' => 'bg-green-50 dark:bg-green-900/20',
+            'border' => 'border-green-500',
+            'text' => 'text-green-700 dark:text-green-300',
+        ],
+        'blocker' => [
+            'bg' => 'bg-red-50 dark:bg-red-900/20',
+            'border' => 'border-red-500',
+            'text' => 'text-red-700 dark:text-red-300',
+        ],
+        'general' => [
+            'bg' => 'bg-gray-50 dark:bg-gray-800',
+            'border' => 'border-gray-500',
+            'text' => 'text-gray-700 dark:text-gray-300',
+        ],
     ];
-    $color = $colors[$note->note_type] ?? 'gray';
+    $classes = $colorClasses[$note->note_type] ?? $colorClasses['general'];
 @endphp
 
-<div class="p-4 bg-{{ $color }}-50 dark:bg-{{ $color }}-900/20 rounded-lg border-l-4 border-{{ $color }}-500">
+<div class="p-4 {{ $classes['bg'] }} rounded-lg border-l-4 {{ $classes['border'] }}">
     <div class="flex justify-between items-start">
         <div class="flex-1">
             <div class="flex items-center gap-2 mb-1">
-                <span class="text-xs font-medium text-{{ $color }}-700 dark:text-{{ $color }}-300 uppercase">
+                <span class="text-xs font-medium {{ $classes['text'] }} uppercase">
                     {{ App\Models\ProjectNote::NOTE_TYPES[$note->note_type] }}
                 </span>
                 @if($note->is_pinned)
