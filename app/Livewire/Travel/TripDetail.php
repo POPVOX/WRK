@@ -563,43 +563,61 @@ class TripDetail extends Component
             return;
         }
 
-        $savedCount = 0;
-        foreach ($this->extractedSegments as $segment) {
-            // Skip if missing required fields
-            if (empty($segment['departure_location']) || empty($segment['arrival_location']) || empty($segment['departure_datetime'])) {
-                continue;
+        try {
+            $savedCount = 0;
+            $skippedCount = 0;
+
+            foreach ($this->extractedSegments as $segment) {
+                // Skip if missing required fields
+                if (empty($segment['departure_location']) || empty($segment['arrival_location']) || empty($segment['departure_datetime'])) {
+                    $skippedCount++;
+                    continue;
+                }
+
+                $this->trip->segments()->create([
+                    'user_id' => $this->smartImportTravelerId,
+                    'trip_guest_id' => $this->smartImportGuestId,
+                    'type' => $segment['type'] ?? 'flight',
+                    'carrier' => $segment['carrier'] ?? null,
+                    'carrier_code' => $segment['carrier_code'] ?? null,
+                    'segment_number' => $segment['segment_number'] ?? null,
+                    'confirmation_number' => $segment['confirmation_number'] ?? null,
+                    'departure_location' => $segment['departure_location'],
+                    'departure_city' => $segment['departure_city'] ?? null,
+                    'departure_datetime' => $segment['departure_datetime'],
+                    'departure_terminal' => $segment['departure_terminal'] ?? null,
+                    'arrival_location' => $segment['arrival_location'],
+                    'arrival_city' => $segment['arrival_city'] ?? null,
+                    'arrival_datetime' => $segment['arrival_datetime'] ?? null,
+                    'arrival_terminal' => $segment['arrival_terminal'] ?? null,
+                    'seat_assignment' => $segment['seat_assignment'] ?? null,
+                    'cabin_class' => $segment['cabin_class'] ?? null,
+                    'cost' => $segment['cost'] ?? null,
+                    'currency' => $segment['currency'] ?? 'USD',
+                    'notes' => $segment['notes'] ?? null,
+                    'ai_extracted' => true,
+                    'ai_confidence' => $segment['confidence'] ?? null,
+                ]);
+                $savedCount++;
             }
 
-            $this->trip->segments()->create([
-                'user_id' => $this->smartImportTravelerId,
-                'trip_guest_id' => $this->smartImportGuestId,
-                'type' => $segment['type'] ?? 'flight',
-                'carrier' => $segment['carrier'] ?? null,
-                'carrier_code' => $segment['carrier_code'] ?? null,
-                'segment_number' => $segment['segment_number'] ?? null,
-                'confirmation_number' => $segment['confirmation_number'] ?? null,
-                'departure_location' => $segment['departure_location'],
-                'departure_city' => $segment['departure_city'] ?? null,
-                'departure_datetime' => $segment['departure_datetime'],
-                'departure_terminal' => $segment['departure_terminal'] ?? null,
-                'arrival_location' => $segment['arrival_location'],
-                'arrival_city' => $segment['arrival_city'] ?? null,
-                'arrival_datetime' => $segment['arrival_datetime'] ?? null,
-                'arrival_terminal' => $segment['arrival_terminal'] ?? null,
-                'seat_assignment' => $segment['seat_assignment'] ?? null,
-                'cabin_class' => $segment['cabin_class'] ?? null,
-                'cost' => $segment['cost'] ?? null,
-                'currency' => $segment['currency'] ?? 'USD',
-                'notes' => $segment['notes'] ?? null,
-                'ai_extracted' => true,
-                'ai_confidence' => $segment['confidence'] ?? null,
-            ]);
-            $savedCount++;
-        }
+            if ($savedCount === 0) {
+                $this->smartImportError = 'No segments could be saved. All segments were missing required fields (departure location, arrival location, or departure date/time).';
+                return;
+            }
 
-        $this->trip->load('segments.traveler', 'segments.guest');
-        $this->closeSmartImport();
-        $this->dispatch('notify', type: 'success', message: "{$savedCount} segment(s) imported successfully!");
+            $this->trip->load('segments.traveler', 'segments.guest');
+            $this->closeSmartImport();
+
+            $message = "{$savedCount} segment(s) imported successfully!";
+            if ($skippedCount > 0) {
+                $message .= " ({$skippedCount} skipped due to missing data)";
+            }
+            $this->dispatch('notify', type: 'success', message: $message);
+        } catch (\Exception $e) {
+            \Log::error('Smart import save error: ' . $e->getMessage(), ['exception' => $e]);
+            $this->smartImportError = 'Error saving segments: ' . $e->getMessage();
+        }
     }
 
     // Destinations
