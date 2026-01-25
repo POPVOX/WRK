@@ -24,8 +24,9 @@ class FeedbackManagement extends Component
 {
     use WithPagination;
 
+    // Unified view - no tabs, just filters
     #[Url]
-    public string $activeTab = 'feedback'; // 'feedback' or 'resolutions'
+    public string $quickFilter = ''; // 'new', 'bugs', 'suggestions', 'resolved'
 
     #[Url]
     public string $filterStatus = '';
@@ -37,6 +38,9 @@ class FeedbackManagement extends Component
     public string $filterPriority = '';
 
     public string $search = '';
+
+    // Resolution stats panel visibility
+    public bool $showResolutionStats = false;
 
     // Resolution form
     public bool $showResolveModal = false;
@@ -368,10 +372,10 @@ PROMPT;
 
             $response = Http::withToken($token)
                 ->post("https://api.github.com/repos/{$repo}/issues", [
-                        'title' => $title,
-                        'body' => $body,
-                        'labels' => $labels,
-                    ]);
+                    'title' => $title,
+                    'body' => $body,
+                    'labels' => $labels,
+                ]);
 
             if ($response->successful()) {
                 $issueData = $response->json();
@@ -637,13 +641,29 @@ BODY;
         ]);
     }
 
-    // === Resolution Methods ===
+    // === Quick Filter Methods ===
 
-    public function setTab(string $tab): void
+    public function setQuickFilter(string $filter): void
     {
-        $this->activeTab = $tab;
+        // Toggle off if clicking the same filter
+        if ($this->quickFilter === $filter) {
+            $this->quickFilter = '';
+        } else {
+            $this->quickFilter = $filter;
+        }
+        // Clear other filters when using quick filter
+        $this->filterStatus = '';
+        $this->filterType = '';
+        $this->filterPriority = '';
         $this->resetPage();
     }
+
+    public function toggleResolutionStats(): void
+    {
+        $this->showResolutionStats = !$this->showResolutionStats;
+    }
+
+    // === Resolution Methods ===
 
     public function openResolveModal(int $id): void
     {
@@ -915,20 +935,19 @@ BODY;
                         ->orWhereHas('user', fn($q) => $q->where('name', 'like', '%' . $this->search . '%'));
                 });
             })
-            ->when($this->filterStatus, fn($q) => $q->where('status', $this->filterStatus))
-            ->when($this->filterType, fn($q) => $q->where('feedback_type', $this->filterType))
+            // Quick filter from clickable stat cards
+            ->when($this->quickFilter === 'new', fn($q) => $q->where('status', 'new'))
+            ->when($this->quickFilter === 'bugs', fn($q) => $q->where('feedback_type', 'bug')->whereIn('status', ['new', 'reviewed', 'in_progress']))
+            ->when($this->quickFilter === 'suggestions', fn($q) => $q->where('feedback_type', 'suggestion')->whereIn('status', ['new', 'reviewed', 'in_progress']))
+            ->when($this->quickFilter === 'resolved', fn($q) => $q->whereNotNull('resolved_at'))
+            // Standard filters (when not using quick filter)
+            ->when($this->filterStatus && !$this->quickFilter, fn($q) => $q->where('status', $this->filterStatus))
+            ->when($this->filterType && !$this->quickFilter, fn($q) => $q->where('feedback_type', $this->filterType))
             ->when($this->filterPriority, fn($q) => $q->where('priority', $this->filterPriority))
             ->orderBy('created_at', 'desc');
 
-        // Get resolved items for the resolution tab
-        $resolvedItems = Feedback::resolved()
-            ->with(['user', 'resolver'])
-            ->orderBy('resolved_at', 'desc')
-            ->get();
-
         return view('livewire.admin.feedback-management', [
             'feedbackItems' => $query->paginate(20),
-            'resolvedItems' => $resolvedItems,
             'stats' => $this->stats,
             'resolutionStats' => $this->resolutionStats,
             'statuses' => Feedback::STATUSES,
