@@ -109,7 +109,7 @@ class Trip extends Model
      */
     public function getAllTravelersAttribute(): \Illuminate\Support\Collection
     {
-        $staffTravelers = $this->travelers->map(fn ($user) => [
+        $staffTravelers = $this->travelers->map(fn($user) => [
             'type' => 'staff',
             'id' => $user->id,
             'name' => $user->name,
@@ -118,7 +118,7 @@ class Trip extends Model
             'home_airport' => $user->travelProfile?->home_airport_code,
         ]);
 
-        $guestTravelers = $this->guests->map(fn ($guest) => [
+        $guestTravelers = $this->guests->map(fn($guest) => [
             'type' => 'guest',
             'id' => $guest->id,
             'name' => $guest->name,
@@ -211,7 +211,7 @@ class Trip extends Model
 
     public function scopeForUser($query, $userId)
     {
-        return $query->whereHas('travelers', fn ($q) => $q->where('users.id', $userId));
+        return $query->whereHas('travelers', fn($q) => $q->where('users.id', $userId));
     }
 
     public function scopeTemplates($query)
@@ -276,15 +276,15 @@ class Trip extends Model
 
     public function hasComplianceIssues(): bool
     {
-        if ($this->step_registration_required && ! $this->step_registration_completed) {
+        if ($this->step_registration_required && !$this->step_registration_completed) {
             return true;
         }
 
-        if ($this->travel_insurance_required && ! $this->travel_insurance_confirmed) {
+        if ($this->travel_insurance_required && !$this->travel_insurance_confirmed) {
             return true;
         }
 
-        if ($this->approval_required && ! $this->approved_at) {
+        if ($this->approval_required && !$this->approved_at) {
             return true;
         }
 
@@ -299,6 +299,7 @@ class Trip extends Model
             'funder_meeting' => 'Funder Meeting',
             'site_visit' => 'Site Visit',
             'advocacy_hill_day' => 'Advocacy/Hill Day',
+            'parliamentary_visit' => 'Parliamentary Visit',
             'training' => 'Training',
             'partner_delegation' => 'Partner Delegation',
             'board_meeting' => 'Board Meeting',

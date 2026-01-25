@@ -561,7 +561,7 @@
                                     $color = $colors[$item['severity']] ?? $colors['info'];
                                     $dotColor = $dotColors[$item['severity']] ?? $dotColors['info'];
                                     $itemCount = $item['items']->count();
-                                    $showCount = 3;
+                                    $showCount = 5;
                                 @endphp
                                 <div class="p-3 rounded-lg border {{ $color }}">
                                     <div class="flex items-center justify-between text-sm font-medium">

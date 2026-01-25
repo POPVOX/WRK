@@ -143,7 +143,6 @@ class PressClip extends Model
             'broadcast' => 'Broadcast',
             'podcast' => 'Podcast',
             'opinion' => 'Opinion/Editorial',
-            'mention' => 'Mention',
             'interview' => 'Interview',
             default => 'Article',
         };
