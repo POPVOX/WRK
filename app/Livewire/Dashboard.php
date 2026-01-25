@@ -327,7 +327,7 @@ class Dashboard extends Component
                 'title' => $overdueActions->count() . ' task' . ($overdueActions->count() > 1 ? 's' : '') . ' overdue',
                 'items' => $overdueActions->map(fn($a) => [
                     'label' => $a->description,
-                    'url' => $a->meeting ? route('meetings.show', $a->meeting) : '#',
+                    'url' => $a->meeting ? route('meetings.show', $a->meeting) : route('dashboard', [], false) . '#my-tasks',
                 ]),
             ]);
         }
@@ -706,14 +706,13 @@ class Dashboard extends Component
                 return;
             }
 
-            $client = new \App\Support\AI\AnthropicClient($apiKey);
-            $response = $client->message(
-                system: 'You are a productivity assistant helping a nonprofit professional manage their tasks. Based on the context provided, suggest 3-5 actionable tasks they should work on. Respond with a JSON array of tasks, each with: title, description, priority (high/medium/low), suggested_due_date (YYYY-MM-DD format or null), and reason (why this task is important now). Only suggest concrete, actionable tasks.',
-                messages: [
+            $response = \App\Support\AI\AnthropicClient::send([
+                'system' => 'You are a productivity assistant helping a nonprofit professional manage their tasks. Based on the context provided, suggest 3-5 actionable tasks they should work on. Respond with a JSON array of tasks, each with: title, description, priority (high/medium/low), suggested_due_date (YYYY-MM-DD format or null), and reason (why this task is important now). Only suggest concrete, actionable tasks.',
+                'messages' => [
                     ['role' => 'user', 'content' => "Based on my current work context, suggest tasks I should add to my to-do list:\n\n{$context}"],
                 ],
-                maxTokens: 1500
-            );
+                'max_tokens' => 1500,
+            ]);
 
             $content = $response['content'][0]['text'] ?? '';
 

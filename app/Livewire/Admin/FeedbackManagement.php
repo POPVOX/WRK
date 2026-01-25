@@ -198,8 +198,6 @@ class FeedbackManagement extends Component
                 return;
             }
 
-            $client = app(AnthropicClient::class);
-
             $feedbackSummary = $recentFeedback->map(function ($f) {
                 return [
                     'type' => $f->feedback_type,
@@ -214,11 +212,11 @@ class FeedbackManagement extends Component
 
             $prompt = $this->buildInsightsPrompt($feedbackSummary, $recentFeedback->count());
 
-            $response = $client->message(
-                system: 'You are a product strategist analyzing user feedback to provide actionable product recommendations. Respond only with valid JSON.',
-                messages: [['role' => 'user', 'content' => $prompt]],
-                maxTokens: 2000
-            );
+            $response = AnthropicClient::send([
+                'system' => 'You are a product strategist analyzing user feedback to provide actionable product recommendations. Respond only with valid JSON.',
+                'messages' => [['role' => 'user', 'content' => $prompt]],
+                'max_tokens' => 2000,
+            ]);
 
             $content = $response['content'][0]['text'] ?? '';
 

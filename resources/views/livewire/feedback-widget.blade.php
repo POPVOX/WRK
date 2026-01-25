@@ -24,7 +24,7 @@
                 }
             }
         }
-    }" class="fixed bottom-20 right-4 z-50">
+    }\" class="fixed bottom-24 right-4 z-40">
     {{-- Floating Button (when closed) --}}
     @if(!$isOpen)
         <button wire:click="open"
