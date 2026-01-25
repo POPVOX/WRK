@@ -31,6 +31,7 @@ class ResolveJan25Session extends Command
         25 => 'Org name fixing already implemented (suggested_name accessor)',
         31 => 'Same as #35 - tasks/items now hyperlinked',
         28 => 'Map already zooms out to show Hawaii (minZoom: 1, maxZoom: 4)',
+        24 => 'Edit org name in list view - already implemented with inline edit in table view',
 
         // Suggestions implemented today
         45 => 'Parliamentary Visit added to trip types',
@@ -39,6 +40,7 @@ class ResolveJan25Session extends Command
         42 => 'Added outlet filter to media coverage search',
         47 => 'Press clip cards now have prominent Edit button',
         26 => 'Calendar import now filters out Lunch, OOO, Focus Time, etc.',
+        33 => 'Quick Add Task floating widget added to all pages',
 
         // General items that can be closed
         43 => 'User resolved own issue (DB limitation understood)',

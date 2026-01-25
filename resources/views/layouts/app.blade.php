@@ -7,19 +7,20 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <title>{{ $title ?? config('app.name', 'WRK') }} - {{ config('app.name', 'WRK') }}</title>
-    <meta name="description" content="WRK - Workspace Management for POPVOX Foundation. Track projects, meetings, contacts, and grant reporting.">
-    
+    <meta name="description"
+        content="WRK - Workspace Management for POPVOX Foundation. Track projects, meetings, contacts, and grant reporting.">
+
     <!-- Favicon -->
     <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/wrk favicon.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('images/wrk favicon.png') }}">
     <link rel="apple-touch-icon" href="{{ asset('images/wrk favicon.png') }}">
-    
+
     <!-- Open Graph / Social -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="{{ $title ?? config('app.name', 'WRK') }}">
     <meta property="og:description" content="WRK - Workspace Management for POPVOX Foundation">
     <meta property="og:image" content="{{ asset('images/logo.png') }}">
-    
+
     <!-- Theme Color -->
     <meta name="theme-color" content="#4f46e5">
 
@@ -172,7 +173,8 @@
                     {{-- Management Section (Admin Only) --}}
                     @if(auth()->user()?->isAdmin())
                         <div class="pt-4">
-                            <p class="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Management</p>
+                            <p class="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                                Management</p>
                             <a href="{{ route('accomplishments.team') }}" wire:navigate
                                 class="mt-1 flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {{ request()->routeIs('accomplishments.team') ? 'bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700' }}">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -203,7 +205,8 @@
                     @endif
                     @if(auth()->user()?->isAdmin())
                         <div class="pt-2">
-                            <p class="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Admin</p>
+                            <p class="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                                Admin</p>
                             <a href="{{ route('admin.metrics') }}" wire:navigate
                                 class="mt-1 flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {{ request()->routeIs('admin.metrics') ? 'bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700' }}">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -231,7 +234,8 @@
                                     $newFeedbackCount = \App\Models\Feedback::new()->count();
                                 @endphp
                                 @if($newFeedbackCount > 0)
-                                    <span class="ml-auto px-2 py-0.5 text-xs bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded-full">{{ $newFeedbackCount }}</span>
+                                    <span
+                                        class="ml-auto px-2 py-0.5 text-xs bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded-full">{{ $newFeedbackCount }}</span>
                                 @endif
                             </a>
                         </div>
@@ -333,6 +337,7 @@
 
     {{-- Beta Feedback Widget --}}
     @auth
+        <livewire:quick-add-task />
         <livewire:feedback-widget />
     @endauth
 
