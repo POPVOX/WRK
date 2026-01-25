@@ -28,6 +28,8 @@ class MediaIndex extends Component
 
     public string $clipType = '';
 
+    public string $outletFilter = '';
+
     public string $sentiment = '';
 
     public string $dateRange = 'all';
@@ -223,7 +225,7 @@ class MediaIndex extends Component
 
         if ($daysSinceLastPitch === null || $daysSinceLastPitch > 30) {
             // Suggest a journalist to pitch (one with clips, high engagement)
-            $suggestedJournalist = Person::whereHas('organization', fn ($q) => $q->where('type', 'media'))
+            $suggestedJournalist = Person::whereHas('organization', fn($q) => $q->where('type', 'media'))
                 ->withCount('pressClips')
                 ->orderByDesc('press_clips_count')
                 ->first();
@@ -315,10 +317,14 @@ class MediaIndex extends Component
             $query->where('sentiment', $this->sentiment);
         }
 
-        $query->when($this->dateRange === 'week', fn ($q) => $q->where('published_at', '>=', now()->subWeek()))
-            ->when($this->dateRange === 'month', fn ($q) => $q->where('published_at', '>=', now()->subMonth()))
-            ->when($this->dateRange === 'quarter', fn ($q) => $q->where('published_at', '>=', now()->subQuarter()))
-            ->when($this->dateRange === 'year', fn ($q) => $q->where('published_at', '>=', now()->subYear()));
+        if ($this->outletFilter) {
+            $query->where('outlet_name', 'like', "%{$this->outletFilter}%");
+        }
+
+        $query->when($this->dateRange === 'week', fn($q) => $q->where('published_at', '>=', now()->subWeek()))
+            ->when($this->dateRange === 'month', fn($q) => $q->where('published_at', '>=', now()->subMonth()))
+            ->when($this->dateRange === 'quarter', fn($q) => $q->where('published_at', '>=', now()->subQuarter()))
+            ->when($this->dateRange === 'year', fn($q) => $q->where('published_at', '>=', now()->subYear()));
 
         return $query->latest('published_at')->paginate(12);
     }
@@ -402,19 +408,19 @@ class MediaIndex extends Component
 
         return [
             'urgent' => $inquiries->filter(
-                fn ($i) => $i->is_overdue ||
+                fn($i) => $i->is_overdue ||
                 ($i->deadline && $i->deadline->isToday()) ||
                 (in_array($i->urgency, ['urgent', 'breaking']) && $i->status !== 'completed')
             ),
             'new' => $inquiries->where('status', 'new')->filter(
-                fn ($i) => ! $i->is_overdue &&
-                ! ($i->deadline && $i->deadline->isToday()) &&
-                ! in_array($i->urgency, ['urgent', 'breaking'])
+                fn($i) => !$i->is_overdue &&
+                !($i->deadline && $i->deadline->isToday()) &&
+                !in_array($i->urgency, ['urgent', 'breaking'])
             ),
             'responding' => $inquiries->where('status', 'responding')->filter(
-                fn ($i) => ! $i->is_overdue &&
-                ! ($i->deadline && $i->deadline->isToday()) &&
-                ! in_array($i->urgency, ['urgent', 'breaking'])
+                fn($i) => !$i->is_overdue &&
+                !($i->deadline && $i->deadline->isToday()) &&
+                !in_array($i->urgency, ['urgent', 'breaking'])
             ),
             'completed' => $inquiries->where('status', 'completed')->take(10),
         ];
@@ -455,9 +461,9 @@ class MediaIndex extends Component
     {
         return Organization::where('type', 'media')
             ->withCount(['pressClips', 'pitches', 'inquiries'])
-            ->with(['journalists' => fn ($q) => $q->limit(5)])
+            ->with(['journalists' => fn($q) => $q->limit(5)])
             ->when($this->search && $this->activeTab === 'outlets', function ($q) {
-                $q->where('name', 'like', '%'.$this->search.'%');
+                $q->where('name', 'like', '%' . $this->search . '%');
             })
             ->orderBy('name')
             ->get();
@@ -523,7 +529,7 @@ class MediaIndex extends Component
     {
         $url = $this->clipForm['url'] ?? '';
 
-        if (empty($url) || ! filter_var($url, FILTER_VALIDATE_URL)) {
+        if (empty($url) || !filter_var($url, FILTER_VALIDATE_URL)) {
             $this->dispatch('notify', type: 'error', message: 'Please enter a valid URL first.');
 
             return;
@@ -535,7 +541,7 @@ class MediaIndex extends Component
             // Fetch the page content
             $response = Http::timeout(15)->get($url);
 
-            if (! $response->successful()) {
+            if (!$response->successful()) {
                 throw new \Exception('Could not fetch URL');
             }
 
@@ -582,12 +588,12 @@ PROMPT;
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->post('https://api.anthropic.com/v1/messages', [
-                'model' => 'claude-sonnet-4-20250514',
-                'max_tokens' => 1000,
-                'messages' => [
-                    ['role' => 'user', 'content' => $prompt],
-                ],
-            ]);
+                        'model' => 'claude-sonnet-4-20250514',
+                        'max_tokens' => 1000,
+                        'messages' => [
+                            ['role' => 'user', 'content' => $prompt],
+                        ],
+                    ]);
 
             if ($aiResponse->successful()) {
                 $content = $aiResponse->json('content.0.text');
@@ -597,38 +603,38 @@ PROMPT;
                     $data = json_decode($matches[0], true);
 
                     if ($data) {
-                        if (! empty($data['headline'])) {
+                        if (!empty($data['headline'])) {
                             $this->clipForm['title'] = $data['headline'];
                         }
-                        if (! empty($data['outlet_name'])) {
+                        if (!empty($data['outlet_name'])) {
                             $this->clipForm['outlet_name'] = $data['outlet_name'];
                         }
-                        if (! empty($data['journalist_name'])) {
+                        if (!empty($data['journalist_name'])) {
                             $this->clipForm['journalist_name'] = $data['journalist_name'];
                         }
-                        if (! empty($data['published_date'])) {
+                        if (!empty($data['published_date'])) {
                             $this->clipForm['published_at'] = $data['published_date'];
                         }
-                        if (! empty($data['summary'])) {
+                        if (!empty($data['summary'])) {
                             $this->clipForm['summary'] = $data['summary'];
                         }
-                        if (! empty($data['sentiment'])) {
+                        if (!empty($data['sentiment'])) {
                             $this->clipForm['sentiment'] = $data['sentiment'];
                         }
-                        if (! empty($data['quotes'])) {
+                        if (!empty($data['quotes'])) {
                             $this->clipForm['quotes'] = $data['quotes'];
                         }
 
                         // Match staff mentioned to user IDs
-                        if (! empty($data['staff_mentioned']) && is_array($data['staff_mentioned'])) {
+                        if (!empty($data['staff_mentioned']) && is_array($data['staff_mentioned'])) {
                             $staffIds = [];
                             foreach ($data['staff_mentioned'] as $staffName) {
-                                $user = User::where('name', 'like', '%'.$staffName.'%')->first();
+                                $user = User::where('name', 'like', '%' . $staffName . '%')->first();
                                 if ($user) {
                                     $staffIds[] = $user->id;
                                 }
                             }
-                            if (! empty($staffIds)) {
+                            if (!empty($staffIds)) {
                                 $this->clipForm['staff_ids'] = $staffIds;
                             }
                         }
@@ -645,7 +651,7 @@ PROMPT;
             $this->dispatch('notify', type: 'warning', message: 'Basic extraction complete. Some fields may need manual entry.');
 
         } catch (\Exception $e) {
-            Log::error('Clip URL fetch error: '.$e->getMessage());
+            Log::error('Clip URL fetch error: ' . $e->getMessage());
             $this->dispatch('notify', type: 'error', message: 'Could not fetch article details. Please fill in manually.');
         }
     }
@@ -731,12 +737,12 @@ PROMPT;
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->post('https://api.anthropic.com/v1/messages', [
-                'model' => 'claude-sonnet-4-20250514',
-                'max_tokens' => 1000,
-                'messages' => [
-                    ['role' => 'user', 'content' => $prompt],
-                ],
-            ]);
+                        'model' => 'claude-sonnet-4-20250514',
+                        'max_tokens' => 1000,
+                        'messages' => [
+                            ['role' => 'user', 'content' => $prompt],
+                        ],
+                    ]);
 
             if ($aiResponse->successful()) {
                 $content = $aiResponse->json('content.0.text');
@@ -747,35 +753,35 @@ PROMPT;
 
                     if ($data) {
                         // Only update fields if they're empty or use new data
-                        if (! empty($data['headline']) && empty($this->clipForm['title'])) {
+                        if (!empty($data['headline']) && empty($this->clipForm['title'])) {
                             $this->clipForm['title'] = $data['headline'];
                         }
-                        if (! empty($data['outlet_name']) && empty($this->clipForm['outlet_name'])) {
+                        if (!empty($data['outlet_name']) && empty($this->clipForm['outlet_name'])) {
                             $this->clipForm['outlet_name'] = $data['outlet_name'];
                         }
-                        if (! empty($data['journalist_name']) && empty($this->clipForm['journalist_name'])) {
+                        if (!empty($data['journalist_name']) && empty($this->clipForm['journalist_name'])) {
                             $this->clipForm['journalist_name'] = $data['journalist_name'];
                         }
-                        if (! empty($data['summary'])) {
+                        if (!empty($data['summary'])) {
                             $this->clipForm['summary'] = $data['summary'];
                         }
-                        if (! empty($data['sentiment'])) {
+                        if (!empty($data['sentiment'])) {
                             $this->clipForm['sentiment'] = $data['sentiment'];
                         }
-                        if (! empty($data['quotes'])) {
+                        if (!empty($data['quotes'])) {
                             $this->clipForm['quotes'] = $data['quotes'];
                         }
 
                         // Match staff mentioned to user IDs
-                        if (! empty($data['staff_mentioned']) && is_array($data['staff_mentioned'])) {
+                        if (!empty($data['staff_mentioned']) && is_array($data['staff_mentioned'])) {
                             $staffIds = [];
                             foreach ($data['staff_mentioned'] as $staffName) {
-                                $user = User::where('name', 'like', '%'.$staffName.'%')->first();
+                                $user = User::where('name', 'like', '%' . $staffName . '%')->first();
                                 if ($user) {
                                     $staffIds[] = $user->id;
                                 }
                             }
-                            if (! empty($staffIds)) {
+                            if (!empty($staffIds)) {
                                 $this->clipForm['staff_ids'] = $staffIds;
                             }
                         }
@@ -795,7 +801,7 @@ PROMPT;
             $this->dispatch('notify', type: 'warning', message: 'Could not extract information from text.');
 
         } catch (\Exception $e) {
-            Log::error('Text extraction error: '.$e->getMessage());
+            Log::error('Text extraction error: ' . $e->getMessage());
             $this->dispatch('notify', type: 'error', message: 'Error analyzing text. Please try again.');
         }
     }
@@ -811,13 +817,13 @@ PROMPT;
 
         // Auto-create or find outlet organization
         $outletId = $this->clipForm['outlet_id'];
-        if (! $outletId && $this->clipForm['outlet_name']) {
+        if (!$outletId && $this->clipForm['outlet_name']) {
             $outletId = $this->findOrCreateOutlet($this->clipForm['outlet_name']);
         }
 
         // Auto-create or find journalist as Person record
         $journalistId = $this->clipForm['journalist_id'];
-        if (! $journalistId && $this->clipForm['journalist_name']) {
+        if (!$journalistId && $this->clipForm['journalist_name']) {
             $journalistId = $this->findOrCreateJournalist(
                 $this->clipForm['journalist_name'],
                 null, // email not provided from clip
@@ -930,7 +936,7 @@ PROMPT;
 
         // Auto-create or link journalist as Person with is_journalist flag
         $journalistId = $this->pitchForm['journalist_id'];
-        if (! $journalistId && $this->pitchForm['journalist_name']) {
+        if (!$journalistId && $this->pitchForm['journalist_name']) {
             $journalistId = $this->findOrCreateJournalist(
                 $this->pitchForm['journalist_name'],
                 $this->pitchForm['journalist_email'],
@@ -953,7 +959,7 @@ PROMPT;
             'pitched_by' => auth()->id(),
         ];
 
-        if ($this->pitchForm['status'] === 'sent' && ! $this->editingId) {
+        if ($this->pitchForm['status'] === 'sent' && !$this->editingId) {
             $data['pitched_at'] = now();
         }
 
@@ -978,7 +984,7 @@ PROMPT;
         $pitch = Pitch::find($id);
         $data = ['status' => $status];
 
-        if ($status === 'sent' && ! $pitch->pitched_at) {
+        if ($status === 'sent' && !$pitch->pitched_at) {
             $data['pitched_at'] = now();
         }
 
@@ -1043,7 +1049,7 @@ PROMPT;
 
         // Auto-create or link journalist as Person with is_journalist flag
         $journalistId = $this->inquiryForm['journalist_id'];
-        if (! $journalistId && $this->inquiryForm['journalist_name']) {
+        if (!$journalistId && $this->inquiryForm['journalist_name']) {
             $journalistId = $this->findOrCreateJournalist(
                 $this->inquiryForm['journalist_name'],
                 $this->inquiryForm['journalist_email'],
@@ -1094,11 +1100,11 @@ PROMPT;
             $existing = Person::where('email', $email)->first();
             if ($existing) {
                 // Ensure they're marked as journalist
-                if (! $existing->is_journalist) {
+                if (!$existing->is_journalist) {
                     $existing->update(['is_journalist' => true]);
                 }
                 // Update org if we have outlet info and person doesn't have one
-                if (! $existing->organization_id && ($outletId || $outletName)) {
+                if (!$existing->organization_id && ($outletId || $outletName)) {
                     $orgId = $outletId ?? $this->findOrCreateOutlet($outletName);
                     $existing->update(['organization_id' => $orgId]);
                 }
@@ -1109,7 +1115,7 @@ PROMPT;
 
         // Resolve outlet ID - create org if only name is provided
         $resolvedOutletId = $outletId;
-        if (! $resolvedOutletId && $outletName) {
+        if (!$resolvedOutletId && $outletName) {
             $resolvedOutletId = $this->findOrCreateOutlet($outletName);
         }
 
@@ -1122,13 +1128,13 @@ PROMPT;
 
         if ($existing) {
             $updates = [];
-            if (! $existing->is_journalist) {
+            if (!$existing->is_journalist) {
                 $updates['is_journalist'] = true;
             }
-            if (! $existing->organization_id && $resolvedOutletId) {
+            if (!$existing->organization_id && $resolvedOutletId) {
                 $updates['organization_id'] = $resolvedOutletId;
             }
-            if (! empty($updates)) {
+            if (!empty($updates)) {
                 $existing->update($updates);
             }
 
@@ -1176,7 +1182,7 @@ PROMPT;
     public function analyzeInquiryWithAI(int $id): void
     {
         $inquiry = Inquiry::find($id);
-        if (! $inquiry) {
+        if (!$inquiry) {
             return;
         }
 
@@ -1190,12 +1196,12 @@ PROMPT;
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->post('https://api.anthropic.com/v1/messages', [
-                'model' => 'claude-sonnet-4-20250514',
-                'max_tokens' => 1500,
-                'messages' => [
-                    ['role' => 'user', 'content' => $prompt],
-                ],
-            ]);
+                        'model' => 'claude-sonnet-4-20250514',
+                        'max_tokens' => 1500,
+                        'messages' => [
+                            ['role' => 'user', 'content' => $prompt],
+                        ],
+                    ]);
 
             if ($response->successful()) {
                 $content = $response->json('content.0.text');
@@ -1208,7 +1214,7 @@ PROMPT;
                 throw new \Exception('API request failed');
             }
         } catch (\Exception $e) {
-            \Log::error('Inquiry AI analysis failed: '.$e->getMessage());
+            \Log::error('Inquiry AI analysis failed: ' . $e->getMessage());
             $this->dispatch('notify', type: 'error', message: 'AI analysis failed. Please try again.');
         }
     }
@@ -1232,7 +1238,7 @@ INQUIRY DETAILS:
 Subject: {$inquiry->subject}
 From: {$inquiry->journalist_display_name} at {$inquiry->outlet_display_name}
 Urgency: {$inquiry->urgency}
-Deadline: ".($inquiry->deadline ? $inquiry->deadline->format('M j, Y g:i A') : 'Not specified')."
+Deadline: " . ($inquiry->deadline ? $inquiry->deadline->format('M j, Y g:i A') : 'Not specified') . "
 
 Description:
 {$inquiry->description}

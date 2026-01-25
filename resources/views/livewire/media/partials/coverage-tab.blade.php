@@ -24,6 +24,8 @@
                 <option value="opinion">Opinion</option>
                 <option value="interview">Interviews</option>
             </select>
+            <input wire:model.live.debounce.300ms="outletFilter" type="text" placeholder="Filter by outlet..."
+                class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm w-40">
             <select wire:model.live="sentiment"
                 class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
                 <option value="">All Sentiment</option>

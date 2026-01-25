@@ -61,10 +61,10 @@ class GoogleCalendarService
                 'error' => $token['error'],
                 'error_description' => $token['error_description'] ?? 'No description',
             ]);
-            throw new \Exception('Google OAuth error: '.($token['error_description'] ?? $token['error']));
+            throw new \Exception('Google OAuth error: ' . ($token['error_description'] ?? $token['error']));
         }
 
-        if (! isset($token['access_token'])) {
+        if (!isset($token['access_token'])) {
             \Log::error('Google OAuth missing access_token', ['response' => $token]);
             throw new \Exception('No access token received from Google');
         }
@@ -93,7 +93,7 @@ class GoogleCalendarService
      */
     public function isConnected(User $user): bool
     {
-        return ! empty($user->google_access_token);
+        return !empty($user->google_access_token);
     }
 
     /**
@@ -101,7 +101,7 @@ class GoogleCalendarService
      */
     public function getCalendarService(User $user): ?GoogleCalendar
     {
-        if (! $this->isConnected($user)) {
+        if (!$this->isConnected($user)) {
             return null;
         }
 
@@ -120,7 +120,7 @@ class GoogleCalendarService
      */
     protected function refreshToken(User $user): void
     {
-        if (! $user->google_refresh_token) {
+        if (!$user->google_refresh_token) {
             return;
         }
 
@@ -139,7 +139,7 @@ class GoogleCalendarService
     public function getEvents(User $user, $startDate = null, $endDate = null): array
     {
         $service = $this->getCalendarService($user);
-        if (! $service) {
+        if (!$service) {
             return [];
         }
 
@@ -180,7 +180,7 @@ class GoogleCalendarService
 
             return $allEvents;
         } catch (\Exception $e) {
-            \Log::error('Google Calendar Error: '.$e->getMessage());
+            \Log::error('Google Calendar Error: ' . $e->getMessage());
 
             return [];
         }
@@ -196,10 +196,19 @@ class GoogleCalendarService
 
         foreach ($events as $event) {
             $eventId = $event->getId();
+            $summary = $event->getSummary() ?? '';
 
             // Skip if already imported
             if (Meeting::where('google_event_id', $eventId)->exists()) {
-                $skipped[] = $event->getSummary();
+                $skipped[] = $summary;
+
+                continue;
+            }
+
+            // Skip personal/internal events that shouldn't be imported as meetings
+            // Matches: Lunch, lunch break, OOO, Out of Office, Focus Time, Busy, etc.
+            if ($this->isPersonalEvent($summary)) {
+                $skipped[] = $summary . ' (personal event)';
 
                 continue;
             }
@@ -219,16 +228,74 @@ class GoogleCalendarService
             ]);
 
             // Set meeting title/summary from event
-            if ($event->getSummary()) {
-                $meeting->update(['raw_notes' => "**{$event->getSummary()}**\n\n".($event->getDescription() ?? '')]);
+            if ($summary) {
+                $meeting->update(['raw_notes' => "**{$summary}**\n\n" . ($event->getDescription() ?? '')]);
             }
 
-            $imported[] = $event->getSummary() ?? 'Untitled event';
+            $imported[] = $summary ?: 'Untitled event';
         }
 
         return [
             'imported' => $imported,
             'skipped' => $skipped,
         ];
+    }
+
+    /**
+     * Check if an event title indicates a personal/internal event that shouldn't be imported.
+     */
+    protected function isPersonalEvent(string $title): bool
+    {
+        $lowerTitle = strtolower(trim($title));
+
+        // Exact matches for common personal events
+        $personalKeywords = [
+            'lunch',
+            'lunch break',
+            'ooo',
+            'out of office',
+            'pto',
+            'vacation',
+            'holiday',
+            'focus time',
+            'busy',
+            'block',
+            'work block',
+            'do not book',
+            'dnb',
+            'personal',
+            'dentist',
+            'doctor',
+            'appointment',
+            'commute',
+            'travel time',
+            'break',
+            'gym',
+            'workout',
+            // Internal team events are typically not tracked as external meetings
+            'standup',
+            'stand-up',
+            'stand up',
+            'daily standup',
+            'team standup',
+            'all hands',
+            '1:1',
+            '1-1',
+            'one on one',
+        ];
+
+        foreach ($personalKeywords as $keyword) {
+            // Exact match or keyword at start/end of title
+            if (
+                $lowerTitle === $keyword ||
+                str_starts_with($lowerTitle, $keyword . ' ') ||
+                str_ends_with($lowerTitle, ' ' . $keyword) ||
+                str_contains($lowerTitle, ' ' . $keyword . ' ')
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

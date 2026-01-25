@@ -30,11 +30,15 @@ class ResolveJan25Session extends Command
         23 => 'URL display already strips https:// and www. (display_website accessor)',
         25 => 'Org name fixing already implemented (suggested_name accessor)',
         31 => 'Same as #35 - tasks/items now hyperlinked',
+        28 => 'Map already zooms out to show Hawaii (minZoom: 1, maxZoom: 4)',
 
         // Suggestions implemented today
         45 => 'Parliamentary Visit added to trip types',
         41 => 'Needs attention now shows 5 items instead of 3',
         29 => 'Removed mention from clip type options',
+        42 => 'Added outlet filter to media coverage search',
+        47 => 'Press clip cards now have prominent Edit button',
+        26 => 'Calendar import now filters out Lunch, OOO, Focus Time, etc.',
 
         // General items that can be closed
         43 => 'User resolved own issue (DB limitation understood)',

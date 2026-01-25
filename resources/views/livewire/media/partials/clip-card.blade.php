@@ -20,15 +20,17 @@
                 @endif
             </div>
 
-            {{-- Title --}}
-            <a href="{{ $clip->url }}" target="_blank" rel="noopener"
-                class="font-semibold text-gray-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition line-clamp-2">
-                {{ $clip->title }}
-                <svg class="inline w-4 h-4 ml-1 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-            </a>
+            {{-- Title with both read and edit options --}}
+            <div class="flex items-start gap-2">
+                <a href="{{ $clip->url }}" target="_blank" rel="noopener"
+                    class="flex-1 font-semibold text-gray-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition line-clamp-2">
+                    {{ $clip->title }}
+                    <svg class="inline w-4 h-4 ml-1 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                </a>
+            </div>
 
             {{-- Summary/Quote --}}
             @if($clip->summary || $clip->quotes)
@@ -109,13 +111,14 @@
                 {{ ucfirst($clip->sentiment) }}
             </span>
 
-            {{-- Edit button --}}
+            {{-- Edit button - now more prominent --}}
             <button wire:click="editClip({{ $clip->id }})"
-                class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition p-1" title="Edit clip">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                class="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 bg-gray-50 hover:bg-indigo-50 dark:bg-gray-700 dark:hover:bg-indigo-900/30 rounded transition" title="Edit clip in WRK">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
+                Edit
             </button>
         </div>
     </div>
