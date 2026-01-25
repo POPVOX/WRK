@@ -25,6 +25,7 @@ class ResolveJan25Session extends Command
         35 => 'Overdue task links fixed',
         32 => 'Feedback button repositioned to avoid covering pagination',
         34 => 'Dark mode styling in notes already correct',
+        46 => 'Smart import error handling improved - now shows errors instead of blank modal',
 
         // Already implemented previously
         23 => 'URL display already strips https:// and www. (display_website accessor)',
