@@ -1,4 +1,18 @@
 <div class="space-y-6">
+    {{-- Error State - if database tables don't exist --}}
+    @if($hasError)
+        <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-6 text-center">
+            <div class="w-12 h-12 bg-amber-100 dark:bg-amber-900/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-amber-800 dark:text-amber-200 mb-2">Automated Reports Unavailable</h3>
+            <p class="text-amber-600 dark:text-amber-400 max-w-md mx-auto">
+                {{ $errorMessage ?: 'This feature is currently unavailable. Please contact support if this persists.' }}
+            </p>
+        </div>
+    @else
     {{-- Header --}}
     <div class="flex items-center justify-between">
         <div>
@@ -547,5 +561,6 @@
             </div>
         </div>
     @endif
+    @endif {{-- End hasError else block --}}
 </div>
 

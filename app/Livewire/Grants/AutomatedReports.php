@@ -64,18 +64,31 @@ class AutomatedReports extends Component
 
     public bool $isGeneratingReport = false;
 
+    public bool $hasError = false;
+
+    public string $errorMessage = '';
+
     public function mount(Grant $grant): void
     {
-        $this->grant = $grant->load(['activeReportingSchema', 'draftReportingSchema']);
-        $this->schema = $this->grant->activeReportingSchema ?? $this->grant->draftReportingSchema;
+        $this->grant = $grant;
 
-        // Default to current quarter
-        $this->setCurrentQuarter();
+        try {
+            $this->grant->load(['activeReportingSchema', 'draftReportingSchema']);
+            $this->schema = $this->grant->activeReportingSchema ?? $this->grant->draftReportingSchema;
 
-        if ($this->schema) {
-            $this->loadMetrics();
-            $this->loadUntaggedItems();
-            $this->schemaPreview = $this->schema->schema_data ?? [];
+            // Default to current quarter
+            $this->setCurrentQuarter();
+
+            if ($this->schema) {
+                $this->loadMetrics();
+                $this->loadUntaggedItems();
+                $this->schemaPreview = $this->schema->schema_data ?? [];
+            }
+        } catch (\Exception $e) {
+            // Database tables may not exist yet - fail gracefully
+            $this->hasError = true;
+            $this->errorMessage = 'Automated reporting is not available. Database migrations may be needed.';
+            Log::warning('AutomatedReports mount failed: ' . $e->getMessage());
         }
     }
 
@@ -146,12 +159,12 @@ class AutomatedReports extends Component
         try {
             $this->analyzeAndSuggestSchema();
         } catch (\Exception $e) {
-            Log::error('AutomatedReports startSetup error: '.$e->getMessage());
+            Log::error('AutomatedReports startSetup error: ' . $e->getMessage());
             $this->addSystemMessage(
-                "I encountered an issue analyzing the documents automatically, but we can still set up your reporting schema together!\n\n".
-                "Tell me about your grant's reporting requirements:\n".
-                "- What metrics do you need to track?\n".
-                "- How often do you report (quarterly, annually)?\n".
+                "I encountered an issue analyzing the documents automatically, but we can still set up your reporting schema together!\n\n" .
+                "Tell me about your grant's reporting requirements:\n" .
+                "- What metrics do you need to track?\n" .
+                "- How often do you report (quarterly, annually)?\n" .
                 "- What outcomes or goals are you measuring?"
             );
         }
@@ -168,7 +181,7 @@ class AutomatedReports extends Component
             ->where('status', 'active')
             ->first();
 
-        if (! $this->activeConversation) {
+        if (!$this->activeConversation) {
             $this->activeConversation = SchemaChatbotConversation::create([
                 'grant_id' => $this->grant->id,
                 'schema_id' => $this->schema?->id,
@@ -236,10 +249,10 @@ class AutomatedReports extends Component
         $apiKey = config('services.anthropic.api_key');
         if (empty($apiKey)) {
             $this->addSystemMessage(
-                "AI analysis is not available (API key not configured).\n\n".
-                "However, we can still set up your reporting schema manually! Tell me about:\n".
-                "- What metrics do you need to track?\n".
-                "- How often do you report?\n".
+                "AI analysis is not available (API key not configured).\n\n" .
+                "However, we can still set up your reporting schema manually! Tell me about:\n" .
+                "- What metrics do you need to track?\n" .
+                "- How often do you report?\n" .
                 "- What outcomes or goals are you measuring?"
             );
 
@@ -260,13 +273,13 @@ class AutomatedReports extends Component
             $manualCount = count($schema->getManualMetrics());
 
             $this->addSystemMessage(
-                "I've analyzed your grant documents and created a draft reporting schema!\n\n".
-                "**Summary:**\n".
-                "- {$pathwayCount} pathway(s)/theme(s)\n".
-                "- {$metricCount} total metrics\n".
-                "- {$autoCount} can be auto-calculated from WRK data\n".
-                "- {$manualCount} will need manual entry\n\n".
-                "Would you like me to walk through each outcome and explain what I've suggested? ".
+                "I've analyzed your grant documents and created a draft reporting schema!\n\n" .
+                "**Summary:**\n" .
+                "- {$pathwayCount} pathway(s)/theme(s)\n" .
+                "- {$metricCount} total metrics\n" .
+                "- {$autoCount} can be auto-calculated from WRK data\n" .
+                "- {$manualCount} will need manual entry\n\n" .
+                "Would you like me to walk through each outcome and explain what I've suggested? " .
                 "Or you can tell me specific changes you'd like to make.",
                 ['action' => 'schema_created']
             );
@@ -276,20 +289,20 @@ class AutomatedReports extends Component
 
             if ($docCount === 0) {
                 $this->addSystemMessage(
-                    "I don't see any grant documents uploaded yet. To get the best automated reporting suggestions, ".
-                    "please upload your grant agreement, proposal, or reporting requirements document first.\n\n".
-                    "Alternatively, tell me about your reporting requirements and I'll help you set up the schema manually:\n".
-                    "- What metrics do you need to track?\n".
-                    "- How often do you report (quarterly, annually)?\n".
+                    "I don't see any grant documents uploaded yet. To get the best automated reporting suggestions, " .
+                    "please upload your grant agreement, proposal, or reporting requirements document first.\n\n" .
+                    "Alternatively, tell me about your reporting requirements and I'll help you set up the schema manually:\n" .
+                    "- What metrics do you need to track?\n" .
+                    "- How often do you report (quarterly, annually)?\n" .
                     "- What outcomes or goals are you measuring?"
                 );
             } else {
                 $this->addSystemMessage(
-                    "I found {$docCount} document(s) but couldn't extract a reporting schema automatically. ".
-                    "This can happen if the documents don't contain specific reporting requirements.\n\n".
-                    "Let's set this up together! Tell me:\n".
-                    "- What metrics do you need to track for this grant?\n".
-                    "- How often do you report?\n".
+                    "I found {$docCount} document(s) but couldn't extract a reporting schema automatically. " .
+                    "This can happen if the documents don't contain specific reporting requirements.\n\n" .
+                    "Let's set this up together! Tell me:\n" .
+                    "- What metrics do you need to track for this grant?\n" .
+                    "- How often do you report?\n" .
                     "- What outcomes or goals are you measuring?"
                 );
             }
@@ -314,10 +327,10 @@ class AutomatedReports extends Component
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->timeout(60)->post('https://api.anthropic.com/v1/messages', [
-                'model' => config('ai.model', 'claude-sonnet-4-20250514'),
-                'max_tokens' => 2000,
-                'messages' => $this->formatChatHistoryForApi(),
-            ]);
+                        'model' => config('ai.model', 'claude-sonnet-4-20250514'),
+                        'max_tokens' => 2000,
+                        'messages' => $this->formatChatHistoryForApi(),
+                    ]);
 
             if ($response->successful()) {
                 $aiResponse = $response->json('content.0.text', '');
@@ -332,11 +345,11 @@ class AutomatedReports extends Component
                 $this->addSystemMessage($displayResponse, $schemaChanges);
             } else {
                 $this->addSystemMessage('I encountered an error processing your request. Please try again.');
-                Log::error('AutomatedReports Chat API error: '.$response->body());
+                Log::error('AutomatedReports Chat API error: ' . $response->body());
             }
         } catch (\Exception $e) {
-            $this->addSystemMessage('An error occurred: '.$e->getMessage());
-            Log::error('AutomatedReports Chat Exception: '.$e->getMessage());
+            $this->addSystemMessage('An error occurred: ' . $e->getMessage());
+            Log::error('AutomatedReports Chat Exception: ' . $e->getMessage());
         }
 
         $this->isChatProcessing = false;
@@ -452,7 +465,7 @@ PROMPT;
 
     public function loadMetrics(): void
     {
-        if (! $this->schema || ! $this->schema->isActive()) {
+        if (!$this->schema || !$this->schema->isActive()) {
             return;
         }
 
@@ -472,7 +485,7 @@ PROMPT;
 
     public function recalculateMetrics(): void
     {
-        if (! $this->schema) {
+        if (!$this->schema) {
             return;
         }
 
@@ -499,7 +512,7 @@ PROMPT;
 
     public function loadUntaggedItems(): void
     {
-        if (! $this->schema) {
+        if (!$this->schema) {
             return;
         }
 
@@ -512,10 +525,10 @@ PROMPT;
             ->orderByDesc('meeting_date')
             ->limit(20)
             ->get()
-            ->map(fn ($m) => [
+            ->map(fn($m) => [
                 'type' => 'meeting',
                 'id' => $m->id,
-                'title' => $m->title ?? 'Meeting on '.$m->meeting_date->format('M j, Y'),
+                'title' => $m->title ?? 'Meeting on ' . $m->meeting_date->format('M j, Y'),
                 'date' => $m->meeting_date->format('Y-m-d'),
                 'current_tags' => $m->metric_tags ?? [],
                 'suggested_grant' => true, // AI would suggest this
@@ -528,7 +541,7 @@ PROMPT;
             ->orderByDesc('created_at')
             ->limit(20)
             ->get()
-            ->map(fn ($d) => [
+            ->map(fn($d) => [
                 'type' => 'document',
                 'id' => $d->id,
                 'title' => $d->title,
@@ -551,7 +564,7 @@ PROMPT;
             return;
         }
 
-        if (! $item) {
+        if (!$item) {
             return;
         }
 
@@ -559,7 +572,7 @@ PROMPT;
 
         if ($associateGrant) {
             $grantAssocs = $item->grant_associations ?? [];
-            if (! in_array($this->grant->id, $grantAssocs)) {
+            if (!in_array($this->grant->id, $grantAssocs)) {
                 $grantAssocs[] = $this->grant->id;
                 $updates['grant_associations'] = $grantAssocs;
             }
@@ -569,7 +582,7 @@ PROMPT;
 
         // Remove from untagged list
         $this->untaggedItems = array_filter($this->untaggedItems, function ($i) use ($type, $id) {
-            return ! ($i['type'] === $type && $i['id'] === $id);
+            return !($i['type'] === $type && $i['id'] === $id);
         });
         $this->untaggedCount = count($this->untaggedItems);
 
@@ -579,7 +592,7 @@ PROMPT;
     public function skipItem(string $type, int $id): void
     {
         $this->untaggedItems = array_filter($this->untaggedItems, function ($i) use ($type, $id) {
-            return ! ($i['type'] === $type && $i['id'] === $id);
+            return !($i['type'] === $type && $i['id'] === $id);
         });
         $this->untaggedCount = count($this->untaggedItems);
     }
@@ -616,7 +629,7 @@ PROMPT;
     public function saveManualEntries(): void
     {
         foreach ($this->manualEntries as $metricId => $entry) {
-            if (! empty($entry['value'])) {
+            if (!empty($entry['value'])) {
                 MetricCalculation::updateOrCreate(
                     [
                         'grant_id' => $this->grant->id,
@@ -663,22 +676,22 @@ PROMPT;
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->timeout(180)->post('https://api.anthropic.com/v1/messages', [
-                'model' => config('ai.model', 'claude-sonnet-4-20250514'),
-                'max_tokens' => 8000,
-                'messages' => [
-                    ['role' => 'user', 'content' => $prompt],
-                ],
-            ]);
+                        'model' => config('ai.model', 'claude-sonnet-4-20250514'),
+                        'max_tokens' => 8000,
+                        'messages' => [
+                            ['role' => 'user', 'content' => $prompt],
+                        ],
+                    ]);
 
             if ($response->successful()) {
                 $this->generatedReport = $response->json('content.0.text', '');
             } else {
                 $this->generatedReport = '**Error generating report.** Please try again.';
-                Log::error('AutomatedReports Report Generation error: '.$response->body());
+                Log::error('AutomatedReports Report Generation error: ' . $response->body());
             }
         } catch (\Exception $e) {
-            $this->generatedReport = '**Error:** '.$e->getMessage();
-            Log::error('AutomatedReports Report Exception: '.$e->getMessage());
+            $this->generatedReport = '**Error:** ' . $e->getMessage();
+            Log::error('AutomatedReports Report Exception: ' . $e->getMessage());
         }
 
         $this->isGeneratingReport = false;
@@ -692,7 +705,7 @@ PROMPT;
         // Gather manual entries
         $manualData = [];
         foreach ($this->manualEntries as $metricId => $entry) {
-            if (! empty($entry['value'])) {
+            if (!empty($entry['value'])) {
                 $manualData[$metricId] = [
                     'name' => $entry['name'],
                     'value' => $entry['value'],
@@ -736,7 +749,7 @@ PROMPT;
 
     public function getSchemaStatusProperty(): string
     {
-        if (! $this->schema) {
+        if (!$this->schema) {
             return 'none';
         }
 
