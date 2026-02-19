@@ -410,6 +410,13 @@
                         class="px-3 py-1.5 bg-white text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-50">Add</button>
                 </div>
                 <button wire:click="clearSelection" class="ml-auto text-xs text-gray-500 hover:text-gray-700">Clear</button>
+                <button wire:click="confirmBulkDelete"
+                    class="px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete
+                </button>
             </div>
         @endif
 
@@ -498,6 +505,18 @@
                                 </span>
                             @endif
                         </div>
+                    </div>
+
+                    {{-- Delete button --}}
+                    <div class="px-4 pb-3 flex justify-end">
+                        <button wire:click="deletePerson({{ $person->id }})"
+                            wire:confirm="Are you sure you want to delete this contact?"
+                            class="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Delete
+                        </button>
                     </div>
                 </div>
             @empty
@@ -658,6 +677,14 @@
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                             </svg>
                                         </a>
+                                        <button wire:click="deletePerson({{ $person->id }})"
+                                            wire:confirm="Are you sure you want to delete this contact?"
+                                            class="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/40"
+                                            title="Delete">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -739,3 +766,33 @@
     </div>
 @endif
 </div>
+
+{{-- Bulk Delete Confirmation Modal --}}
+@if($confirmingBulkDelete)
+    <div class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-gray-900/70" wire:click="cancelBulkDelete"></div>
+        <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-gray-200 dark:border-gray-700">
+            <div class="p-6 text-center">
+                <div class="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/40 mb-4">
+                    <svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Delete {{ count($selected) }} Contact(s)?</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                    This action is permanent and cannot be undone. Meeting and project associations will be removed.
+                </p>
+                <div class="flex items-center justify-center gap-3">
+                    <button wire:click="cancelBulkDelete"
+                        class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+                        Cancel
+                    </button>
+                    <button wire:click="bulkDelete"
+                        class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+                        Delete {{ count($selected) }} Contact(s)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+@endif

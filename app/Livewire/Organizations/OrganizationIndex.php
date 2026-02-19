@@ -67,6 +67,13 @@ class OrganizationIndex extends Component
 
     public string $editingName = '';
 
+    // Bulk selection/actions
+    public array $selected = [];
+
+    public bool $selectAll = false;
+
+    public bool $confirmingBulkDelete = false;
+
     public function startEditing(int $orgId, string $name): void
     {
         $this->editingOrgId = $orgId;
@@ -118,6 +125,72 @@ class OrganizationIndex extends Component
         $this->viewMode = $mode;
     }
 
+    // ---- Bulk actions ----
+    public function toggleSelectAll(): void
+    {
+        if ($this->selectAll) {
+            $ids = Organization::query()
+                ->when($this->filterType, fn($q) => $q->where('type', $this->filterType))
+                ->when($this->search, fn($q) => $q->where('name', 'like', '%' . $this->search . '%'))
+                ->pluck('id')->toArray();
+            $this->selected = $ids;
+        } else {
+            $this->selected = [];
+        }
+    }
+
+    public function clearSelection(): void
+    {
+        $this->selected = [];
+        $this->selectAll = false;
+    }
+
+    public function deleteOrganization(int $id): void
+    {
+        $org = Organization::find($id);
+        if (!$org) {
+            return;
+        }
+        // Null out organization_id on associated people
+        $org->people()->update(['organization_id' => null]);
+        $org->meetings()->detach();
+        $org->projects()->detach();
+        $org->delete();
+        $this->selected = array_values(array_diff($this->selected, [$id]));
+        $this->dispatch('notify', type: 'success', message: 'Organization deleted.');
+    }
+
+    public function confirmBulkDelete(): void
+    {
+        if (empty($this->selected)) {
+            return;
+        }
+        $this->confirmingBulkDelete = true;
+    }
+
+    public function cancelBulkDelete(): void
+    {
+        $this->confirmingBulkDelete = false;
+    }
+
+    public function bulkDelete(): void
+    {
+        if (empty($this->selected)) {
+            return;
+        }
+        $orgs = Organization::whereIn('id', $this->selected)->get();
+        $count = $orgs->count();
+        foreach ($orgs as $org) {
+            $org->people()->update(['organization_id' => null]);
+            $org->meetings()->detach();
+            $org->projects()->detach();
+            $org->delete();
+        }
+        $this->confirmingBulkDelete = false;
+        $this->clearSelection();
+        $this->dispatch('notify', type: 'success', message: "{$count} organization(s) deleted.");
+    }
+
     public function openAddModal(string $mode = 'single'): void
     {
         $this->resetAddForm();
@@ -160,7 +233,7 @@ class OrganizationIndex extends Component
         $this->validate([
             'orgName' => 'required|min:2|max:255',
             'orgAbbreviation' => 'nullable|max:20',
-            'orgType' => 'nullable|in:'.implode(',', Organization::TYPES),
+            'orgType' => 'nullable|in:' . implode(',', Organization::TYPES),
             'orgWebsite' => 'nullable|url|max:500',
             'orgLinkedIn' => 'nullable|url|max:500',
             'orgDescription' => 'nullable|max:2000',
@@ -232,23 +305,23 @@ class OrganizationIndex extends Component
 
         try {
             $response = \Illuminate\Support\Facades\Http::withHeaders([
-                'Authorization' => 'Bearer '.config('services.openai.key'),
+                'Authorization' => 'Bearer ' . config('services.openai.key'),
                 'Content-Type' => 'application/json',
             ])->post('https://api.openai.com/v1/chat/completions', [
-                'model' => 'gpt-4o-mini',
-                'messages' => [
-                    [
-                        'role' => 'system',
-                        'content' => 'You are an expert at extracting organization names from unstructured text. Extract all distinct organization, company, foundation, nonprofit, government agency, and institution names. Return ONLY a JSON array of strings with the organization names. Do not include any explanation, just the JSON array. Remove duplicates. If you cannot find any organizations, return an empty array [].',
-                    ],
-                    [
-                        'role' => 'user',
-                        'content' => "Extract all organization names from this text:\n\n".$this->bulkText,
-                    ],
-                ],
-                'temperature' => 0.3,
-                'max_tokens' => 2000,
-            ]);
+                        'model' => 'gpt-4o-mini',
+                        'messages' => [
+                            [
+                                'role' => 'system',
+                                'content' => 'You are an expert at extracting organization names from unstructured text. Extract all distinct organization, company, foundation, nonprofit, government agency, and institution names. Return ONLY a JSON array of strings with the organization names. Do not include any explanation, just the JSON array. Remove duplicates. If you cannot find any organizations, return an empty array [].',
+                            ],
+                            [
+                                'role' => 'user',
+                                'content' => "Extract all organization names from this text:\n\n" . $this->bulkText,
+                            ],
+                        ],
+                        'temperature' => 0.3,
+                        'max_tokens' => 2000,
+                    ]);
 
             if ($response->successful()) {
                 $content = $response->json()['choices'][0]['message']['content'] ?? '[]';
@@ -258,7 +331,7 @@ class OrganizationIndex extends Component
 
                 $orgs = json_decode($content, true);
                 if (is_array($orgs)) {
-                    $this->extractedOrgs = array_map(fn ($name) => [
+                    $this->extractedOrgs = array_map(fn($name) => [
                         'name' => trim($name),
                         'selected' => true,
                         'exists' => Organization::where('name', trim($name))->exists(),
@@ -279,7 +352,7 @@ class OrganizationIndex extends Component
     public function toggleExtractedOrg(int $index): void
     {
         if (isset($this->extractedOrgs[$index])) {
-            $this->extractedOrgs[$index]['selected'] = ! $this->extractedOrgs[$index]['selected'];
+            $this->extractedOrgs[$index]['selected'] = !$this->extractedOrgs[$index]['selected'];
         }
     }
 
@@ -289,7 +362,7 @@ class OrganizationIndex extends Component
         $errors = [];
 
         foreach ($this->extractedOrgs as $org) {
-            if (! $org['selected']) {
+            if (!$org['selected']) {
                 continue;
             }
             if ($org['exists']) {
@@ -328,7 +401,7 @@ class OrganizationIndex extends Component
     {
         $this->csvPreview = [];
 
-        if (! $this->csvFile) {
+        if (!$this->csvFile) {
             return;
         }
 
@@ -354,7 +427,7 @@ class OrganizationIndex extends Component
         $path = $this->csvFile->getRealPath();
         $handle = fopen($path, 'r');
 
-        if (! $handle) {
+        if (!$handle) {
             $this->importErrors = ['Could not read CSV file.'];
 
             return;
@@ -413,7 +486,7 @@ class OrganizationIndex extends Component
         $query = Organization::query()
             ->withCount(['meetings', 'people'])
             ->when($this->search, function ($q) {
-                $q->where('name', 'like', '%'.$this->search.'%');
+                $q->where('name', 'like', '%' . $this->search . '%');
             })
             ->when($this->filterType, function ($q) {
                 $q->where('type', $this->filterType);
