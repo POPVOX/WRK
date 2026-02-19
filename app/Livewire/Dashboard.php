@@ -262,7 +262,7 @@ class Dashboard extends Component
         return Action::where('assigned_to', $this->user->id)
             ->where('status', 'pending')
             ->with('meeting.organizations')
-            ->orderByRaw('CASE WHEN due_date < date("now") THEN 0 ELSE 1 END')
+            ->orderByRaw('CASE WHEN due_date IS NOT NULL AND due_date < ? THEN 0 ELSE 1 END', [today()->toDateString()])
             ->orderBy('due_date')
             ->limit(10)
             ->get()
