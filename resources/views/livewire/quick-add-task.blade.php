@@ -1,4 +1,4 @@
-<div class="fixed bottom-24 right-20 z-40">
+<div class="fixed bottom-4 right-4 z-50">
     {{-- Floating Button (when closed) --}}
     @if(!$isOpen)
         <button wire:click="open"

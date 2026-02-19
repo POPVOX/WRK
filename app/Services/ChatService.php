@@ -220,9 +220,11 @@ class ChatService
             ])->toArray();
         }
 
-        // Optional FTS fallback from knowledge base (SQLite FTS5)
+        // Optional KB full-text context
         try {
-            if (DB::getDriverName() === 'sqlite') {
+            $driver = DB::getDriverName();
+
+            if ($driver === 'sqlite') {
                 $kbMatches = DB::select(
                     'SELECT doc_id, title, snippet(kb_index, 2, "[[", "]]", "...", 8) AS snippet
                      FROM kb_index
@@ -230,14 +232,44 @@ class ChatService
                      LIMIT 5',
                     [$query]
                 );
+            } elseif ($driver === 'pgsql') {
+                $kbMatches = DB::select(
+                    "SELECT
+                        doc_id,
+                        title,
+                        ts_headline(
+                            'english',
+                            coalesce(body, ''),
+                            plainto_tsquery('english', ?),
+                            'StartSel=[[, StopSel=]], MaxWords=8, MinWords=3, ShortWord=2'
+                        ) AS snippet
+                     FROM kb_index
+                     WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
+                           @@ plainto_tsquery('english', ?)
+                     ORDER BY ts_rank_cd(
+                         to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, '')),
+                         plainto_tsquery('english', ?)
+                     ) DESC
+                     LIMIT 5",
+                    [$query, $query, $query]
+                );
+            } else {
+                $like = "%{$query}%";
+                $kbMatches = DB::select(
+                    'SELECT doc_id, title, substr(coalesce(body, \'\'), 1, 240) AS snippet
+                     FROM kb_index
+                     WHERE title LIKE ? OR body LIKE ?
+                     LIMIT 5',
+                    [$like, $like]
+                );
+            }
 
-                if (! empty($kbMatches)) {
-                    $context['kb_matches'] = collect($kbMatches)->map(fn ($row) => [
-                        'doc_id' => $row->doc_id,
-                        'title' => $row->title,
-                        'snippet' => $row->snippet,
-                    ])->toArray();
-                }
+            if (! empty($kbMatches)) {
+                $context['kb_matches'] = collect($kbMatches)->map(fn ($row) => [
+                    'doc_id' => $row->doc_id,
+                    'title' => $row->title,
+                    'snippet' => $row->snippet,
+                ])->toArray();
             }
         } catch (\Throwable $e) {
             \Log::debug('ChatService FTS lookup skipped', ['error' => $e->getMessage()]);

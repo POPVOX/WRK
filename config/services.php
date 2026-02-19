@@ -39,6 +39,7 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect_uri' => env('GOOGLE_REDIRECT_URI', 'http://localhost:8000/google/callback'),
+        'login_redirect_uri' => env('GOOGLE_LOGIN_REDIRECT_URI', env('APP_URL', 'http://localhost').'/auth/google/callback'),
     ],
 
     'anthropic' => [

@@ -105,19 +105,64 @@ class KnowledgeBase extends Component
 
         $this->isSearching = true;
 
-        // FTS5 match string (basic)
         $match = $query;
+        $driver = DB::connection()->getDriverName();
+        $ftsRows = [];
 
-        // Get candidate doc IDs + snippet from FTS, order by bm25
-        $ftsRows = DB::select("
-            SELECT doc_id,
-                   snippet(kb_index, 3, '<mark>', '</mark>', '…', 10) AS snip,
-                   bm25(kb_index) AS rank
-            FROM kb_index
-            WHERE kb_index MATCH ?
-            ORDER BY rank ASC
-            LIMIT 200
-        ", [$match]);
+        try {
+            if ($driver === 'sqlite') {
+                // SQLite FTS5
+                $ftsRows = DB::select("
+                    SELECT doc_id,
+                           snippet(kb_index, 3, '<mark>', '</mark>', '…', 10) AS snip,
+                           bm25(kb_index) AS rank
+                    FROM kb_index
+                    WHERE kb_index MATCH ?
+                    ORDER BY rank ASC
+                    LIMIT 200
+                ", [$match]);
+            } elseif ($driver === 'pgsql') {
+                // Postgres full-text search
+                $ftsRows = DB::select("
+                    SELECT
+                        doc_id,
+                        ts_headline(
+                            'english',
+                            coalesce(body, ''),
+                            plainto_tsquery('english', ?),
+                            'StartSel=<mark>, StopSel=</mark>, MaxWords=12, MinWords=4, ShortWord=2'
+                        ) AS snip,
+                        ts_rank_cd(
+                            to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, '')),
+                            plainto_tsquery('english', ?)
+                        ) AS rank
+                    FROM kb_index
+                    WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
+                          @@ plainto_tsquery('english', ?)
+                    ORDER BY rank DESC
+                    LIMIT 200
+                ", [$match, $match, $match]);
+            } else {
+                // Portable fallback
+                $like = "%{$match}%";
+                $ftsRows = DB::select("
+                    SELECT doc_id,
+                           NULL AS snip,
+                           0 AS rank
+                    FROM kb_index
+                    WHERE title LIKE ? OR body LIKE ?
+                    LIMIT 200
+                ", [$like, $like]);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('KnowledgeBase search failed', [
+                'driver' => $driver,
+                'error' => $e->getMessage(),
+            ]);
+            $this->isSearching = false;
+
+            return;
+        }
 
         $ids = collect($ftsRows)->pluck('doc_id')->unique()->values();
         $snippetMap = collect($ftsRows)->keyBy('doc_id')->map(fn ($r) => $r->snip)->all();

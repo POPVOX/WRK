@@ -86,7 +86,7 @@ class IndexDocumentContent implements ShouldQueue
                 }, $tags));
             }
 
-            // Update FTS5 index
+            // Update KB index table (driver-specific search backend)
             try {
                 DB::delete('DELETE FROM kb_index WHERE doc_id = ?', [$doc->id]);
                 DB::insert('INSERT INTO kb_index (doc_id, project_id, title, body) VALUES (?, ?, ?, ?)', [

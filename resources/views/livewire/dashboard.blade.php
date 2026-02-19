@@ -342,10 +342,15 @@
                         <div class="space-y-2">
                             @foreach($myActions->take(5) as $action)
                                 <div
-                                    class="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                                    {{-- Checkbox --}}
+                                    class="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition group/task">
+                                    {{-- Checkbox - Mark Complete --}}
                                     <button wire:click="completeAction({{ $action->id }})"
-                                        class="flex-shrink-0 mt-0.5 w-5 h-5 rounded border-2 border-gray-300 dark:border-gray-600 hover:border-indigo-500 dark:hover:border-indigo-400 transition">
+                                        class="flex-shrink-0 mt-0.5 w-5 h-5 rounded border-2 border-gray-300 dark:border-gray-600 hover:border-green-500 dark:hover:border-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition flex items-center justify-center"
+                                        title="Mark as completed">
+                                        {{-- Show checkmark on hover --}}
+                                        <svg class="w-3 h-3 text-green-500 opacity-0 group-hover/task:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                        </svg>
                                     </button>
 
                                     {{-- Task Details --}}
@@ -359,7 +364,7 @@
                                                 <span
                                                     class="{{ $action->is_overdue ? 'text-red-600 dark:text-red-400' : ($action->due_date->isToday() ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400') }}">
                                                     @if($action->is_overdue)
-                                                        Overdue
+                                                        Overdue ({{ $action->due_date->format('M j') }})
                                                     @elseif($action->due_date->isToday())
                                                         Due today
                                                     @elseif($action->due_date->isTomorrow())
@@ -441,7 +446,19 @@
                         @if($showArchivedTasks)
                             <div class="mt-3 space-y-2">
                                 @forelse($archivedActions as $action)
-                                    <div class="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+                                    <div class="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 group/archived">
+                                        {{-- Filled checkbox for completed, empty for deleted --}}
+                                        @if(!$action->deleted_at)
+                                            <button wire:click="restoreTask({{ $action->id }})"
+                                                class="flex-shrink-0 w-5 h-5 rounded border-2 border-green-500 bg-green-500 flex items-center justify-center hover:bg-green-600 hover:border-green-600 transition"
+                                                title="Mark as incomplete">
+                                                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </button>
+                                        @else
+                                            <div class="flex-shrink-0 w-5 h-5 rounded border-2 border-gray-300 dark:border-gray-500 bg-gray-200 dark:bg-gray-600"></div>
+                                        @endif
                                         <div class="flex-1 min-w-0">
                                             <p class="text-sm text-gray-500 dark:text-gray-400 line-through">
                                                 {{ $action->title ?? $action->description }}
@@ -455,14 +472,17 @@
                                                 <span class="text-gray-400">{{ $action->updated_at->diffForHumans() }}</span>
                                             </div>
                                         </div>
-                                        <button wire:click="restoreTask({{ $action->id }})"
-                                            class="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                                            title="Restore task">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                            </svg>
-                                        </button>
+                                        {{-- Restore button for deleted tasks --}}
+                                        @if($action->deleted_at)
+                                            <button wire:click="restoreTask({{ $action->id }})"
+                                                class="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                                                title="Restore task">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                            </button>
+                                        @endif
                                     </div>
                                 @empty
                                     <p class="text-xs text-gray-400 dark:text-gray-500 text-center py-2">No archived tasks</p>

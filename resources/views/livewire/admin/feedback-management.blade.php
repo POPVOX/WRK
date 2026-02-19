@@ -199,11 +199,11 @@
                                                     'dot' => 'bg-red-500',
                                                 ],
                                                 'suggestion' => [
-                                                    'bg' => 'bg-gradient-to-r from-amber-50 to-yellow-100 dark:from-yellow-900/30 dark:to-amber-900/20',
-                                                    'text' => 'text-amber-700 dark:text-yellow-300',
-                                                    'border' => 'border border-amber-200 dark:border-yellow-800/50',
+                                                    'bg' => 'bg-gradient-to-r from-blue-50 to-sky-100 dark:from-blue-900/30 dark:to-sky-900/20',
+                                                    'text' => 'text-blue-700 dark:text-blue-300',
+                                                    'border' => 'border border-blue-200 dark:border-blue-800/50',
                                                     'icon' => '💡',
-                                                    'dot' => 'bg-amber-500',
+                                                    'dot' => 'bg-blue-500',
                                                 ],
                                                 'compliment' => [
                                                     'bg' => 'bg-gradient-to-r from-green-50 to-emerald-100 dark:from-green-900/30 dark:to-emerald-900/20',
@@ -583,7 +583,7 @@
                             @php
                                 $modalTypeStyles = [
                                     'bug' => 'bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/50',
-                                    'suggestion' => 'bg-gradient-to-r from-amber-50 to-yellow-100 dark:from-yellow-900/30 dark:to-amber-900/20 text-amber-700 dark:text-yellow-300 border border-amber-200 dark:border-yellow-800/50',
+                                    'suggestion' => 'bg-gradient-to-r from-blue-50 to-sky-100 dark:from-blue-900/30 dark:to-sky-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50',
                                     'compliment' => 'bg-gradient-to-r from-green-50 to-emerald-100 dark:from-green-900/30 dark:to-emerald-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/50',
                                     'question' => 'bg-gradient-to-r from-purple-50 to-violet-100 dark:from-purple-900/30 dark:to-violet-900/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50',
                                     'general' => 'bg-gradient-to-r from-gray-50 to-slate-100 dark:from-gray-800 dark:to-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700',
