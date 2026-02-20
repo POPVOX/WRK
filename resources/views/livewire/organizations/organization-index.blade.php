@@ -5,7 +5,22 @@
             <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Organizations</h1>
             <p class="mt-1 text-gray-500 dark:text-gray-400">View and manage stakeholder organizations and partners</p>
         </div>
-        <div class="mt-4 sm:mt-0">
+        <div class="mt-4 sm:mt-0 flex items-center gap-2">
+            <button wire:click="normalizeOrgNames"
+                wire:loading.attr="disabled"
+                wire:loading.class="opacity-50 cursor-wait"
+                wire:target="normalizeOrgNames"
+                class="inline-flex items-center px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors text-sm">
+                <svg wire:loading.remove wire:target="normalizeOrgNames" class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <svg wire:loading wire:target="normalizeOrgNames" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                <span wire:loading.remove wire:target="normalizeOrgNames">AI Normalize Names</span>
+                <span wire:loading wire:target="normalizeOrgNames">Normalizing…</span>
+            </button>
             <button wire:click="openAddModal"
                 class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -67,6 +82,26 @@
         <div
             class="mb-4 p-4 bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-300">
             {{ session('message') }}
+        </div>
+    @endif
+
+    {{-- AI Suggestion Review Banner --}}
+    @if($suggestionCount > 0)
+        <div class="mb-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span class="text-sm font-medium text-amber-800 dark:text-amber-300">
+                    {{ $suggestionCount }} AI name suggestion(s) ready for review
+                </span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button wire:click="acceptAllSuggestions"
+                    class="px-3 py-1.5 text-xs font-medium bg-amber-500 text-white rounded hover:bg-amber-600 transition-colors">
+                    Accept All
+                </button>
+            </div>
         </div>
     @endif
 
@@ -143,6 +178,15 @@
                                             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
                                                 {{ $org->name }}
                                             </h3>
+                                            @if($org->suggested_name)
+                                                <div class="mt-1 flex items-center gap-1" onclick="event.preventDefault(); event.stopPropagation();">
+                                                    <span class="text-xs text-amber-700 dark:text-amber-400">→ {{ $org->suggested_name }}</span>
+                                                    <button wire:click="applySuggestedName({{ $org->id }})"
+                                                        class="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded hover:bg-green-200">✓</button>
+                                                    <button wire:click="rejectSuggestedName({{ $org->id }})"
+                                                        class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded hover:bg-gray-200">✗</button>
+                                                </div>
+                                            @endif
                                             @if($org->type)
                                                 <span
                                                     class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300 mt-1">
@@ -285,11 +329,13 @@
                                         <a href="{{ route('organizations.show', $org) }}"
                                             class="font-medium text-gray-900 dark:text-white hover:text-indigo-600">{{ $org->name }}</a>
                                         @if($org->suggested_name)
-                                            <button wire:click="applySuggestedName({{ $org->id }})"
-                                                class="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 transition-colors"
-                                                title="Fix to: {{ $org->suggested_name }}">
-                                                Fix: {{ $org->suggested_name }}
-                                            </button>
+                                            <div class="flex items-center gap-1">
+                                                <span class="text-xs text-amber-700 dark:text-amber-400 truncate max-w-[150px]" title="{{ $org->suggested_name }}">→ {{ $org->suggested_name }}</span>
+                                                <button wire:click="applySuggestedName({{ $org->id }})"
+                                                    class="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded hover:bg-green-200 flex-shrink-0">✓</button>
+                                                <button wire:click="rejectSuggestedName({{ $org->id }})"
+                                                    class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded hover:bg-gray-200 flex-shrink-0">✗</button>
+                                            </div>
                                         @endif
                                         <button wire:click="startEditing({{ $org->id }}, '{{ addslashes($org->name) }}')"
                                             class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-indigo-600 transition-opacity"

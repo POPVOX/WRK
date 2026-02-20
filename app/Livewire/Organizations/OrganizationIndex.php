@@ -3,6 +3,7 @@
 namespace App\Livewire\Organizations;
 
 use App\Models\Organization;
+use App\Services\OrgNameNormalizerService;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -78,6 +79,10 @@ class OrganizationIndex extends Component
 
     public int $trashedCount = 0;
 
+    public bool $isNormalizing = false;
+
+    public int $suggestionCount = 0;
+
     public function startEditing(int $orgId, string $name): void
     {
         $this->editingOrgId = $orgId;
@@ -109,9 +114,58 @@ class OrganizationIndex extends Component
     {
         $org = Organization::find($orgId);
         if ($org && $org->suggested_name) {
-            $org->update(['name' => $org->suggested_name]);
+            $org->update([
+                'name' => $org->suggested_name,
+                'suggested_name' => null,
+            ]);
             $this->dispatch('notify', type: 'success', message: 'Name updated!');
         }
+    }
+
+    public function rejectSuggestedName(int $orgId): void
+    {
+        $org = Organization::find($orgId);
+        if ($org) {
+            $org->update(['suggested_name' => null]);
+            $this->dispatch('notify', type: 'info', message: 'Suggestion dismissed.');
+        }
+    }
+
+    public function acceptAllSuggestions(): void
+    {
+        $orgs = Organization::whereNotNull('suggested_name')->get();
+        $count = 0;
+        foreach ($orgs as $org) {
+            $org->update([
+                'name' => $org->suggested_name,
+                'suggested_name' => null,
+            ]);
+            $count++;
+        }
+        $this->dispatch('notify', type: 'success', message: "{$count} organization name(s) updated.");
+    }
+
+    public function normalizeOrgNames(): void
+    {
+        $this->isNormalizing = true;
+
+        try {
+            $service = app(OrgNameNormalizerService::class);
+            $candidates = $service->candidates();
+
+            if ($candidates->isEmpty()) {
+                $this->dispatch('notify', type: 'info', message: 'No organizations need normalization.');
+                $this->isNormalizing = false;
+                return;
+            }
+
+            $results = $service->normalize($candidates);
+            $this->dispatch('notify', type: 'success', message: count($results) . ' name suggestion(s) generated. Review the highlighted organizations.');
+        } catch (\Throwable $e) {
+            $this->dispatch('notify', type: 'error', message: 'Normalization failed: ' . $e->getMessage());
+        }
+
+        $this->isNormalizing = false;
     }
 
     public function updatingSearch()
@@ -554,6 +608,7 @@ class OrganizationIndex extends Component
             ->orderBy('name');
 
         $this->trashedCount = Organization::onlyTrashed()->count();
+        $this->suggestionCount = Organization::whereNotNull('suggested_name')->count();
 
         return view('livewire.organizations.organization-index', [
             'organizations' => $query->paginate(20),
