@@ -39,6 +39,9 @@ class MeetingList extends Component
     #[Url]
     public string $completedPeriod = 'month'; // week, month, quarter, year, all
 
+    #[Url]
+    public string $scope = 'mine'; // 'mine' or 'all'
+
     // Bulk import state
     public bool $showBulkImportModal = false;
 
@@ -72,7 +75,21 @@ class MeetingList extends Component
         $this->issue = '';
         $this->teamMember = '';
         $this->completedPeriod = 'month';
+        $this->scope = 'mine';
         $this->resetPage();
+    }
+
+    /**
+     * Apply common filters including the mine/all scope.
+     */
+    protected function applyCommonFilters($query)
+    {
+        return $query
+            ->when($this->search, fn($q) => $q->where('title', 'like', "%{$this->search}%"))
+            ->when($this->organization, fn($q) => $q->whereHas('organizations', fn($o) => $o->where('organizations.id', $this->organization)))
+            ->when($this->issue, fn($q) => $q->whereHas('issues', fn($i) => $i->where('issues.id', $this->issue)))
+            ->when($this->teamMember, fn($q) => $q->whereHas('teamMembers', fn($t) => $t->where('users.id', $this->teamMember)))
+            ->when($this->scope === 'mine' && !$this->teamMember, fn($q) => $q->whereHas('teamMembers', fn($t) => $t->where('users.id', auth()->id())));
     }
 
     // Bulk Import Methods
@@ -159,7 +176,7 @@ class MeetingList extends Component
             $this->dispatch('notify', type: 'success', message: "{$createdCount} meetings imported!");
         }
 
-        if (! empty($result['errors'])) {
+        if (!empty($result['errors'])) {
             $this->importError = implode("\n", $result['errors']);
         }
     }
@@ -168,7 +185,7 @@ class MeetingList extends Component
     {
         $meeting = Meeting::find($id);
 
-        if (! $meeting) {
+        if (!$meeting) {
             $this->dispatch('notify', type: 'error', message: 'Meeting not found.');
 
             return;
@@ -197,10 +214,14 @@ class MeetingList extends Component
     // Stats for section headers
     public function getStatsProperty()
     {
+        $scopeFilter = fn($q) => $this->scope === 'mine'
+            ? $q->whereHas('teamMembers', fn($t) => $t->where('users.id', auth()->id()))
+            : $q;
+
         return [
-            'upcoming' => Meeting::upcoming()->count(),
-            'needs_notes' => Meeting::needsNotes()->count(),
-            'completed_this_month' => Meeting::withNotes()->where('meeting_date', '>=', now()->subMonth())->count(),
+            'upcoming' => $scopeFilter(Meeting::upcoming())->count(),
+            'needs_notes' => $scopeFilter(Meeting::needsNotes())->count(),
+            'completed_this_month' => $scopeFilter(Meeting::withNotes()->where('meeting_date', '>=', now()->subMonth()))->count(),
         ];
     }
 
@@ -208,11 +229,9 @@ class MeetingList extends Component
     public function getUpcomingMeetingsProperty()
     {
         $query = Meeting::upcoming()
-            ->with(['people', 'organizations', 'issues', 'teamMembers'])
-            ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
-            ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)))
-            ->when($this->teamMember, fn ($q) => $q->whereHas('teamMembers', fn ($t) => $t->where('users.id', $this->teamMember)));
+            ->with(['people', 'organizations', 'issues', 'teamMembers']);
+
+        $this->applyCommonFilters($query);
 
         return $query->get();
     }
@@ -221,11 +240,9 @@ class MeetingList extends Component
     public function getNeedsNotesMeetingsProperty()
     {
         $query = Meeting::needsNotes()
-            ->with(['people', 'organizations', 'teamMembers'])
-            ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
-            ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)))
-            ->when($this->teamMember, fn ($q) => $q->whereHas('teamMembers', fn ($t) => $t->where('users.id', $this->teamMember)));
+            ->with(['people', 'organizations', 'teamMembers']);
+
+        $this->applyCommonFilters($query);
 
         return $query->limit(10)->get();
     }
@@ -234,17 +251,15 @@ class MeetingList extends Component
     public function getCompletedMeetingsProperty()
     {
         $query = Meeting::withNotes()
-            ->with(['people', 'organizations', 'issues', 'teamMembers'])
-            ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
-            ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)))
-            ->when($this->teamMember, fn ($q) => $q->whereHas('teamMembers', fn ($t) => $t->where('users.id', $this->teamMember)));
+            ->with(['people', 'organizations', 'issues', 'teamMembers']);
+
+        $this->applyCommonFilters($query);
 
         // Period filter
-        $query->when($this->completedPeriod === 'week', fn ($q) => $q->where('meeting_date', '>=', now()->subWeek()))
-            ->when($this->completedPeriod === 'month', fn ($q) => $q->where('meeting_date', '>=', now()->subMonth()))
-            ->when($this->completedPeriod === 'quarter', fn ($q) => $q->where('meeting_date', '>=', now()->subQuarter()))
-            ->when($this->completedPeriod === 'year', fn ($q) => $q->where('meeting_date', '>=', now()->subYear()));
+        $query->when($this->completedPeriod === 'week', fn($q) => $q->where('meeting_date', '>=', now()->subWeek()))
+            ->when($this->completedPeriod === 'month', fn($q) => $q->where('meeting_date', '>=', now()->subMonth()))
+            ->when($this->completedPeriod === 'quarter', fn($q) => $q->where('meeting_date', '>=', now()->subQuarter()))
+            ->when($this->completedPeriod === 'year', fn($q) => $q->where('meeting_date', '>=', now()->subYear()));
 
         return $query->paginate(15, pageName: 'completed');
     }
@@ -252,11 +267,9 @@ class MeetingList extends Component
     // All meetings for list/cards view
     public function getAllMeetingsProperty()
     {
-        $query = Meeting::with(['people', 'organizations', 'issues', 'teamMembers'])
-            ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
-            ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)))
-            ->when($this->teamMember, fn ($q) => $q->whereHas('teamMembers', fn ($t) => $t->where('users.id', $this->teamMember)));
+        $query = Meeting::with(['people', 'organizations', 'issues', 'teamMembers']);
+
+        $this->applyCommonFilters($query);
 
         // Filter by view type
         if ($this->view === 'upcoming') {
@@ -277,14 +290,13 @@ class MeetingList extends Component
     {
         $query = Meeting::with(['people', 'organizations', 'issues'])
             ->where('meeting_date', '>=', now()->startOfMonth())
-            ->where('meeting_date', '<=', now()->addMonths(6)->endOfMonth())
-            ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
-            ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)))
-            ->orderBy('meeting_date')
-            ->get();
+            ->where('meeting_date', '<=', now()->addMonths(6)->endOfMonth());
 
-        return $query->groupBy(fn ($m) => $m->meeting_date->format('Y-m'));
+        $this->applyCommonFilters($query);
+
+        $query->orderBy('meeting_date');
+
+        return $query->get()->groupBy(fn($m) => $m->meeting_date->format('Y-m'));
     }
 
     public function render()

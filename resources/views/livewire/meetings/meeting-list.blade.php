@@ -25,34 +25,49 @@
         </div>
     </div>
 
-    {{-- Toolbar Row 1: Filter Tabs + View Mode --}}
+    {{-- Toolbar Row 1: Scope Toggle + Filter Tabs + View Mode --}}
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        {{-- Filter Tabs --}}
-        <div class="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-x-auto">
-            <button wire:click="$set('view', '')"
-                class="px-3 py-1.5 text-sm font-medium rounded-md transition whitespace-nowrap {{ $view === '' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' }}">
-                All
-            </button>
-            <button wire:click="$set('view', 'upcoming')"
-                class="px-3 py-1.5 text-sm font-medium rounded-md transition whitespace-nowrap {{ $view === 'upcoming' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' }}">
-                Upcoming
-                @if($stats['upcoming'] > 0)
-                    <span
-                        class="ml-1 px-1.5 py-0.5 text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-full">{{ $stats['upcoming'] }}</span>
-                @endif
-            </button>
-            <button wire:click="$set('view', 'needs_notes')"
-                class="px-3 py-1.5 text-sm font-medium rounded-md transition whitespace-nowrap {{ $view === 'needs_notes' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' }}">
-                Needs Notes
-                @if($stats['needs_notes'] > 0)
-                    <span
-                        class="ml-1 px-1.5 py-0.5 text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-full">{{ $stats['needs_notes'] }}</span>
-                @endif
-            </button>
-            <button wire:click="$set('view', 'completed')"
-                class="px-3 py-1.5 text-sm font-medium rounded-md transition whitespace-nowrap {{ $view === 'completed' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' }}">
-                Completed
-            </button>
+        <div class="flex items-center gap-3">
+            {{-- Scope Toggle --}}
+            <div
+                class="flex items-center gap-1 p-1 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                <button wire:click="$set('scope', 'mine')"
+                    class="px-3 py-1.5 text-sm font-medium rounded-md transition whitespace-nowrap {{ $scope === 'mine' ? 'bg-indigo-600 text-white shadow' : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-800' }}">
+                    My Meetings
+                </button>
+                <button wire:click="$set('scope', 'all')"
+                    class="px-3 py-1.5 text-sm font-medium rounded-md transition whitespace-nowrap {{ $scope === 'all' ? 'bg-indigo-600 text-white shadow' : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-800' }}">
+                    All Team
+                </button>
+            </div>
+
+            {{-- Filter Tabs --}}
+            <div class="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-x-auto">
+                <button wire:click="$set('view', '')"
+                    class="px-3 py-1.5 text-sm font-medium rounded-md transition whitespace-nowrap {{ $view === '' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' }}">
+                    All
+                </button>
+                <button wire:click="$set('view', 'upcoming')"
+                    class="px-3 py-1.5 text-sm font-medium rounded-md transition whitespace-nowrap {{ $view === 'upcoming' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' }}">
+                    Upcoming
+                    @if($stats['upcoming'] > 0)
+                        <span
+                            class="ml-1 px-1.5 py-0.5 text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-full">{{ $stats['upcoming'] }}</span>
+                    @endif
+                </button>
+                <button wire:click="$set('view', 'needs_notes')"
+                    class="px-3 py-1.5 text-sm font-medium rounded-md transition whitespace-nowrap {{ $view === 'needs_notes' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' }}">
+                    Needs Notes
+                    @if($stats['needs_notes'] > 0)
+                        <span
+                            class="ml-1 px-1.5 py-0.5 text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-full">{{ $stats['needs_notes'] }}</span>
+                    @endif
+                </button>
+                <button wire:click="$set('view', 'completed')"
+                    class="px-3 py-1.5 text-sm font-medium rounded-md transition whitespace-nowrap {{ $view === 'completed' ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white' }}">
+                    Completed
+                </button>
+            </div>
         </div>
 
         {{-- View Mode Switcher --}}
@@ -134,7 +149,7 @@
             @endforeach
         </select>
 
-        @if($search || $organization || $issue || $teamMember)
+        @if($search || $organization || $issue || $teamMember || $scope !== 'mine')
             <button wire:click="clearFilters" class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
                 Clear filters
             </button>

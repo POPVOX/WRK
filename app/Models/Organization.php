@@ -154,7 +154,7 @@ class Organization extends Model
      */
     public function journalists(): HasMany
     {
-        return $this->hasMany(Person::class)->where('role', 'journalist');
+        return $this->hasMany(Person::class)->where('is_journalist', true);
     }
 
     /**
