@@ -74,6 +74,10 @@ class OrganizationIndex extends Component
 
     public bool $confirmingBulkDelete = false;
 
+    public bool $showTrashed = false;
+
+    public int $trashedCount = 0;
+
     public function startEditing(int $orgId, string $name): void
     {
         $this->editingOrgId = $orgId;
@@ -151,13 +155,9 @@ class OrganizationIndex extends Component
         if (!$org) {
             return;
         }
-        // Null out organization_id on associated people
-        $org->people()->update(['organization_id' => null]);
-        $org->meetings()->detach();
-        $org->projects()->detach();
-        $org->delete();
+        $org->delete(); // soft delete — sets deleted_at
         $this->selected = array_values(array_diff($this->selected, [$id]));
-        $this->dispatch('notify', type: 'success', message: 'Organization deleted.');
+        $this->dispatch('notify', type: 'success', message: 'Organization moved to trash.');
     }
 
     public function confirmBulkDelete(): void
@@ -178,17 +178,72 @@ class OrganizationIndex extends Component
         if (empty($this->selected)) {
             return;
         }
-        $orgs = Organization::whereIn('id', $this->selected)->get();
+        $count = Organization::whereIn('id', $this->selected)->count();
+        Organization::whereIn('id', $this->selected)->delete(); // soft delete
+        $this->confirmingBulkDelete = false;
+        $this->clearSelection();
+        $this->dispatch('notify', type: 'success', message: "{$count} organization(s) moved to trash.");
+    }
+
+    public function toggleTrashed(): void
+    {
+        $this->showTrashed = !$this->showTrashed;
+        $this->clearSelection();
+        $this->resetPage();
+    }
+
+    public function restoreOrganization(int $id): void
+    {
+        $org = Organization::onlyTrashed()->find($id);
+        if (!$org) {
+            return;
+        }
+        $org->restore();
+        $this->selected = array_values(array_diff($this->selected, [$id]));
+        $this->dispatch('notify', type: 'success', message: 'Organization restored.');
+    }
+
+    public function bulkRestore(): void
+    {
+        if (empty($this->selected)) {
+            return;
+        }
+        $count = Organization::onlyTrashed()->whereIn('id', $this->selected)->count();
+        Organization::onlyTrashed()->whereIn('id', $this->selected)->restore();
+        $this->clearSelection();
+        $this->dispatch('notify', type: 'success', message: "{$count} organization(s) restored.");
+    }
+
+    public function permanentlyDeleteOrganization(int $id): void
+    {
+        $org = Organization::onlyTrashed()->find($id);
+        if (!$org) {
+            return;
+        }
+        $org->people()->update(['organization_id' => null]);
+        $org->meetings()->detach();
+        $org->projects()->detach();
+        $org->forceDelete();
+        $this->selected = array_values(array_diff($this->selected, [$id]));
+        $this->dispatch('notify', type: 'success', message: 'Organization permanently deleted.');
+    }
+
+    public function bulkPermanentlyDelete(): void
+    {
+        if (empty($this->selected)) {
+            return;
+        }
+        $orgs = Organization::onlyTrashed()->whereIn('id', $this->selected)->get();
         $count = $orgs->count();
         foreach ($orgs as $org) {
             $org->people()->update(['organization_id' => null]);
             $org->meetings()->detach();
             $org->projects()->detach();
-            $org->delete();
+            $org->forceDelete();
         }
         $this->confirmingBulkDelete = false;
         $this->clearSelection();
-        $this->dispatch('notify', type: 'success', message: "{$count} organization(s) deleted.");
+        $this->dispatch('notify', type: 'success', message: "{$count} organization(s) permanently deleted.");
     }
 
     public function openAddModal(string $mode = 'single'): void
@@ -484,14 +539,21 @@ class OrganizationIndex extends Component
     public function render()
     {
         $query = Organization::query()
-            ->withCount(['meetings', 'people'])
-            ->when($this->search, function ($q) {
-                $q->where('name', 'like', '%' . $this->search . '%');
-            })
+            ->withCount(['meetings', 'people']);
+
+        if ($this->showTrashed) {
+            $query->onlyTrashed();
+        }
+
+        $query->when($this->search, function ($q) {
+            $q->where('name', 'like', '%' . $this->search . '%');
+        })
             ->when($this->filterType, function ($q) {
                 $q->where('type', $this->filterType);
             })
             ->orderBy('name');
+
+        $this->trashedCount = Organization::onlyTrashed()->count();
 
         return view('livewire.organizations.organization-index', [
             'organizations' => $query->paginate(20),

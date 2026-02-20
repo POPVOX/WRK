@@ -46,6 +46,10 @@ class PersonIndex extends Component
 
     public bool $confirmingBulkDelete = false;
 
+    public bool $showTrashed = false;
+
+    public int $trashedCount = 0;
+
     // Saved views
     public array $views = [];
 
@@ -273,11 +277,9 @@ class PersonIndex extends Component
         if (!$person) {
             return;
         }
-        $person->meetings()->detach();
-        $person->projects()->detach();
-        $person->delete();
+        $person->delete(); // soft delete — sets deleted_at
         $this->selected = array_values(array_diff($this->selected, [$id]));
-        $this->dispatch('notify', type: 'success', message: 'Contact deleted.');
+        $this->dispatch('notify', type: 'success', message: 'Contact moved to trash.');
     }
 
     public function confirmBulkDelete(): void
@@ -298,16 +300,70 @@ class PersonIndex extends Component
         if (empty($this->selected)) {
             return;
         }
-        $people = Person::whereIn('id', $this->selected)->get();
+        $count = Person::whereIn('id', $this->selected)->count();
+        Person::whereIn('id', $this->selected)->delete(); // soft delete
+        $this->confirmingBulkDelete = false;
+        $this->clearSelection();
+        $this->dispatch('notify', type: 'success', message: "{$count} contact(s) moved to trash.");
+    }
+
+    public function toggleTrashed(): void
+    {
+        $this->showTrashed = !$this->showTrashed;
+        $this->clearSelection();
+        $this->resetPage();
+    }
+
+    public function restorePerson(int $id): void
+    {
+        $person = Person::onlyTrashed()->find($id);
+        if (!$person) {
+            return;
+        }
+        $person->restore();
+        $this->selected = array_values(array_diff($this->selected, [$id]));
+        $this->dispatch('notify', type: 'success', message: 'Contact restored.');
+    }
+
+    public function bulkRestore(): void
+    {
+        if (empty($this->selected)) {
+            return;
+        }
+        $count = Person::onlyTrashed()->whereIn('id', $this->selected)->count();
+        Person::onlyTrashed()->whereIn('id', $this->selected)->restore();
+        $this->clearSelection();
+        $this->dispatch('notify', type: 'success', message: "{$count} contact(s) restored.");
+    }
+
+    public function permanentlyDeletePerson(int $id): void
+    {
+        $person = Person::onlyTrashed()->find($id);
+        if (!$person) {
+            return;
+        }
+        $person->meetings()->detach();
+        $person->projects()->detach();
+        $person->forceDelete();
+        $this->selected = array_values(array_diff($this->selected, [$id]));
+        $this->dispatch('notify', type: 'success', message: 'Contact permanently deleted.');
+    }
+
+    public function bulkPermanentlyDelete(): void
+    {
+        if (empty($this->selected)) {
+            return;
+        }
+        $people = Person::onlyTrashed()->whereIn('id', $this->selected)->get();
         $count = $people->count();
         foreach ($people as $person) {
             $person->meetings()->detach();
             $person->projects()->detach();
-            $person->delete();
+            $person->forceDelete();
         }
         $this->confirmingBulkDelete = false;
         $this->clearSelection();
-        $this->dispatch('notify', type: 'success', message: "{$count} contact(s) deleted.");
+        $this->dispatch('notify', type: 'success', message: "{$count} contact(s) permanently deleted.");
     }
 
     // ---- Saved views ----
@@ -698,14 +754,20 @@ PROMPT;
     {
         $query = Person::query()
             ->with(['organization', 'owner'])
-            ->withCount('meetings')
-            ->when($this->search, function ($q) {
-                $q->where(function ($q) {
-                    $q->where('name', 'like', '%' . $this->search . '%')
-                        ->orWhere('title', 'like', '%' . $this->search . '%')
-                        ->orWhere('email', 'like', '%' . $this->search . '%');
-                });
-            })
+            ->withCount('meetings');
+
+        // Show trashed or active records
+        if ($this->showTrashed) {
+            $query->onlyTrashed();
+        }
+
+        $query->when($this->search, function ($q) {
+            $q->where(function ($q) {
+                $q->where('name', 'like', '%' . $this->search . '%')
+                    ->orWhere('title', 'like', '%' . $this->search . '%')
+                    ->orWhere('email', 'like', '%' . $this->search . '%');
+            });
+        })
             ->when($this->filterOrg, function ($q) {
                 $q->where('organization_id', $this->filterOrg);
             })
@@ -722,6 +784,8 @@ PROMPT;
                 }
             })
             ->orderBy('name');
+
+        $this->trashedCount = Person::onlyTrashed()->count();
 
         return view('livewire.people.person-index', [
             'people' => $query->paginate($this->perPage),

@@ -8,10 +8,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Organization extends Model
 {
-    use HasFactory, HasGeographicTags;
+    use HasFactory, HasGeographicTags, SoftDeletes;
 
     protected $fillable = [
         'name',
@@ -239,9 +240,9 @@ class Organization extends Model
         // Fix common acronyms that should stay uppercase
         $acronyms = ['Usa', 'Us', 'Dc', 'Nyc', 'La', 'Ai', 'It', 'Hr', 'Pr', 'Tv', 'Uk', 'Eu', 'Un', 'Nato', 'Ngo', 'Ceo', 'Cfo', 'Cto'];
         foreach ($acronyms as $acronym) {
-            $spaced = str_replace(' '.$acronym.' ', ' '.strtoupper($acronym).' ', $spaced);
-            $spaced = preg_replace('/^'.preg_quote($acronym, '/').' /', strtoupper($acronym).' ', $spaced);
-            $spaced = preg_replace('/ '.preg_quote($acronym, '/').'$/', ' '.strtoupper($acronym), $spaced);
+            $spaced = str_replace(' ' . $acronym . ' ', ' ' . strtoupper($acronym) . ' ', $spaced);
+            $spaced = preg_replace('/^' . preg_quote($acronym, '/') . ' /', strtoupper($acronym) . ' ', $spaced);
+            $spaced = preg_replace('/ ' . preg_quote($acronym, '/') . '$/', ' ' . strtoupper($acronym), $spaced);
         }
 
         return $spaced !== $name ? $spaced : null;

@@ -31,21 +31,34 @@
                 @endforeach
             </select>
         </div>
-        <!-- View Toggle -->
-        <div class="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
-            <button wire:click="setViewMode('card')"
-                class="px-3 py-1.5 text-sm font-medium rounded {{ $viewMode === 'card' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400' }}">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+        <div class="flex items-center gap-2">
+            <!-- View Toggle -->
+            <div class="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
+                <button wire:click="setViewMode('card')"
+                    class="px-3 py-1.5 text-sm font-medium rounded {{ $viewMode === 'card' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400' }}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                </button>
+                <button wire:click="setViewMode('table')"
+                    class="px-3 py-1.5 text-sm font-medium rounded {{ $viewMode === 'table' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400' }}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Trash Toggle -->
+            <button wire:click="toggleTrashed"
+                class="relative px-3 py-1.5 text-sm font-medium rounded-lg transition-colors {{ $showTrashed ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600' }}">
+                <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
-            </button>
-            <button wire:click="setViewMode('table')"
-                class="px-3 py-1.5 text-sm font-medium rounded {{ $viewMode === 'table' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400' }}">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                </svg>
+                @if($trashedCount > 0)
+                    <span class="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none {{ $showTrashed ? 'bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-200' : 'bg-red-500 text-white' }} rounded-full">{{ $trashedCount }}</span>
+                @endif
             </button>
         </div>
     </div>
@@ -60,18 +73,47 @@
     @if($viewMode === 'card')
         {{-- Bulk Actions Toolbar --}}
         @if(count($selected) > 0)
-            <div
-                class="mb-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-3 text-sm">
-                <div class="text-gray-700 dark:text-gray-300">{{ count($selected) }} selected</div>
+            <div class="mb-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-3 text-sm">
+                <div class="text-gray-700 dark:text-gray-300 font-medium">{{ count($selected) }} selected</div>
+
+                @if($showTrashed)
+                    <button wire:click="bulkRestore"
+                        class="px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                        </svg>
+                        Restore
+                    </button>
+                    <button wire:click="confirmBulkDelete"
+                        class="px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Delete Forever
+                    </button>
+                @else
+                    <div x-data="{ open: false }" class="relative">
+                        <button @click="open = !open"
+                            class="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 transition-colors flex items-center gap-1">
+                            Actions
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        <div x-show="open" @click.away="open = false" x-cloak
+                            class="absolute left-0 mt-2 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 py-1">
+                            <button wire:click="confirmBulkDelete" @click="open = false"
+                                class="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Move to Trash
+                            </button>
+                        </div>
+                    </div>
+                @endif
+
                 <button wire:click="clearSelection" class="ml-auto text-xs text-gray-500 hover:text-gray-700">Clear</button>
-                <button wire:click="confirmBulkDelete"
-                    class="px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors flex items-center gap-1">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    Delete
-                </button>
             </div>
         @endif
 
@@ -141,17 +183,34 @@
                             </a>
                         </div>
                     </div>
-                    {{-- Delete button --}}
-                    <div class="px-6 pb-4 flex justify-end">
-                        <button wire:click="deleteOrganization({{ $org->id }})"
-                            wire:confirm="Are you sure you want to delete this organization?"
-                            class="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                            Delete
-                        </button>
+                    {{-- Card actions --}}
+                    <div class="px-6 pb-4 flex justify-end gap-1">
+                        @if($showTrashed)
+                            <button wire:click="restoreOrganization({{ $org->id }})"
+                                class="inline-flex items-center gap-1 px-2 py-1 text-xs text-green-600 hover:text-green-800 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                </svg>
+                                Restore
+                            </button>
+                            <button wire:click="permanentlyDeleteOrganization({{ $org->id }})"
+                                wire:confirm="This will PERMANENTLY delete this organization. This cannot be undone."
+                                class="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Delete Forever
+                            </button>
+                        @else
+                            <button wire:click="deleteOrganization({{ $org->id }})"
+                                wire:confirm="Move this organization to trash?"
+                                class="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Delete
+                            </button>
+                        @endif
                     </div>
                 </div>
             @empty
@@ -265,25 +324,40 @@
                             </td>
                             <td class="px-6 py-4">
                                 <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <a href="{{ route('organizations.show', $org) }}" wire:navigate
-                                        class="p-1.5 rounded text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/40"
-                                        title="View details">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
-                                    </a>
-                                    <button wire:click="deleteOrganization({{ $org->id }})"
-                                        wire:confirm="Are you sure you want to delete this organization?"
-                                        class="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/40"
-                                        title="Delete">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                    </button>
+                                    @if($showTrashed)
+                                        <button wire:click="restoreOrganization({{ $org->id }})"
+                                            class="p-1.5 rounded text-gray-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/40"
+                                            title="Restore">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                            </svg>
+                                        </button>
+                                        <button wire:click="permanentlyDeleteOrganization({{ $org->id }})"
+                                            wire:confirm="This will PERMANENTLY delete this organization. This cannot be undone."
+                                            class="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/40"
+                                            title="Delete Forever">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    @else
+                                        <a href="{{ route('organizations.show', $org) }}" wire:navigate
+                                            class="p-1.5 rounded text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/40"
+                                            title="View details">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                            </svg>
+                                        </a>
+                                        <button wire:click="deleteOrganization({{ $org->id }})"
+                                            wire:confirm="Move this organization to trash?"
+                                            class="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/40"
+                                            title="Delete">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -595,37 +669,47 @@
     @endif
 </div>
 
-{{-- Bulk Delete Confirmation Modal --}}
 @if($confirmingBulkDelete)
     <div class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-gray-900/70" wire:click="cancelBulkDelete"></div>
-        <div
-            class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-gray-200 dark:border-gray-700">
+        <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-gray-200 dark:border-gray-700">
             <div class="p-6 text-center">
-                <div
-                    class="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/40 mb-4">
-                    <svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor"
-                        viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                <div class="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/40 mb-4">
+                    <svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                 </div>
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Delete {{ count($selected) }}
-                    Organization(s)?</h3>
-                <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
-                    This action is permanent and cannot be undone. People linked to these organizations will have their
-                    organization cleared.
-                </p>
-                <div class="flex items-center justify-center gap-3">
-                    <button wire:click="cancelBulkDelete"
-                        class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
-                        Cancel
-                    </button>
-                    <button wire:click="bulkDelete"
-                        class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
-                        Delete {{ count($selected) }} Organization(s)
-                    </button>
-                </div>
+                @if($showTrashed)
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Permanently Delete {{ count($selected) }} Organization(s)?</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                        This action is <strong>permanent</strong> and cannot be undone. People linked to these organizations will have their organization cleared.
+                    </p>
+                    <div class="flex items-center justify-center gap-3">
+                        <button wire:click="cancelBulkDelete"
+                            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+                            Cancel
+                        </button>
+                        <button wire:click="bulkPermanentlyDelete"
+                            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+                            Delete Forever
+                        </button>
+                    </div>
+                @else
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Move {{ count($selected) }} Organization(s) to Trash?</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                        These organizations will be moved to the trash. You can restore them later from the trash view.
+                    </p>
+                    <div class="flex items-center justify-center gap-3">
+                        <button wire:click="cancelBulkDelete"
+                            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+                            Cancel
+                        </button>
+                        <button wire:click="bulkDelete"
+                            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+                            Move to Trash
+                        </button>
+                    </div>
+                @endif
             </div>
         </div>
     </div>
