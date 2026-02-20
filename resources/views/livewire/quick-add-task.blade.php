@@ -1,12 +1,12 @@
-<div class="fixed bottom-4 right-4 z-50">
+<div class="fixed bottom-20 right-4 z-50">
     {{-- Floating Button (when closed) --}}
     @if(!$isOpen)
         <button wire:click="open"
-            class="group flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200">
+            class="group flex items-center justify-center w-10 h-10 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
+            title="Quick Task">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
             </svg>
-            <span class="text-sm font-medium">Quick Task</span>
         </button>
     @endif
 
