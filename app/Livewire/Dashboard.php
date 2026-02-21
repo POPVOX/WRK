@@ -11,6 +11,8 @@ use App\Models\Project;
 use App\Models\Trip;
 use App\Services\ChatService;
 use App\Services\GoogleCalendarService;
+use App\Support\AI\AnthropicClient;
+use App\Support\AI\PromptProfile;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
@@ -46,6 +48,8 @@ class Dashboard extends Component
     public array $omniConversation = [];
 
     public bool $omniBusy = false;
+
+    public array $companionSuggestions = [];
 
     public function mount(GoogleCalendarService $calendarService)
     {
@@ -89,6 +93,15 @@ class Dashboard extends Component
         if (is_array($storedConversation)) {
             $this->omniConversation = collect($storedConversation)
                 ->filter(fn ($item) => is_array($item) && isset($item['role'], $item['content']))
+                ->take(-24)
+                ->values()
+                ->all();
+        }
+
+        $storedSuggestions = session('workspace.companionSuggestions', []);
+        if (is_array($storedSuggestions)) {
+            $this->companionSuggestions = collect($storedSuggestions)
+                ->filter(fn ($item) => is_array($item) && isset($item['id'], $item['type'], $item['title']))
                 ->take(-24)
                 ->values()
                 ->all();
@@ -211,34 +224,111 @@ class Dashboard extends Component
     {
         $stats = $this->workspaceStats;
         $nextMeeting = $this->nextMeeting;
+        $now = now();
+        $hour = (int) $now->hour;
+        $isWeekend = $now->isWeekend();
+        $isLateNight = $hour >= 21 || $hour < 6;
 
         $sentences = [];
 
+        if ($isWeekend) {
+            $sentences[] = 'Weekend mode: use this for light planning if helpful, or take real recharge time.';
+        } elseif ($isLateNight) {
+            $sentences[] = 'Late-night inspiration is welcome. Capture what matters, then protect your rest.';
+        }
+
         if ($nextMeeting && $nextMeeting['starts_at'] instanceof Carbon && $nextMeeting['starts_at']->isFuture()) {
             $minutes = now()->diffInMinutes($nextMeeting['starts_at']);
-            $hours = round($minutes / 60, 1);
-            if ($hours >= 1) {
-                $sentences[] = "You have about {$hours} hour".($hours == 1.0 ? '' : 's')." of focus time before {$nextMeeting['title']}.";
+            $hours = $minutes / 60;
+
+            if ($isWeekend) {
+                if ($hours >= 24) {
+                    $sentences[] = "{$nextMeeting['title']} is on ".$nextMeeting['starts_at']->format('l').'. A short prep pass now can make Monday easier.';
+                } elseif ($hours >= 2) {
+                    $sentences[] = "{$nextMeeting['title']} is coming up ".$nextMeeting['starts_at']->diffForHumans().'.';
+                } else {
+                    $sentences[] = "{$nextMeeting['title']} is coming up in {$minutes} minutes.";
+                }
+            } elseif ($isLateNight) {
+                if ($hours >= 6) {
+                    $sentences[] = "{$nextMeeting['title']} is next. No need to finish everything tonight; we can queue the essentials.";
+                } else {
+                    $sentences[] = "{$nextMeeting['title']} is coming up in {$minutes} minutes.";
+                }
+            } elseif ($hours >= 8) {
+                $roundedHours = (int) round($hours);
+                $sentences[] = "You have about {$roundedHours} hour".($roundedHours === 1 ? '' : 's')." before {$nextMeeting['title']}.";
+            } elseif ($hours >= 1) {
+                $roundedHours = round($hours, 1);
+                $sentences[] = "You have about {$roundedHours} hour".($roundedHours == 1.0 ? '' : 's')." before {$nextMeeting['title']}.";
             } else {
                 $sentences[] = "{$nextMeeting['title']} is coming up in {$minutes} minutes.";
             }
         } else {
-            $sentences[] = 'Your calendar is clear right now, so this is a good block for deep work.';
+            $sentences[] = $isWeekend
+                ? 'No meetings are pressing right now.'
+                : 'Your calendar is clear right now, so this is a good block for deep work.';
         }
 
         if ($stats['tasks_overdue'] > 0) {
-            $sentences[] = "{$stats['tasks_overdue']} overdue task".($stats['tasks_overdue'] === 1 ? ' needs' : 's need')." attention.";
+            if ($isWeekend || $isLateNight) {
+                $sentences[] = "You have {$stats['tasks_overdue']} overdue task".($stats['tasks_overdue'] === 1 ? '' : 's').'. We can set a gentle Monday catch-up plan or clear one small step now.';
+            } else {
+                $sentences[] = "{$stats['tasks_overdue']} overdue task".($stats['tasks_overdue'] === 1 ? ' needs' : 's need')." attention.";
+            }
         } elseif ($stats['tasks_due_today'] > 0) {
-            $sentences[] = "{$stats['tasks_due_today']} task".($stats['tasks_due_today'] === 1 ? ' is' : 's are')." due today.";
+            if ($isWeekend || $isLateNight) {
+                $sentences[] = "{$stats['tasks_due_today']} task".($stats['tasks_due_today'] === 1 ? ' is' : 's are')." due today. Want me to turn that into a short, low-stress plan?";
+            } else {
+                $sentences[] = "{$stats['tasks_due_today']} task".($stats['tasks_due_today'] === 1 ? ' is' : 's are')." due today.";
+            }
         } else {
-            $sentences[] = 'No task deadlines are due today.';
+            $sentences[] = $isWeekend
+                ? 'No deadlines are due right now.'
+                : 'No task deadlines are due today.';
         }
 
         if ($stats['upcoming_trips'] > 0) {
             $sentences[] = "You have {$stats['upcoming_trips']} upcoming trip".($stats['upcoming_trips'] === 1 ? '' : 's')." in the next 30 days.";
         }
 
+        $nudge = $this->wellbeingNudge($isWeekend, $isLateNight);
+        if ($nudge !== '') {
+            $sentences[] = $nudge;
+        }
+
         return implode(' ', $sentences);
+    }
+
+    protected function wellbeingNudge(bool $isWeekend, bool $isLateNight): string
+    {
+        if (! $isWeekend && ! $isLateNight) {
+            return '';
+        }
+
+        $weekendNudges = [
+            'If you are working now, quick wellness check: hydrate, get a little fresh air, and take it one step at a time.',
+            'If it helps, do a short planning pass and then unplug for recovery time.',
+            'Low-pressure reminder: water, a quick stretch, and maybe a hug for a furry friend if one is nearby.',
+        ];
+
+        $lateNightNudges = [
+            'Quick night check: hydrate, stretch, and leave some runway for sleep.',
+            'Late-night mode works best when you capture ideas now and defer heavy execution to tomorrow.',
+            'Gentle reminder: a few focused notes now can replace a lot of late-night pressure.',
+        ];
+
+        $seed = now()->dayOfYear + now()->hour;
+        if ($isWeekend && $isLateNight) {
+            $combined = array_merge($weekendNudges, $lateNightNudges);
+            return $combined[$seed % count($combined)];
+        }
+
+        if ($isWeekend) {
+            return $weekendNudges[$seed % count($weekendNudges)];
+        }
+
+        return $lateNightNudges[$seed % count($lateNightNudges)];
     }
 
     public function getUrgentTasksProperty()
@@ -333,6 +423,12 @@ class Dashboard extends Component
                 'auto_submit' => true,
             ],
             [
+                'key' => 'brain_dump',
+                'label' => 'Morning brain dump',
+                'command' => 'Here is everything on my mind this morning: ',
+                'auto_submit' => false,
+            ],
+            [
                 'key' => 'task',
                 'label' => 'Capture a task',
                 'command' => '/task ',
@@ -419,17 +515,35 @@ class Dashboard extends Component
                 $this->syncCalendar();
                 $this->addConversationMessage('assistant', 'Calendar sync started. I updated your workspace context.');
             } else {
-                $historyForAi = collect($this->omniConversation)
-                    ->take(-10)
-                    ->map(fn (array $message) => [
-                        'role' => $message['role'],
-                        'content' => $message['content'],
-                    ])
-                    ->values()
-                    ->all();
+                $proposalResult = $this->buildCompanionSuggestionResponse($command);
+                $suggestions = is_array($proposalResult['suggestions'] ?? null)
+                    ? $proposalResult['suggestions']
+                    : [];
 
-                $response = app(ChatService::class)->query($command, $historyForAi);
-                $this->addConversationMessage('assistant', $response);
+                if (! empty($suggestions)) {
+                    $addedCount = $this->appendCompanionSuggestions($suggestions);
+                    $assistantMessage = trim((string) ($proposalResult['assistant_message'] ?? ''));
+                    if ($assistantMessage === '') {
+                        $assistantMessage = $this->composeCompanionAssistantMessage($suggestions);
+                    }
+                    if ($addedCount < count($suggestions)) {
+                        $assistantMessage .= "\n\nI skipped ".(count($suggestions) - $addedCount)." duplicate suggestion(s) already in your queue.";
+                    }
+
+                    $this->addConversationMessage('assistant', $assistantMessage);
+                } else {
+                    $historyForAi = collect($this->omniConversation)
+                        ->take(-10)
+                        ->map(fn (array $message) => [
+                            'role' => $message['role'],
+                            'content' => $message['content'],
+                        ])
+                        ->values()
+                        ->all();
+
+                    $response = app(ChatService::class)->query($command, $historyForAi);
+                    $this->addConversationMessage('assistant', $response);
+                }
             }
         } catch (\Throwable $exception) {
             \Log::warning('Workspace omni command failed', [
@@ -442,6 +556,646 @@ class Dashboard extends Component
         } finally {
             $this->omniBusy = false;
         }
+    }
+
+    public function applyCompanionSuggestion(string $suggestionId): void
+    {
+        $index = collect($this->companionSuggestions)
+            ->search(fn (array $item) => (string) ($item['id'] ?? '') === $suggestionId);
+
+        if ($index === false) {
+            return;
+        }
+
+        $suggestion = $this->companionSuggestions[$index];
+
+        try {
+            $type = (string) ($suggestion['type'] ?? '');
+            $resultMessage = match ($type) {
+                'task', 'reminder' => $this->applyTaskOrReminderSuggestion($suggestion),
+                'draft_email' => $this->applyDraftEmailSuggestion($suggestion),
+                'create_project' => $this->applyProjectSuggestion($suggestion, false),
+                'create_subproject' => $this->applyProjectSuggestion($suggestion, true),
+                default => 'I could not apply that suggestion because its type is not supported yet.',
+            };
+
+            unset($this->companionSuggestions[$index]);
+            $this->companionSuggestions = array_values($this->companionSuggestions);
+            $this->persistCompanionSuggestions();
+
+            $this->addConversationMessage('assistant', $resultMessage);
+            $this->dispatch('notify', type: 'success', message: 'Suggestion applied.');
+        } catch (\Throwable $exception) {
+            \Log::warning('Failed to apply companion suggestion', [
+                'user_id' => $this->user?->id,
+                'suggestion_id' => $suggestionId,
+                'error' => $exception->getMessage(),
+            ]);
+
+            $this->addConversationMessage('assistant', 'I could not apply that suggestion: '.$exception->getMessage());
+        }
+    }
+
+    public function dismissCompanionSuggestion(string $suggestionId): void
+    {
+        $this->companionSuggestions = array_values(array_filter(
+            $this->companionSuggestions,
+            fn (array $item) => (string) ($item['id'] ?? '') !== $suggestionId
+        ));
+        $this->persistCompanionSuggestions();
+    }
+
+    public function clearCompanionSuggestions(): void
+    {
+        $this->companionSuggestions = [];
+        $this->persistCompanionSuggestions();
+    }
+
+    /**
+     * @return array{assistant_message:string,suggestions:array<int,array<string,mixed>>}
+     */
+    protected function buildCompanionSuggestionResponse(string $command): array
+    {
+        $looksLikeQuestion = Str::contains($command, '?');
+        $hasActionCue = (bool) preg_match('/\b(task|remind|todo|to do|need to|follow up|email|create|project|subproject|send|draft|schedule|review|prepare|submit|update)\b/i', $command);
+        if ($looksLikeQuestion && ! $hasActionCue) {
+            return [
+                'assistant_message' => '',
+                'suggestions' => [],
+            ];
+        }
+
+        $fromAi = $this->inferCompanionSuggestionsWithAi($command);
+        if ($fromAi !== null && ! empty($fromAi['suggestions'])) {
+            return $fromAi;
+        }
+
+        $fromHeuristics = $this->inferCompanionSuggestionsHeuristically($command);
+        if (! empty($fromHeuristics['suggestions'])) {
+            return $fromHeuristics;
+        }
+
+        if ($fromAi !== null) {
+            return [
+                'assistant_message' => (string) ($fromAi['assistant_message'] ?? ''),
+                'suggestions' => [],
+            ];
+        }
+
+        return [
+            'assistant_message' => '',
+            'suggestions' => [],
+        ];
+    }
+
+    /**
+     * @return array{assistant_message:string,suggestions:array<int,array<string,mixed>>}|null
+     */
+    protected function inferCompanionSuggestionsWithAi(string $command): ?array
+    {
+        $apiKey = (string) (config('services.anthropic.api_key') ?: env('ANTHROPIC_API_KEY'));
+        if (! config('ai.enabled') || trim($apiKey) === '') {
+            return null;
+        }
+
+        $projectNames = $this->projectsForUserQuery()
+            ->orderBy('name')
+            ->limit(40)
+            ->pluck('name')
+            ->implode(', ');
+
+        $systemPrompt = PromptProfile::forGeneralAssistant()."\n\n".<<<'PROMPT'
+You are WRK Workspace Companion planner. Your job is to extract suggested actions from a user's stream-of-consciousness notes.
+
+Rules:
+- Suggest actions only. Do not execute anything.
+- Prefer concrete, low-ambiguity actions.
+- Return valid JSON only.
+- Max 8 suggestions.
+- Allowed suggestion types:
+  1) task
+  2) reminder
+  3) draft_email
+  4) create_project
+  5) create_subproject
+- For due dates:
+  - Convert to YYYY-MM-DD.
+  - If user says "Monday" (or other weekday), use the next upcoming weekday from the provided current date.
+  - If no date is stated, set due_date to null.
+- Never invent names, dates, or commitments that are not implied by the note.
+
+Output JSON shape:
+{
+  "assistant_message": "Short summary for the user. Include that nothing has been created yet.",
+  "suggestions": [
+    {
+      "type": "task|reminder|draft_email|create_project|create_subproject",
+      "title": "short action title",
+      "description": "optional details",
+      "due_date": "YYYY-MM-DD or null",
+      "recipient": "email recipient name if relevant, else null",
+      "project_name": "project name if relevant, else null",
+      "parent_project_name": "parent project if create_subproject, else null",
+      "reason": "why this suggestion was inferred",
+      "confidence": "high|medium|low"
+    }
+  ]
+}
+PROMPT;
+
+        $today = now()->format('Y-m-d');
+        $todayLabel = now()->format('l, F j, Y');
+        $userPrompt = <<<PROMPT
+Current date: {$today} ({$todayLabel})
+Known project names: {$projectNames}
+
+User note:
+{$command}
+PROMPT;
+
+        $response = AnthropicClient::send([
+            'system' => $systemPrompt,
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => $userPrompt,
+                ],
+            ],
+            'max_tokens' => 1200,
+        ]);
+
+        $text = (string) data_get($response, 'content.0.text', '');
+        $decoded = $this->decodeJsonBlock($text);
+
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        $suggestions = collect(Arr::get($decoded, 'suggestions', []))
+            ->filter(fn ($item) => is_array($item))
+            ->map(fn (array $item) => $this->normalizeCompanionSuggestion($item))
+            ->filter()
+            ->values()
+            ->all();
+
+        return [
+            'assistant_message' => trim((string) Arr::get($decoded, 'assistant_message', '')),
+            'suggestions' => $suggestions,
+        ];
+    }
+
+    /**
+     * @return array{assistant_message:string,suggestions:array<int,array<string,mixed>>}
+     */
+    protected function inferCompanionSuggestionsHeuristically(string $command): array
+    {
+        $chunks = preg_split('/[\r\n]+|(?<=[\.\!\?;])\s+/', trim($command)) ?: [];
+        $chunks = array_values(array_filter(array_map('trim', $chunks)));
+        if (empty($chunks)) {
+            $chunks = [trim($command)];
+        }
+
+        $suggestions = [];
+
+        foreach ($chunks as $chunk) {
+            if ($chunk === '' || Str::length($chunk) < 6) {
+                continue;
+            }
+
+            $lower = Str::lower($chunk);
+            $dueDate = $this->parseDueDateFromFreeText($chunk);
+
+            if (preg_match('/\b(remind me|please remind me|set a reminder|reminder)\b/i', $chunk)) {
+                $title = preg_replace('/^.*\b(remind me(?: to)?|please remind me(?: to)?|set a reminder(?: to)?|reminder:?)\b/i', '', $chunk, 1);
+                $title = trim((string) $title, " \t\n\r\0\x0B.:");
+                $title = $title !== '' ? $title : $chunk;
+
+                $suggestions[] = $this->normalizeCompanionSuggestion([
+                    'type' => 'reminder',
+                    'title' => $title,
+                    'description' => $chunk,
+                    'due_date' => $dueDate,
+                    'reason' => 'You asked for a reminder.',
+                    'confidence' => 'high',
+                ]);
+                continue;
+            }
+
+            if (preg_match('/\b(draft( an)? email|send( an)? email|email|write to)\b/i', $chunk)) {
+                $recipient = null;
+                if (preg_match('/\bto\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b/', $chunk, $matches)) {
+                    $recipient = trim((string) $matches[1]);
+                }
+
+                $suggestions[] = $this->normalizeCompanionSuggestion([
+                    'type' => 'draft_email',
+                    'title' => $recipient ? "Draft email to {$recipient}" : 'Draft follow-up email',
+                    'description' => $chunk,
+                    'recipient' => $recipient,
+                    'due_date' => $dueDate,
+                    'reason' => 'This looks like email follow-through.',
+                    'confidence' => 'medium',
+                ]);
+                continue;
+            }
+
+            if (preg_match('/\b(sub-?project|subproject)\b/i', $chunk)) {
+                $name = trim((string) preg_replace('/^.*\b(sub-?project|subproject)\b[:\s-]*/i', '', $chunk, 1));
+                $name = $name !== '' ? $name : 'Untitled subproject';
+
+                $suggestions[] = $this->normalizeCompanionSuggestion([
+                    'type' => 'create_subproject',
+                    'title' => Str::limit($name, 120, ''),
+                    'description' => $chunk,
+                    'reason' => 'This sounds like a subproject request.',
+                    'confidence' => 'medium',
+                ]);
+                continue;
+            }
+
+            if (preg_match('/\b(new project|project idea|start a project|launch a project)\b/i', $lower)) {
+                $name = trim((string) preg_replace('/^.*\b(new project|project idea|start a project|launch a project)\b[:\s-]*/i', '', $chunk, 1));
+                $name = $name !== '' ? $name : 'Untitled project';
+
+                $suggestions[] = $this->normalizeCompanionSuggestion([
+                    'type' => 'create_project',
+                    'title' => Str::limit($name, 120, ''),
+                    'description' => $chunk,
+                    'reason' => 'This sounds like a new project request.',
+                    'confidence' => 'medium',
+                ]);
+                continue;
+            }
+
+            if (preg_match('/\b(i need to|need to|todo|to do|follow up|send|draft|review|prepare|schedule|finish|submit|share|update|reach out)\b/i', $lower)) {
+                $title = trim((string) preg_replace('/\b(i need to|need to|todo|to do)\b[:\s-]*/i', '', $chunk, 1));
+                $title = $title !== '' ? $title : $chunk;
+
+                $suggestions[] = $this->normalizeCompanionSuggestion([
+                    'type' => $dueDate ? 'reminder' : 'task',
+                    'title' => Str::limit($title, 140, ''),
+                    'description' => $chunk,
+                    'due_date' => $dueDate,
+                    'reason' => 'This reads like a concrete follow-up.',
+                    'confidence' => 'medium',
+                ]);
+            }
+        }
+
+        $suggestions = collect($suggestions)
+            ->filter()
+            ->take(8)
+            ->values()
+            ->all();
+
+        return [
+            'assistant_message' => ! empty($suggestions)
+                ? $this->composeCompanionAssistantMessage($suggestions)
+                : '',
+            'suggestions' => $suggestions,
+        ];
+    }
+
+    protected function normalizeCompanionSuggestion(array $suggestion): ?array
+    {
+        $type = Str::lower(trim((string) ($suggestion['type'] ?? '')));
+        if (! in_array($type, ['task', 'reminder', 'draft_email', 'create_project', 'create_subproject'], true)) {
+            return null;
+        }
+
+        $title = Str::of((string) ($suggestion['title'] ?? ''))
+            ->squish()
+            ->trim()
+            ->value();
+        if ($title === '') {
+            return null;
+        }
+
+        $description = Str::of((string) ($suggestion['description'] ?? $title))
+            ->squish()
+            ->trim()
+            ->value();
+        $reason = Str::of((string) ($suggestion['reason'] ?? ''))
+            ->squish()
+            ->trim()
+            ->value();
+
+        $dueDate = $this->parseDueDateToken((string) ($suggestion['due_date'] ?? ''));
+        if (! $dueDate) {
+            $dueDate = $this->parseDueDateFromFreeText((string) ($suggestion['due_text'] ?? ''));
+        }
+
+        return [
+            'id' => (string) Str::uuid(),
+            'type' => $type,
+            'title' => Str::limit($title, 140, ''),
+            'description' => Str::limit($description, 320, ''),
+            'due_date' => $dueDate,
+            'due_label' => $dueDate ? Carbon::parse($dueDate)->format('M j, Y') : null,
+            'recipient' => trim((string) ($suggestion['recipient'] ?? '')) ?: null,
+            'project_name' => trim((string) ($suggestion['project_name'] ?? '')) ?: null,
+            'parent_project_name' => trim((string) ($suggestion['parent_project_name'] ?? '')) ?: null,
+            'reason' => Str::limit($reason, 200, ''),
+            'confidence' => in_array(($suggestion['confidence'] ?? ''), ['high', 'medium', 'low'], true)
+                ? (string) $suggestion['confidence']
+                : 'medium',
+        ];
+    }
+
+    protected function appendCompanionSuggestions(array $suggestions): int
+    {
+        $existingKeys = collect($this->companionSuggestions)
+            ->map(fn (array $item) => Str::lower(($item['type'] ?? '').'|'.($item['title'] ?? '')))
+            ->all();
+
+        $added = 0;
+        foreach ($suggestions as $suggestion) {
+            if (! is_array($suggestion)) {
+                continue;
+            }
+
+            $normalized = $this->normalizeCompanionSuggestion($suggestion);
+            if (! $normalized) {
+                continue;
+            }
+
+            $dedupeKey = Str::lower($normalized['type'].'|'.$normalized['title']);
+            if (in_array($dedupeKey, $existingKeys, true)) {
+                continue;
+            }
+
+            $this->companionSuggestions[] = $normalized;
+            $existingKeys[] = $dedupeKey;
+            $added++;
+        }
+
+        if ($added > 0) {
+            $this->persistCompanionSuggestions();
+        }
+
+        return $added;
+    }
+
+    protected function composeCompanionAssistantMessage(array $suggestions): string
+    {
+        $count = count($suggestions);
+        if ($count === 0) {
+            return 'I did not detect concrete follow-up actions yet.';
+        }
+
+        $lines = [
+            "I pulled {$count} possible action".($count === 1 ? '' : 's')." from your notes. I have not created anything yet.",
+        ];
+
+        foreach (array_slice($suggestions, 0, 5) as $suggestion) {
+            if (! is_array($suggestion)) {
+                continue;
+            }
+
+            $type = (string) ($suggestion['type'] ?? 'task');
+            $title = (string) ($suggestion['title'] ?? 'Untitled');
+
+            if ($type === 'task') {
+                $lines[] = "• Should I make \"{$title}\" a new task?";
+                continue;
+            }
+
+            if ($type === 'reminder') {
+                $due = (string) ($suggestion['due_label'] ?? 'later');
+                $lines[] = "• Should I set a reminder for \"{$title}\"".($due !== '' ? " (due {$due})" : '').'?';
+                continue;
+            }
+
+            if ($type === 'draft_email') {
+                $recipient = (string) ($suggestion['recipient'] ?? '');
+                $lines[] = $recipient !== ''
+                    ? "• Should I draft an email to {$recipient}?"
+                    : '• Should I draft an email for this follow-up?';
+                continue;
+            }
+
+            if ($type === 'create_project') {
+                $lines[] = "• Sounds like \"{$title}\" might be a new project. Should I create it?";
+                continue;
+            }
+
+            if ($type === 'create_subproject') {
+                $lines[] = "• Sounds like \"{$title}\" might be a subproject. Should I create it under an existing project?";
+            }
+        }
+
+        if ($count > 5) {
+            $lines[] = '• I found additional suggestions in the queue below.';
+        }
+
+        $lines[] = 'Use the Suggested Actions panel to approve what you want me to execute.';
+
+        return implode("\n", $lines);
+    }
+
+    protected function parseDueDateFromFreeText(string $text): ?string
+    {
+        $trimmed = trim($text);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (preg_match('/\b(today|tomorrow|next week)\b/i', $trimmed, $matches)) {
+            return $this->parseDueDateToken((string) $matches[1]);
+        }
+
+        if (preg_match('/\b(next\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i', $trimmed, $matches)) {
+            $forceNext = ! empty($matches[1]);
+            $weekday = (string) $matches[2];
+            return $this->nextWeekdayDate($weekday, $forceNext)?->toDateString();
+        }
+
+        if (preg_match('/\b(\d{4}-\d{2}-\d{2})\b/', $trimmed, $matches)) {
+            return $this->parseDueDateToken((string) $matches[1]);
+        }
+
+        if (preg_match('/\b([A-Za-z]{3,9}\s+\d{1,2}(?:,\s*\d{4})?)\b/', $trimmed, $matches)) {
+            return $this->parseDueDateToken((string) $matches[1]);
+        }
+
+        return null;
+    }
+
+    protected function nextWeekdayDate(string $weekday, bool $forceNext = false): ?Carbon
+    {
+        $targetIso = $this->weekdayIsoNumber($weekday);
+        if (! $targetIso) {
+            return null;
+        }
+
+        $today = now()->startOfDay();
+        $todayIso = (int) $today->dayOfWeekIso;
+        $delta = ($targetIso - $todayIso + 7) % 7;
+        if ($delta === 0 && $forceNext) {
+            $delta = 7;
+        }
+
+        return $today->copy()->addDays($delta);
+    }
+
+    protected function weekdayIsoNumber(string $weekday): ?int
+    {
+        return match (Str::lower(trim($weekday))) {
+            'monday' => 1,
+            'tuesday' => 2,
+            'wednesday' => 3,
+            'thursday' => 4,
+            'friday' => 5,
+            'saturday' => 6,
+            'sunday' => 7,
+            default => null,
+        };
+    }
+
+    protected function decodeJsonBlock(string $text): ?array
+    {
+        $trimmed = trim($text);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $decoded = json_decode($trimmed, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        if (preg_match('/```(?:json)?\s*(\{[\s\S]*\})\s*```/i', $trimmed, $matches)) {
+            $decoded = json_decode((string) $matches[1], true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        $firstBrace = strpos($trimmed, '{');
+        $lastBrace = strrpos($trimmed, '}');
+        if ($firstBrace !== false && $lastBrace !== false && $lastBrace > $firstBrace) {
+            $candidate = substr($trimmed, $firstBrace, $lastBrace - $firstBrace + 1);
+            $decoded = json_decode($candidate, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return null;
+    }
+
+    protected function applyTaskOrReminderSuggestion(array $suggestion): string
+    {
+        $isReminder = ($suggestion['type'] ?? 'task') === 'reminder';
+        $projectName = (string) ($suggestion['project_name'] ?? '');
+        $projectId = $projectName !== '' ? $this->resolveUserProjectIdByName($projectName) : null;
+
+        $action = Action::create([
+            'title' => (string) ($suggestion['title'] ?? ''),
+            'description' => (string) ($suggestion['description'] ?? $suggestion['title'] ?? ''),
+            'due_date' => $suggestion['due_date'] ?? null,
+            'priority' => $isReminder ? 'low' : 'medium',
+            'status' => 'pending',
+            'source' => 'manual',
+            'assigned_to' => $this->user->id,
+            'project_id' => $projectId,
+        ]);
+
+        $due = $action->due_date
+            ? Carbon::parse($action->due_date)->format('F j, Y')
+            : 'no due date';
+
+        return 'Done. I created '.($isReminder ? 'a reminder' : 'a task').": "
+            .$action->title
+            .' (due '.$due.')'
+            .($action->project?->name ? ' under '.$action->project->name.'.' : '.');
+    }
+
+    protected function applyDraftEmailSuggestion(array $suggestion): string
+    {
+        $draft = $this->generateEmailDraft($suggestion);
+
+        return "Done. I drafted this email:\n\n".$draft;
+    }
+
+    protected function applyProjectSuggestion(array $suggestion, bool $isSubproject): string
+    {
+        $projectName = trim((string) ($suggestion['title'] ?? ''));
+        if ($projectName === '') {
+            throw new \RuntimeException('Project name is missing.');
+        }
+
+        $parentProjectId = null;
+        if ($isSubproject) {
+            $parentName = trim((string) ($suggestion['parent_project_name'] ?? $suggestion['project_name'] ?? ''));
+            if ($parentName === '') {
+                throw new \RuntimeException('Please specify the parent project for this subproject.');
+            }
+
+            $parentProjectId = $this->resolveUserProjectIdByName($parentName);
+            if (! $parentProjectId) {
+                throw new \RuntimeException("I could not find a matching parent project for \"{$parentName}\".");
+            }
+        }
+
+        $project = Project::create([
+            'name' => $projectName,
+            'description' => (string) ($suggestion['description'] ?? 'Created from Workspace companion notes.'),
+            'status' => 'planning',
+            'created_by' => $this->user->id,
+            'lead' => $this->user->name,
+            'project_type' => 'initiative',
+            'parent_project_id' => $parentProjectId,
+        ]);
+
+        $project->staff()->syncWithoutDetaching([
+            $this->user->id => [
+                'role' => 'lead',
+                'added_at' => now(),
+            ],
+        ]);
+
+        return $isSubproject
+            ? "Done. I created subproject \"{$project->name}\"."
+            : "Done. I created project \"{$project->name}\".";
+    }
+
+    protected function generateEmailDraft(array $suggestion): string
+    {
+        $recipient = trim((string) ($suggestion['recipient'] ?? 'there'));
+        $topic = trim((string) ($suggestion['title'] ?? 'Follow-up'));
+        $context = trim((string) ($suggestion['description'] ?? ''));
+        $dueLabel = trim((string) ($suggestion['due_label'] ?? ''));
+
+        $subject = 'Follow-up: '.Str::limit($topic, 80, '');
+        $body = [
+            'Subject: '.$subject,
+            '',
+            'Hi '.($recipient !== '' ? $recipient : 'there').',',
+            '',
+            'Quick follow-up on '.$topic.'.',
+        ];
+
+        if ($context !== '') {
+            $body[] = '';
+            $body[] = $context;
+        }
+
+        if ($dueLabel !== '') {
+            $body[] = '';
+            $body[] = 'If possible, could we close this by '.$dueLabel.'?';
+        }
+
+        $body[] = '';
+        $body[] = 'Thank you,';
+        $body[] = $this->user->name;
+
+        return implode("\n", $body);
+    }
+
+    protected function persistCompanionSuggestions(): void
+    {
+        session(['workspace.companionSuggestions' => $this->companionSuggestions]);
     }
 
     public function completeAction(int $actionId): void
@@ -500,6 +1254,7 @@ class Dashboard extends Component
         }
 
         session(['workspace.omniConversation' => $this->omniConversation]);
+        $this->dispatch('workspace-thread-updated');
     }
 
     protected function createTaskFromDirective(string $command, bool $isReminder): string
@@ -614,6 +1369,12 @@ class Dashboard extends Component
         if ($lower === 'next-week' || $lower === 'next week') {
             return today()->addWeek()->toDateString();
         }
+        if (in_array($lower, ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'], true)) {
+            return $this->nextWeekdayDate($lower)?->toDateString();
+        }
+        if (preg_match('/^next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/', $lower, $matches)) {
+            return $this->nextWeekdayDate((string) $matches[1], true)?->toDateString();
+        }
 
         try {
             return Carbon::parse($token)->toDateString();
@@ -695,7 +1456,8 @@ class Dashboard extends Component
             'laterTasks' => $this->laterTasks,
             'dailyPulse' => $this->dailyPulse,
             'smartActions' => $this->smartActions,
-            'recentMessages' => array_slice($this->omniConversation, -8),
+            'conversationMessages' => $this->omniConversation,
+            'companionSuggestions' => $this->companionSuggestions,
         ]);
     }
 }

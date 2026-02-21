@@ -58,75 +58,178 @@
         </section>
 
         <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 sm:p-5">
-            <form wire:submit.prevent="submitOmni" class="space-y-4">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center flex-shrink-0">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                    </div>
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white">Workspace Conversation</h2>
+                <span class="text-xs text-gray-500 dark:text-gray-400">Your companion proposes, you approve</span>
+            </div>
 
-                    <input
-                        wire:model="omniInput"
-                        type="text"
-                        placeholder="Ask, task, or capture a reminder..."
-                        class="flex-1 text-base sm:text-lg rounded-xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-
-                    <button
-                        type="submit"
-                        wire:loading.attr="disabled"
-                        wire:target="submitOmni"
-                        class="inline-flex items-center px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                        <span wire:loading.remove wire:target="submitOmni">Enter</span>
-                        <span wire:loading wire:target="submitOmni">Working...</span>
-                    </button>
-                </div>
-
-                <div class="flex flex-wrap gap-2">
-                    @foreach($smartActions as $action)
-                        <button
-                            type="button"
-                            wire:click="useSmartAction('{{ $action['key'] }}')"
-                            class="px-3 py-1.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                        >
-                            {{ $action['label'] }}
-                        </button>
-                    @endforeach
-                </div>
-
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                    Shortcuts: <span class="font-mono">/task</span>, <span class="font-mono">/remind</span>,
-                    <span class="font-mono">/help</span>
-                </p>
-            </form>
-        </section>
-
-        @if(!empty($recentMessages))
-            <section class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Workspace Thread</h2>
-                    <span class="text-xs text-gray-500 dark:text-gray-400">Latest 8 messages</span>
-                </div>
-                <div class="space-y-3 max-h-72 overflow-y-auto pr-1">
-                    @foreach($recentMessages as $message)
+            <div
+                x-data
+                x-init="$nextTick(() => { if ($refs.thread) { $refs.thread.scrollTop = $refs.thread.scrollHeight; } })"
+                x-on:workspace-thread-updated.window="$nextTick(() => { if ($refs.thread) { $refs.thread.scrollTop = $refs.thread.scrollHeight; } })"
+                class="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+            >
+                <div x-ref="thread" class="h-[360px] overflow-y-auto p-4 space-y-3 bg-gray-50 dark:bg-gray-900/40">
+                    @forelse($conversationMessages as $message)
                         @php
                             $isUser = ($message['role'] ?? 'assistant') === 'user';
                         @endphp
                         <div class="flex {{ $isUser ? 'justify-end' : 'justify-start' }}">
-                            <div class="max-w-[90%] rounded-xl px-3 py-2 {{ $isUser ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100' }}">
+                            <div class="max-w-[94%] rounded-xl px-3 py-2 {{ $isUser ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-600' }}">
                                 <div class="text-[11px] mb-1 {{ $isUser ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-400' }}">
                                     {{ $isUser ? 'You' : 'WRK Assistant' }} • {{ $message['timestamp'] ?? '' }}
                                 </div>
                                 <div class="whitespace-pre-wrap text-sm">{{ $message['content'] ?? '' }}</div>
                             </div>
                         </div>
+                    @empty
+                        <div class="h-full flex items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                            Start with a brain dump, question, or reminder request.
+                        </div>
+                    @endforelse
+                </div>
+
+                <form wire:submit.prevent="submitOmni" class="space-y-3 p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+                    <div class="flex items-start gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center flex-shrink-0">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                            </svg>
+                        </div>
+
+                        <textarea
+                            wire:model="omniInput"
+                            rows="3"
+                            placeholder="Dump your notes, ask a question, or capture a reminder..."
+                            class="flex-1 text-base sm:text-lg rounded-xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-indigo-500 focus:border-indigo-500 resize-y min-h-[92px]"
+                        ></textarea>
+
+                        <button
+                            type="submit"
+                            wire:loading.attr="disabled"
+                            wire:target="submitOmni"
+                            class="inline-flex items-center px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                            <span wire:loading.remove wire:target="submitOmni">Enter</span>
+                            <span wire:loading wire:target="submitOmni">Working...</span>
+                        </button>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2">
+                        @foreach($smartActions as $action)
+                            <button
+                                type="button"
+                                wire:click="useSmartAction('{{ $action['key'] }}')"
+                                class="px-3 py-1.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                            >
+                                {{ $action['label'] }}
+                            </button>
+                        @endforeach
+                    </div>
+
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                        Shortcuts: <span class="font-mono">/task</span>, <span class="font-mono">/remind</span>,
+                        <span class="font-mono">/help</span>. Free-form notes create suggested actions only until you approve.
+                    </p>
+                </form>
+            </div>
+        </section>
+
+        <section class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <div>
+                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Suggested Actions</h2>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Your companion infers tasks from notes. Nothing is created until you click an action button.
+                    </p>
+                </div>
+                @if(!empty($companionSuggestions))
+                    <button
+                        type="button"
+                        wire:click="clearCompanionSuggestions"
+                        class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    >
+                        Clear all
+                    </button>
+                @endif
+            </div>
+
+            @if(!empty($companionSuggestions))
+                <div class="space-y-3">
+                    @foreach($companionSuggestions as $suggestion)
+                        @php
+                            $type = $suggestion['type'] ?? 'task';
+                            $actionLabel = match ($type) {
+                                'task' => 'Create task',
+                                'reminder' => 'Create reminder',
+                                'draft_email' => 'Draft email',
+                                'create_project' => 'Create project',
+                                'create_subproject' => 'Create subproject',
+                                default => 'Apply',
+                            };
+                            $typeLabel = match ($type) {
+                                'draft_email' => 'Email',
+                                'create_project' => 'Project',
+                                'create_subproject' => 'Subproject',
+                                default => ucfirst($type),
+                            };
+                            $confidenceClass = match ($suggestion['confidence'] ?? 'medium') {
+                                'high' => 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+                                'low' => 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+                                default => 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+                            };
+                        @endphp
+                        <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                                            {{ $typeLabel }}
+                                        </span>
+                                        <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold {{ $confidenceClass }}">
+                                            {{ ucfirst($suggestion['confidence'] ?? 'medium') }} confidence
+                                        </span>
+                                        @if(!empty($suggestion['due_label']))
+                                            <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                                                Due {{ $suggestion['due_label'] }}
+                                            </span>
+                                        @endif
+                                    </div>
+                                    <p class="mt-2 font-medium text-gray-900 dark:text-white break-words">
+                                        {{ $suggestion['title'] ?? 'Untitled suggestion' }}
+                                    </p>
+                                    @if(!empty($suggestion['reason']))
+                                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ $suggestion['reason'] }}</p>
+                                    @endif
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        wire:click="applyCompanionSuggestion('{{ $suggestion['id'] }}')"
+                                        class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+                                    >
+                                        {{ $actionLabel }}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        wire:click="dismissCompanionSuggestion('{{ $suggestion['id'] }}')"
+                                        class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     @endforeach
                 </div>
-            </section>
-        @endif
+            @else
+                <div class="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 p-4 text-sm text-gray-500 dark:text-gray-400">
+                    Drop your stream-of-consciousness notes and I will propose tasks, reminders, email drafts, and project ideas for approval.
+                </div>
+            @endif
+        </section>
 
         <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-8 space-y-6">

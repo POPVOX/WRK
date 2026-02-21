@@ -372,6 +372,7 @@ PROMPT;
     protected function buildPrompt(string $query, array $context, array $conversationHistory): string
     {
         $contextJson = json_encode($context, JSON_PRETTY_PRINT);
+        $currentDateTime = now()->format('l, F j, Y g:i A T');
 
         // Include recent conversation for continuity
         $recentHistory = '';
@@ -383,7 +384,8 @@ PROMPT;
             }
         }
 
-        $prompt = "RETRIEVED CONTEXT:\n{$contextJson}\n\n";
+        $prompt = "CURRENT DATETIME: {$currentDateTime}\n\n";
+        $prompt .= "RETRIEVED CONTEXT:\n{$contextJson}\n\n";
 
         if ($recentHistory) {
             $prompt .= "RECENT CONVERSATION:\n{$recentHistory}\n";
