@@ -61,13 +61,13 @@ class TripAgentService
         }
 
         if (! empty($changes)) {
-            $assistantResponse = sprintf('I identified %d update(s) and I am applying them now.', count($changes));
+            $assistantResponse = sprintf('I found %d requested update(s) and I am processing them now.', count($changes));
         }
 
         if ($assistantResponse === '') {
             $assistantResponse = empty($changes)
-                ? 'I did not detect a clear trip change to apply yet. Share concrete date or lodging updates and I will apply them.'
-                : 'I parsed your update and I am applying the trip changes now.';
+                ? 'I can help with trip questions and updates. Tell me what you need.'
+                : 'I parsed your update and I am processing the trip changes now.';
         }
 
         $assistantMessage = $conversation->messages()->create([
@@ -260,18 +260,19 @@ class TripAgentService
         $tripContext = $this->buildTripContext($trip);
 
         $systemPrompt = <<<'PROMPT'
-You are WRK Trip Agent. Convert user trip updates into executable structured changes.
+You are WRK Travel Agent for a specific trip.
 
 Rules:
 - Output must be valid JSON only.
-- Include only fields explicitly stated or strongly implied in the user message.
+- For informational questions, answer in assistant_response and return an empty changes array.
+- For actionable updates, include only fields explicitly stated or strongly implied in the user message.
 - Never invent hotel names, dates, cities, or confirmation numbers.
 - Supported change types for this phase:
   1) "update_trip_dates"
   2) "upsert_lodging"
 - Do NOT claim flight or itinerary changes unless they appear explicitly in "changes".
-- If info is ambiguous, set missing fields to null and explain in assistant_response.
-- Keep assistant_response concise and action-oriented.
+- If update info is ambiguous, set missing fields to null and explain in assistant_response.
+- Keep assistant_response concise and useful.
 
 Return JSON exactly in this shape:
 {
@@ -361,7 +362,7 @@ PROMPT;
 
         if (empty($changes)) {
             return [
-                'assistant_response' => 'I can apply updates when you provide concrete dates or hotel details (for example: start date, end date, hotel name, city).',
+                'assistant_response' => 'I can help with trip planning, trip questions, and updates. For updates, include concrete details like dates, flights, or lodging.',
                 'summary' => 'No actionable update detected',
                 'changes' => [],
             ];
@@ -376,7 +377,7 @@ PROMPT;
 
     protected function buildTripContext(Trip $trip): string
     {
-        $trip->loadMissing(['lodging']);
+        $trip->loadMissing(['lodging', 'segments']);
 
         $lodgingSummary = $trip->lodging
             ->sortBy('check_in_date')
@@ -394,6 +395,23 @@ PROMPT;
             ->values()
             ->all();
 
+        $segmentSummary = $trip->segments
+            ->sortBy('departure_datetime')
+            ->take(8)
+            ->map(function (TripSegment $segment): string {
+                return implode(' | ', array_filter([
+                    "id={$segment->id}",
+                    "type={$segment->type}",
+                    "carrier={$segment->carrier}",
+                    "segment={$segment->segment_number}",
+                    "route={$segment->departure_location}-{$segment->arrival_location}",
+                    'depart='.$segment->departure_datetime?->format('Y-m-d H:i'),
+                    'arrive='.$segment->arrival_datetime?->format('Y-m-d H:i'),
+                ]));
+            })
+            ->values()
+            ->all();
+
         return implode("\n", array_filter([
             "trip_id={$trip->id}",
             "name={$trip->name}",
@@ -402,6 +420,7 @@ PROMPT;
             "primary_destination_city={$trip->primary_destination_city}",
             "primary_destination_country={$trip->primary_destination_country}",
             'lodging='.($lodgingSummary === [] ? 'none' : implode('; ', $lodgingSummary)),
+            'segments='.($segmentSummary === [] ? 'none' : implode('; ', $segmentSummary)),
         ]));
     }
 

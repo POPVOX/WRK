@@ -91,6 +91,40 @@ test('trip agent applies action immediately from ai response', function () {
     ]);
 });
 
+test('trip agent answers informational questions without creating actions', function () {
+    config()->set('services.anthropic.api_key', 'test-anthropic-key');
+    config()->set('ai.enabled', true);
+
+    Http::fake([
+        'https://api.anthropic.com/v1/messages' => Http::response([
+            'content' => [
+                [
+                    'text' => json_encode([
+                        'assistant_response' => 'This trip is 5 days long and currently has one lodging entry in Brussels.',
+                        'summary' => 'Informational response only',
+                        'changes' => [],
+                    ], JSON_THROW_ON_ERROR),
+                ],
+            ],
+        ], 200),
+    ]);
+
+    $user = User::factory()->admin()->create();
+    $trip = createTripForAgentTest($user);
+
+    $service = app(TripAgentService::class);
+    $result = $service->proposeChanges(
+        $trip,
+        $user,
+        'How long is this trip and how many hotels do we currently have?'
+    );
+
+    expect($result['action'])->toBeNull();
+    expect($result['assistant_message']->content)->toContain('5 days long');
+    expect($result['assistant_message']->content)->toContain('lodging entry');
+    expect($result['conversation']->actions()->count())->toBe(0);
+});
+
 test('trip agent imports itinerary segments from long message text', function () {
     config()->set('services.anthropic.api_key', 'test-anthropic-key');
     config()->set('ai.enabled', true);

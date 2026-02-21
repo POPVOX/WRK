@@ -1935,14 +1935,14 @@ class TripDetail extends Component
                 $action = $result['action'];
                 if ($action->status === 'applied') {
                     $this->loadTripRelations();
-                    $this->dispatch('notify', type: 'success', message: 'Trip updates applied.');
+                    $this->dispatch('notify', type: 'success', message: 'Message processed and trip records updated.');
                 } elseif ($action->status === 'failed') {
-                    $this->dispatch('notify', type: 'error', message: 'Trip agent could not apply all changes: '.($action->error_message ?: 'unknown error'));
+                    $this->dispatch('notify', type: 'error', message: 'Message processed, but some updates could not be applied: '.($action->error_message ?: 'unknown error'));
                 } else {
-                    $this->dispatch('notify', type: 'success', message: 'Trip agent processed your request.');
+                    $this->dispatch('notify', type: 'success', message: 'Message sent.');
                 }
             } else {
-                $this->dispatch('notify', type: 'success', message: 'No actionable change detected. Add concrete dates or lodging details.');
+                $this->dispatch('notify', type: 'success', message: 'Message sent.');
             }
         } catch (\Throwable $exception) {
             \Log::warning('Trip agent message failed', [
