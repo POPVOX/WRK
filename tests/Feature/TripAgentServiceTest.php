@@ -24,7 +24,7 @@ function createTripForAgentTest(User $creator): Trip
     ]);
 }
 
-test('trip agent creates a pending proposal action from ai response', function () {
+test('trip agent applies action immediately from ai response', function () {
     config()->set('services.anthropic.api_key', 'test-anthropic-key');
     config()->set('ai.enabled', true);
 
@@ -72,7 +72,8 @@ test('trip agent creates a pending proposal action from ai response', function (
 
     expect($conversation)->toBeInstanceOf(TripAgentConversation::class);
     expect($action)->toBeInstanceOf(TripAgentAction::class);
-    expect($action->status)->toBe('pending');
+    expect($action->status)->toBe('applied');
+    expect($action->executed_by)->toBe($user->id);
 
     $this->assertDatabaseHas('trip_agent_messages', [
         'conversation_id' => $conversation->id,
@@ -85,7 +86,7 @@ test('trip agent creates a pending proposal action from ai response', function (
     $this->assertDatabaseHas('trip_agent_actions', [
         'id' => $action->id,
         'conversation_id' => $conversation->id,
-        'status' => 'pending',
+        'status' => 'applied',
     ]);
 });
 

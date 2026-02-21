@@ -4,7 +4,6 @@ namespace App\Livewire\Travel;
 
 use App\Models\Organization;
 use App\Models\Trip;
-use App\Models\TripAgentAction;
 use App\Models\TripAgentConversation;
 use App\Models\TripChecklist;
 use App\Models\TripGuest;
@@ -1925,9 +1924,17 @@ class TripDetail extends Component
             $this->agentMessage = '';
 
             if ($result['action'] ?? null) {
-                $this->dispatch('notify', type: 'success', message: 'Drafted proposed changes. Review and approve to apply.');
+                $action = $result['action'];
+                if ($action->status === 'applied') {
+                    $this->loadTripRelations();
+                    $this->dispatch('notify', type: 'success', message: 'Trip updates applied.');
+                } elseif ($action->status === 'failed') {
+                    $this->dispatch('notify', type: 'error', message: 'Trip agent could not apply all changes: '.($action->error_message ?: 'unknown error'));
+                } else {
+                    $this->dispatch('notify', type: 'success', message: 'Trip agent processed your request.');
+                }
             } else {
-                $this->dispatch('notify', type: 'success', message: 'Message sent to trip agent.');
+                $this->dispatch('notify', type: 'success', message: 'No actionable change detected. Add concrete dates or lodging details.');
             }
         } catch (\Throwable $exception) {
             \Log::warning('Trip agent message failed', [
@@ -1939,72 +1946,6 @@ class TripDetail extends Component
             $this->dispatch('notify', type: 'error', message: 'Trip agent could not process that message right now.');
         } finally {
             $this->agentBusy = false;
-        }
-    }
-
-    public function applyAgentAction(int $actionId, TripAgentService $service): void
-    {
-        if (! $this->canEdit()) {
-            $this->dispatch('notify', type: 'error', message: 'You do not have permission to apply trip agent actions.');
-
-            return;
-        }
-
-        $action = TripAgentAction::query()
-            ->where('id', $actionId)
-            ->whereHas('conversation', fn ($query) => $query->where('trip_id', $this->trip->id))
-            ->first();
-
-        if (! $action) {
-            $this->dispatch('notify', type: 'error', message: 'Trip agent action not found.');
-
-            return;
-        }
-
-        $this->agentBusy = true;
-
-        try {
-            $service->applyAction($action, Auth::user());
-            $this->loadTripRelations();
-            $this->dispatch('notify', type: 'success', message: 'Trip updates applied.');
-        } catch (\Throwable $exception) {
-            \Log::warning('Trip agent apply action failed', [
-                'trip_id' => $this->trip->id,
-                'action_id' => $actionId,
-                'user_id' => Auth::id(),
-                'error' => $exception->getMessage(),
-            ]);
-
-            $this->dispatch('notify', type: 'error', message: 'Could not apply this proposal: '.$exception->getMessage());
-        } finally {
-            $this->agentBusy = false;
-        }
-    }
-
-    public function rejectAgentAction(int $actionId, TripAgentService $service): void
-    {
-        if (! $this->canEdit()) {
-            $this->dispatch('notify', type: 'error', message: 'You do not have permission to reject trip agent actions.');
-
-            return;
-        }
-
-        $action = TripAgentAction::query()
-            ->where('id', $actionId)
-            ->whereHas('conversation', fn ($query) => $query->where('trip_id', $this->trip->id))
-            ->first();
-
-        if (! $action) {
-            $this->dispatch('notify', type: 'error', message: 'Trip agent action not found.');
-
-            return;
-        }
-
-        try {
-            $service->rejectAction($action, Auth::user());
-            $this->dispatch('notify', type: 'success', message: 'Proposal rejected.');
-        } catch (\Throwable $exception) {
-            $this->dispatch('notify', type: 'error', message: 'Could not reject this proposal.');
         }
     }
 
@@ -2030,19 +1971,6 @@ class TripDetail extends Component
             ->with('user')
             ->orderBy('created_at')
             ->limit(100)
-            ->get();
-    }
-
-    public function getPendingAgentActionsProperty(): \Illuminate\Support\Collection
-    {
-        if (! $this->agentConversation) {
-            return collect();
-        }
-
-        return $this->agentConversation->actions()
-            ->with('requester')
-            ->where('status', 'pending')
-            ->orderByDesc('created_at')
             ->get();
     }
 
@@ -2117,7 +2045,6 @@ class TripDetail extends Component
             'organizations' => $this->organizations,
             'agentConversation' => $this->agentConversation,
             'agentMessages' => $this->agentMessages,
-            'pendingAgentActions' => $this->pendingAgentActions,
         ])->title($this->title);
     }
 }

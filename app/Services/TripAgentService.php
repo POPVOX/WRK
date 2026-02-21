@@ -56,8 +56,8 @@ class TripAgentService
 
         if ($assistantResponse === '') {
             $assistantResponse = empty($changes)
-                ? 'I did not detect a clear trip change to apply yet. Share concrete date/hotel updates and I can draft a proposal.'
-                : 'I drafted a change proposal. Review it below and approve to apply.';
+                ? 'I did not detect a clear trip change to apply yet. Share concrete date or lodging updates and I will apply them.'
+                : 'I parsed your update and I am applying the trip changes now.';
         }
 
         $assistantMessage = $conversation->messages()->create([
@@ -87,6 +87,27 @@ class TripAgentService
                     'action_id' => $action->id,
                 ]),
             ]);
+
+            try {
+                $action = $this->applyAction($action, $user);
+            } catch (\Throwable $exception) {
+                $action->update([
+                    'status' => 'failed',
+                    'executed_by' => $user->id,
+                    'executed_at' => now(),
+                    'error_message' => $exception->getMessage(),
+                ]);
+
+                $conversation->messages()->create([
+                    'role' => 'assistant',
+                    'content' => 'I could not apply those changes automatically. Please share clearer details or try again.',
+                    'meta' => [
+                        'action_id' => $action->id,
+                        'status' => 'failed',
+                        'error' => $exception->getMessage(),
+                    ],
+                ]);
+            }
         }
 
         return [
@@ -189,9 +210,10 @@ class TripAgentService
                 'error_message' => null,
             ]);
 
+            $summary = trim((string) $action->summary);
             $conversation->messages()->create([
                 'role' => 'assistant',
-                'content' => 'Approved and applied. I updated the trip records.',
+                'content' => $summary !== '' ? "Applied: {$summary}" : 'Applied your update to the trip records.',
                 'meta' => [
                     'action_id' => $action->id,
                     'status' => 'applied',
@@ -316,15 +338,15 @@ PROMPT;
 
         if (empty($changes)) {
             return [
-                'assistant_response' => 'I can draft updates when you provide concrete dates/hotel details (for example: start date, end date, hotel name, city).',
+                'assistant_response' => 'I can apply updates when you provide concrete dates or hotel details (for example: start date, end date, hotel name, city).',
                 'summary' => 'No actionable update detected',
                 'changes' => [],
             ];
         }
 
         return [
-            'assistant_response' => 'I drafted a proposal from your update. Please review and approve before I apply it.',
-            'summary' => 'Draft trip updates parsed from message',
+            'assistant_response' => 'I parsed your update and I am applying it now.',
+            'summary' => 'Trip updates parsed from message',
             'changes' => $changes,
         ];
     }
