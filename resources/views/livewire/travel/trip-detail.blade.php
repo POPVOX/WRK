@@ -138,47 +138,69 @@
         @endif
     </div>
 
-    <!-- Workspace Navigation -->
-    <div class="mb-8 space-y-3">
-        <div class="flex flex-wrap items-center gap-2">
-            @foreach([
-                'agent' => 'Workspace',
-                'overview' => 'Overview',
-            ] as $key => $label)
-                <button
-                    wire:click="setTab('{{ $key }}')"
-                    class="px-4 py-2 rounded-lg text-sm font-medium transition {{ $activeTab === $key
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:text-indigo-600' }}">
-                    {{ $label }}
-                </button>
-            @endforeach
+    <div
+        class="relative"
+        x-data="{ agentDrawerOpen: window.matchMedia('(min-width: 1280px)').matches }"
+        @keydown.escape.window="if (window.innerWidth < 1280) agentDrawerOpen = false"
+    >
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                Manage itinerary and expenses on the left, chat with your travel agent on the right.
+            </p>
+            <button
+                type="button"
+                @click="agentDrawerOpen = !agentDrawerOpen"
+                class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/40 dark:border-indigo-800 dark:text-indigo-200"
+            >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-4 4v-4z"/>
+                </svg>
+                <span x-text="agentDrawerOpen ? 'Hide Travel Agent' : 'Chat with Travel Agent'"></span>
+            </button>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2">
-            <span class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Data sections</span>
-            @foreach([
-                'itinerary' => 'Itinerary',
-                'expenses' => 'Expenses',
-                'documents' => 'Documents',
-                'events' => 'Events',
-                'sponsorship' => 'Sponsorship',
-                'checklist' => 'Checklist',
-                'notes' => 'Notes',
-            ] as $key => $label)
-                <button
-                    wire:click="setTab('{{ $key }}')"
-                    class="px-3 py-1.5 rounded-full text-sm font-medium transition {{ $activeTab === $key
-                        ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
-                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' }}">
-                    {{ $label }}
-                </button>
-            @endforeach
-        </div>
-    </div>
+        <div class="grid grid-cols-1 gap-6" :class="agentDrawerOpen ? 'xl:grid-cols-[minmax(0,1fr)_24rem]' : 'xl:grid-cols-1'">
+            <div class="min-w-0">
+                <!-- Workspace Navigation -->
+                <div class="mb-8 space-y-3">
+                    <div class="flex flex-wrap items-center gap-2">
+                        @foreach([
+                            'overview' => 'Overview',
+                            'itinerary' => 'Itinerary',
+                            'expenses' => 'Expenses',
+                        ] as $key => $label)
+                            <button
+                                wire:click="setTab('{{ $key }}')"
+                                class="px-4 py-2 rounded-lg text-sm font-medium transition {{ $activeTab === $key
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:text-indigo-600' }}">
+                                {{ $label }}
+                            </button>
+                        @endforeach
+                    </div>
 
-    <!-- Tab Content -->
-    <div class="space-y-8">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">More</span>
+                        @foreach([
+                            'documents' => 'Documents',
+                            'events' => 'Events',
+                            'sponsorship' => 'Sponsorship',
+                            'checklist' => 'Checklist',
+                            'notes' => 'Notes',
+                        ] as $key => $label)
+                            <button
+                                wire:click="setTab('{{ $key }}')"
+                                class="px-3 py-1.5 rounded-full text-sm font-medium transition {{ $activeTab === $key
+                                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
+                                    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' }}">
+                                {{ $label }}
+                            </button>
+                        @endforeach
+                    </div>
+                </div>
+
+                <!-- Tab Content -->
+                <div class="space-y-8">
         @if($activeTab === 'overview')
             <!-- Overview Tab -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -340,195 +362,29 @@
             @endif
 
         @elseif($activeTab === 'agent')
-            @php
-                $latestLodging = $trip->lodging->sortByDesc('check_in_date')->first();
-                $nextTimelineDate = collect(array_keys($timeline))
-                    ->filter(fn ($date) => $date >= now()->format('Y-m-d'))
-                    ->sort()
-                    ->first();
-                $nextTimelineItems = $nextTimelineDate ? ($timeline[$nextTimelineDate] ?? []) : [];
-                $nextTimelineItem = $nextTimelineItems[0] ?? null;
-            @endphp
-            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                <div class="xl:col-span-2 space-y-6">
-                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                        <div class="flex items-start justify-between gap-4 mb-4">
-                            <div>
-                                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Travel Agent</h3>
-                                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                    Chat about this trip naturally. Ask questions, plan options, or request updates.
-                                </p>
-                            </div>
-                            @if(!$canUseTripAgent)
-                                <span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                                    Read-only
-                                </span>
-                            @endif
-                        </div>
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Travel Agent Activity</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                    The full conversation now lives in the side drawer so you can chat while staying on itinerary and expenses.
+                </p>
 
-                        @if($canUseTripAgent)
-                            <div class="space-y-4">
-                                <div class="flex flex-wrap gap-2">
-                                    <button wire:click="useAgentPrompt('dates')" class="px-3 py-1.5 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
-                                        Change dates
-                                    </button>
-                                    <button wire:click="useAgentPrompt('hotel')" class="px-3 py-1.5 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
-                                        Update hotel
-                                    </button>
-                                    <button wire:click="useAgentPrompt('flight')" class="px-3 py-1.5 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
-                                        Add flight
-                                    </button>
-                                    <button wire:click="useAgentPrompt('expense')" class="px-3 py-1.5 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
-                                        Log expense
-                                    </button>
-                                    <button wire:click="useAgentPrompt('summary')" class="px-3 py-1.5 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
-                                        Summarize trip
-                                    </button>
+                @if($recentAgentActions->isEmpty())
+                    <p class="text-sm text-gray-500 dark:text-gray-400">No actions logged yet.</p>
+                @else
+                    <div class="space-y-3">
+                        @foreach($recentAgentActions as $action)
+                            <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+                                <div class="text-sm text-gray-900 dark:text-white">{{ $action->summary ?: 'Trip update' }}</div>
+                                <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                    {{ $action->status }} • {{ $action->created_at->format('M j, g:i A') }}
                                 </div>
-
-                                <textarea
-                                    wire:model="agentMessage"
-                                    rows="5"
-                                    placeholder="Ask anything about this trip, or share updates like new dates, flights, and hotels."
-                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
-                                <div class="flex items-center justify-end">
-                                    <button
-                                        wire:click="sendAgentMessage"
-                                        wire:loading.attr="disabled"
-                                        wire:target="sendAgentMessage"
-                                        class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-60">
-                                        <span wire:loading.remove wire:target="sendAgentMessage">Enter</span>
-                                        <span wire:loading wire:target="sendAgentMessage">Thinking...</span>
-                                    </button>
-                                </div>
+                                @if($action->error_message)
+                                    <div class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $action->error_message }}</div>
+                                @endif
                             </div>
-                        @else
-                            <p class="text-sm text-amber-600 dark:text-amber-400">
-                                You can view this thread, but only assigned travelers or editors can submit updates.
-                            </p>
-                        @endif
+                        @endforeach
                     </div>
-
-                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                        <h4 class="font-semibold text-gray-900 dark:text-white mb-4">Conversation</h4>
-
-                        @if($agentMessages->isEmpty())
-                            <div class="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
-                                No messages yet. Start by describing the trip changes you want.
-                            </div>
-                        @else
-                            <div class="space-y-4">
-                                @foreach($agentMessages as $message)
-                                    @php
-                                        $isUser = $message->role === 'user';
-                                        $meta = is_array($message->meta) ? $message->meta : [];
-                                        $executionLog = is_array($meta['execution_log'] ?? null) ? $meta['execution_log'] : [];
-                                    @endphp
-                                    <div class="flex {{ $isUser ? 'justify-end' : 'justify-start' }}">
-                                        <div class="max-w-3xl rounded-xl px-4 py-3 {{ $isUser ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100' }}">
-                                            <div class="text-xs mb-1 {{ $isUser ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-400' }}">
-                                                {{ $isUser ? ($message->user?->name ?? 'You') : 'WRK Trip Agent' }} • {{ $message->created_at->format('M j, g:i A') }}
-                                            </div>
-                                            <div class="whitespace-pre-wrap text-sm max-h-80 overflow-y-auto pr-1">{{ $message->content }}</div>
-
-                                            @if(!empty($meta['proposal_summary']))
-                                                <div class="mt-2 text-xs {{ $isUser ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-300' }}">
-                                                    Action: {{ $meta['proposal_summary'] }}
-                                                </div>
-                                            @endif
-
-                                            @if(!$isUser && !empty($executionLog))
-                                                <div class="mt-3 p-2 rounded border border-gray-200 dark:border-gray-600 bg-white/70 dark:bg-gray-800/60">
-                                                    <div class="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Execution Log</div>
-                                                    <div class="space-y-1">
-                                                        @foreach(array_slice($executionLog, 0, 3) as $entry)
-                                                            <div class="text-xs text-gray-600 dark:text-gray-300">
-                                                                {{ ucfirst(str_replace('_', ' ', (string) ($entry['type'] ?? 'change'))) }}: {{ (string) ($entry['status'] ?? 'processed') }}
-                                                            </div>
-                                                        @endforeach
-                                                    </div>
-                                                </div>
-                                            @endif
-                                        </div>
-                                    </div>
-                                @endforeach
-                            </div>
-                        @endif
-                    </div>
-                </div>
-
-                <div class="space-y-6">
-                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                        <h4 class="font-semibold text-gray-900 dark:text-white mb-4">Trip Snapshot</h4>
-                        <div class="space-y-3 text-sm">
-                            <div class="flex items-start justify-between gap-3">
-                                <span class="text-gray-500 dark:text-gray-400">Dates</span>
-                                <span class="text-right text-gray-900 dark:text-white">
-                                    {{ $trip->start_date?->format('M j, Y') }} to {{ $trip->end_date?->format('M j, Y') }}<br>
-                                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ $trip->duration }} days</span>
-                                </span>
-                            </div>
-                            <div class="flex items-start justify-between gap-3">
-                                <span class="text-gray-500 dark:text-gray-400">Travelers</span>
-                                <span class="text-right text-gray-900 dark:text-white">
-                                    {{ $trip->travelers->count() + $trip->guests->count() }} total<br>
-                                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ $trip->travelers->count() }} staff, {{ $trip->guests->count() }} guests</span>
-                                </span>
-                            </div>
-                            <div class="flex items-start justify-between gap-3">
-                                <span class="text-gray-500 dark:text-gray-400">Lodging</span>
-                                <span class="text-right text-gray-900 dark:text-white">
-                                    @if($latestLodging)
-                                        {{ $latestLodging->property_name }}<br>
-                                        <span class="text-xs text-gray-500 dark:text-gray-400">{{ $latestLodging->city }}, {{ $latestLodging->country }}</span>
-                                    @else
-                                        <span class="text-gray-500 dark:text-gray-400">None set</span>
-                                    @endif
-                                </span>
-                            </div>
-                            <div class="flex items-start justify-between gap-3">
-                                <span class="text-gray-500 dark:text-gray-400">Next Item</span>
-                                <span class="text-right text-gray-900 dark:text-white">
-                                    @if($nextTimelineItem)
-                                        {{ $nextTimelineItem['title'] ?? 'Upcoming event' }}<br>
-                                        <span class="text-xs text-gray-500 dark:text-gray-400">{{ \Carbon\Carbon::parse($nextTimelineDate)->format('M j, Y') }}</span>
-                                    @else
-                                        <span class="text-gray-500 dark:text-gray-400">No upcoming timeline item</span>
-                                    @endif
-                                </span>
-                            </div>
-                            <div class="flex items-start justify-between gap-3">
-                                <span class="text-gray-500 dark:text-gray-400">Budget Logged</span>
-                                <span class="text-right text-gray-900 dark:text-white">
-                                    ${{ number_format($expenseStats['total'] ?? 0, 2) }}<br>
-                                    <span class="text-xs text-gray-500 dark:text-gray-400">${{ number_format($expenseStats['pending_reimbursement'] ?? 0, 2) }} pending reimbursement</span>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                        <h4 class="font-semibold text-gray-900 dark:text-white mb-4">Recent Agent Actions</h4>
-                        @if($recentAgentActions->isEmpty())
-                            <p class="text-sm text-gray-500 dark:text-gray-400">No actions logged yet.</p>
-                        @else
-                            <div class="space-y-3">
-                                @foreach($recentAgentActions as $action)
-                                    <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
-                                        <div class="text-sm text-gray-900 dark:text-white">{{ $action->summary ?: 'Trip update' }}</div>
-                                        <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                            {{ $action->status }} • {{ $action->created_at->format('M j, g:i A') }}
-                                        </div>
-                                        @if($action->error_message)
-                                            <div class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $action->error_message }}</div>
-                                        @endif
-                                    </div>
-                                @endforeach
-                            </div>
-                        @endif
-                    </div>
-
-                </div>
+                @endif
             </div>
 
         @elseif($activeTab === 'itinerary')
@@ -1428,6 +1284,137 @@
                 Coming soon...
             </div>
         @endif
+                </div>
+            </div>
+
+            @php
+                $latestLodging = $trip->lodging->sortByDesc('check_in_date')->first();
+            @endphp
+
+            <div
+                x-show="agentDrawerOpen"
+                @click="agentDrawerOpen = false"
+                class="fixed inset-0 bg-black/40 z-40 xl:hidden"
+                x-transition.opacity
+            ></div>
+
+            <aside
+                x-show="agentDrawerOpen"
+                class="fixed z-50 top-0 right-0 h-full w-full sm:w-[26rem] bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 shadow-2xl xl:shadow-none xl:z-auto xl:relative xl:h-[calc(100vh-8rem)] xl:w-auto xl:flex xl:flex-col xl:rounded-xl xl:border"
+                x-transition:enter="transition transform ease-out duration-200"
+                x-transition:enter-start="translate-x-full"
+                x-transition:enter-end="translate-x-0"
+                x-transition:leave="transition transform ease-in duration-150"
+                x-transition:leave-start="translate-x-0"
+                x-transition:leave-end="translate-x-full"
+            >
+                <div class="px-4 py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white flex items-center justify-between">
+                    <div>
+                        <div class="font-semibold">AI Travel Assistant</div>
+                        <div class="text-xs text-indigo-100">Ask questions, update bookings, and log changes in chat</div>
+                    </div>
+                    <button type="button" @click="agentDrawerOpen = false" class="p-1 rounded hover:bg-white/20">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
+                    <div class="flex items-center justify-between">
+                        <span>{{ $trip->start_date->format('M j') }} to {{ $trip->end_date->format('M j, Y') }}</span>
+                        <span>{{ $trip->travelers->count() + $trip->guests->count() }} travelers</span>
+                    </div>
+                    @if($latestLodging)
+                        <div class="mt-1">
+                            Current lodging: <span class="text-gray-700 dark:text-gray-200">{{ $latestLodging->property_name }}</span>
+                        </div>
+                    @endif
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50 dark:bg-gray-900/40">
+                    @if($agentMessages->isEmpty())
+                        <div class="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-4 text-sm text-gray-500 dark:text-gray-400">
+                            Start the conversation by asking the travel agent to update flights, lodging, dates, or expenses.
+                        </div>
+                    @else
+                        @foreach($agentMessages as $message)
+                            @php
+                                $isUser = $message->role === 'user';
+                                $meta = is_array($message->meta) ? $message->meta : [];
+                                $executionLog = is_array($meta['execution_log'] ?? null) ? $meta['execution_log'] : [];
+                            @endphp
+                            <div class="flex {{ $isUser ? 'justify-end' : 'justify-start' }}">
+                                <div class="max-w-[90%] rounded-xl px-3 py-2 {{ $isUser ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-600' }}">
+                                    <div class="text-[11px] mb-1 {{ $isUser ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-400' }}">
+                                        {{ $isUser ? ($message->user?->name ?? 'You') : 'WRK Travel Agent' }} • {{ $message->created_at->format('M j, g:i A') }}
+                                    </div>
+                                    <div class="whitespace-pre-wrap text-sm">{{ $message->content }}</div>
+
+                                    @if(!empty($meta['proposal_summary']))
+                                        <div class="mt-2 text-[11px] {{ $isUser ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-300' }}">
+                                            Action: {{ $meta['proposal_summary'] }}
+                                        </div>
+                                    @endif
+
+                                    @if(!$isUser && !empty($executionLog))
+                                        <div class="mt-2 p-2 rounded border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/70">
+                                            <div class="text-[11px] font-medium text-gray-600 dark:text-gray-300 mb-1">Execution</div>
+                                            @foreach(array_slice($executionLog, 0, 2) as $entry)
+                                                <div class="text-[11px] text-gray-600 dark:text-gray-300">
+                                                    {{ ucfirst(str_replace('_', ' ', (string) ($entry['type'] ?? 'change'))) }}: {{ (string) ($entry['status'] ?? 'processed') }}
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    @endif
+                </div>
+
+                <div class="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 space-y-3">
+                    @if($recentAgentActions->isNotEmpty())
+                        <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-2 bg-gray-50 dark:bg-gray-900/40">
+                            <div class="text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Recent Agent Action</div>
+                            <div class="text-xs text-gray-600 dark:text-gray-300">
+                                {{ $recentAgentActions->first()->summary ?: 'Trip update processed' }}
+                            </div>
+                        </div>
+                    @endif
+
+                    <div class="flex flex-wrap gap-2">
+                        <button wire:click="useAgentPrompt('dates')" class="px-2.5 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">Change dates</button>
+                        <button wire:click="useAgentPrompt('flight')" class="px-2.5 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">Update flights</button>
+                        <button wire:click="useAgentPrompt('hotel')" class="px-2.5 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">Update hotels</button>
+                        <button wire:click="useAgentPrompt('budget')" class="px-2.5 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">Budget</button>
+                    </div>
+
+                    <div class="flex items-end gap-2">
+                        <textarea
+                            wire:model="agentMessage"
+                            wire:keydown.enter.exact.prevent="sendAgentMessage"
+                            rows="3"
+                            placeholder="Ask me anything about this trip..."
+                            class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"></textarea>
+                        <button
+                            wire:click="sendAgentMessage"
+                            wire:loading.attr="disabled"
+                            wire:target="sendAgentMessage"
+                            @disabled(!$canUseTripAgent)
+                            class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm disabled:opacity-60 disabled:cursor-not-allowed">
+                            <span wire:loading.remove wire:target="sendAgentMessage">Enter</span>
+                            <span wire:loading wire:target="sendAgentMessage">Thinking...</span>
+                        </button>
+                    </div>
+                    @if(!$canUseTripAgent)
+                        <p class="text-xs text-amber-600 dark:text-amber-400">
+                            Read-only: only assigned travelers or trip editors can submit updates.
+                        </p>
+                    @endif
+                </div>
+            </aside>
+        </div>
     </div>
 
     <!-- Add Segment Modal -->
@@ -2072,43 +2059,6 @@ Total: $867 + $112.71 tax = $979.71"
                             {{ $editingLodgingId ? 'Update Lodging' : 'Save Lodging' }}
                         </button>
                     @endif
-                </div>
-            </div>
-        </div>
-    @endif
-
-    @if($canUseTripAgent && $activeTab !== 'agent')
-        <div class="sticky bottom-4 z-30 mt-8">
-            <div class="bg-white/95 dark:bg-gray-800/95 backdrop-blur rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <div>
-                        <div class="text-sm font-semibold text-gray-900 dark:text-white">Travel Agent</div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400">Ask questions or request updates without leaving this view.</div>
-                    </div>
-                    <button wire:click="setTab('agent')" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Open full thread</button>
-                </div>
-
-                <div class="flex flex-wrap gap-2 mb-3">
-                    <button wire:click="useAgentPrompt('dates')" class="px-2.5 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">Change dates</button>
-                    <button wire:click="useAgentPrompt('flight')" class="px-2.5 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">Update flights</button>
-                    <button wire:click="useAgentPrompt('hotel')" class="px-2.5 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">Update hotels</button>
-                    <button wire:click="useAgentPrompt('summary')" class="px-2.5 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">Trip summary</button>
-                </div>
-
-                <div class="flex items-end gap-3">
-                    <textarea
-                        wire:model="agentMessage"
-                        rows="2"
-                        placeholder="Chat with your travel agent..."
-                        class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"></textarea>
-                    <button
-                        wire:click="sendAgentMessage"
-                        wire:loading.attr="disabled"
-                        wire:target="sendAgentMessage"
-                        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm disabled:opacity-60">
-                        <span wire:loading.remove wire:target="sendAgentMessage">Enter</span>
-                        <span wire:loading wire:target="sendAgentMessage">Thinking...</span>
-                    </button>
                 </div>
             </div>
         </div>

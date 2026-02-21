@@ -13,8 +13,8 @@ Make trip management conversational-first: users can ask questions, request upda
 ## Core UX Model
 1. Global trip pages:
 - Keep itinerary/expenses/data views.
-- Add a persistent travel-agent composer on non-agent tabs.
-- Keep a full conversation workspace for deep thread review.
+- Keep a persistent right-side travel-agent drawer (desktop) plus slide-over (mobile).
+- Keep chat accessible without switching to a dedicated agent tab.
 
 2. Conversation behavior:
 - One entry action: `Enter`.
@@ -28,7 +28,7 @@ Make trip management conversational-first: users can ask questions, request upda
 
 ## IA Changes
 - Primary trip destinations:
-  - `Workspace` (full thread + snapshot)
+  - `Itinerary`
   - `Overview`
 - Secondary data pills:
   - itinerary, expenses, documents, events, sponsorship, checklist, notes
@@ -50,16 +50,15 @@ Make trip management conversational-first: users can ask questions, request upda
 - [x] Informational Q&A path without action creation.
 - [x] Itinerary segment import from long message text.
 - [x] Per-traveler segment splitting from mentioned names.
-- [x] Persistent travel-agent composer on non-agent tabs.
+- [x] Figma-style right-side travel-agent drawer (desktop) + mobile slide-over.
 - [x] Expense modal redesigned to receipt-first flow with optional text extraction.
 - [x] Traveler selector in expense modal (manager-capable, self-default for non-management).
 - [x] Receipt upload auto-parse wiring fixed for PDF temp uploads.
 
 ## Next Build Slices
-1. Side thread drawer (always accessible, not just Workspace).
-2. Inline “Agent changed this” markers inside itinerary and expense rows.
-3. OCR support for image receipts (not just PDF text extraction).
-4. Trip rebooking workflow scaffolding (future booking integration).
+1. Inline “Agent changed this” markers inside itinerary and expense rows.
+2. OCR support for image receipts (not just PDF text extraction).
+3. Trip rebooking workflow scaffolding (future booking integration).
 
 ## Acceptance Criteria
 - Users can stay on itinerary/expenses and still chat with the agent.

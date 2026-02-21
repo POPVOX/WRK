@@ -28,7 +28,7 @@ class TripDetail extends Component
     public Trip $trip;
 
     #[Url]
-    public string $activeTab = 'agent';
+    public string $activeTab = 'itinerary';
 
     // Agent conversation
     public ?int $agentConversationId = null;
@@ -295,7 +295,7 @@ class TripDetail extends Component
         $this->loadTripRelations();
 
         if (! in_array($this->activeTab, ['agent', 'overview', 'itinerary', 'expenses', 'sponsorship', 'events', 'documents', 'checklist', 'notes'], true)) {
-            $this->activeTab = 'agent';
+            $this->activeTab = 'itinerary';
         }
 
         $this->agentConversationId = TripAgentConversation::query()
@@ -2050,6 +2050,8 @@ class TripDetail extends Component
             'flight' => 'Add this flight segment: [Carrier] [Number], depart [Airport/City] [YYYY-MM-DD HH:MM], arrive [Airport/City] [YYYY-MM-DD HH:MM].',
             'expense' => 'Log an expense: [Category], [Vendor], [Amount] [Currency], date [YYYY-MM-DD], notes [optional].',
             'summary' => 'Summarize current trip status, key risks, and the next 3 actions.',
+            'budget' => 'Give me a budget breakdown for this trip and flag any unusual spend items.',
+            'weather' => 'What weather should travelers expect during this trip dates, and what should we pack?',
         ];
 
         $template = $templates[$intent] ?? null;
