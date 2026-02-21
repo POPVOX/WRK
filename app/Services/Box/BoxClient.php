@@ -10,6 +10,19 @@ use RuntimeException;
 
 class BoxClient
 {
+    public function createFolder(string $name, string $parentFolderId): array
+    {
+        return $this->request()
+            ->post('folders', [
+                'name' => $name,
+                'parent' => [
+                    'id' => $parentFolderId,
+                ],
+            ])
+            ->throw()
+            ->json();
+    }
+
     public function listFolderItems(string $folderId, int $offset = 0, ?int $limit = null): array
     {
         $limit = $limit ?? (int) config('services.box.sync_page_size', 100);

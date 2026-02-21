@@ -46,6 +46,8 @@ return [
         'base_uri' => env('BOX_API_BASE_URI', 'https://api.box.com/2.0'),
         'access_token' => env('BOX_ACCESS_TOKEN'),
         'root_folder_id' => env('BOX_ROOT_FOLDER_ID', '0'),
+        'projects_folder_id' => env('BOX_PROJECTS_FOLDER_ID', env('BOX_ROOT_FOLDER_ID', '0')),
+        'auto_provision_project_folders' => filter_var(env('BOX_AUTO_PROVISION_PROJECT_FOLDERS', true), FILTER_VALIDATE_BOOL),
         'sync_page_size' => (int) env('BOX_SYNC_PAGE_SIZE', 100),
         'sync_max_depth' => (int) env('BOX_SYNC_MAX_DEPTH', 6),
         'webhook' => [
