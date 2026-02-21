@@ -3,40 +3,35 @@
 namespace App\Livewire;
 
 use App\Jobs\SyncCalendarEvents;
+use App\Models\Accomplishment;
 use App\Models\Action;
-use App\Models\Grant;
 use App\Models\Meeting;
 use App\Models\PressClip;
 use App\Models\Project;
+use App\Models\Trip;
 use App\Services\ChatService;
 use App\Services\GoogleCalendarService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 #[Layout('layouts.app')]
-#[Title('Dashboard')]
+#[Title('Workspace')]
 class Dashboard extends Component
 {
     public $user;
 
-    // Calendar sync state
     public bool $isCalendarConnected = false;
 
     public bool $isSyncing = false;
 
     public ?string $lastSyncAt = null;
-
-    // Chat state
-    public string $chatQuery = '';
-
-    public array $chatHistory = [];
-
-    public bool $isProcessing = false;
 
     public ?string $aiWarning = null;
 
@@ -44,86 +39,62 @@ class Dashboard extends Component
 
     public ?string $passportWarning = null;
 
-    // Task creation state
-    public bool $showAddTask = false;
-
-    public string $newTaskTitle = '';
-
-    public string $newTaskDescription = '';
-
-    public ?string $newTaskDueDate = null;
-
-    public string $newTaskPriority = 'medium';
-
-    public ?int $newTaskProjectId = null;
-
-    public ?int $editingTaskId = null;
-
-    // AI Task Suggestions
-    public bool $showAiSuggestions = false;
-
-    public array $aiSuggestedTasks = [];
-
-    public bool $isLoadingSuggestions = false;
-
-    // Timezone prompt
     public bool $showTimezonePrompt = false;
 
-    // Archived tasks toggle
-    public bool $showArchivedTasks = false;
+    public string $omniInput = '';
+
+    public array $omniConversation = [];
+
+    public bool $omniBusy = false;
 
     public function mount(GoogleCalendarService $calendarService)
     {
         $this->user = Auth::user();
 
-        // Redirect to onboarding if profile not completed
-        if (!$this->user->profile_completed_at) {
+        if (! $this->user?->profile_completed_at) {
             return redirect()->route('onboarding');
         }
 
-        // Check calendar connection
         $this->isCalendarConnected = $calendarService->isConnected($this->user);
         $this->lastSyncAt = $this->user->calendar_import_date?->diffForHumans();
 
-        // Health banners
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             $this->aiWarning = 'AI features are disabled by the administrator.';
-        } else {
-            $lastError = Cache::get('metrics:ai:last_error_at');
-            if ($lastError && now()->diffInMinutes(Carbon::parse($lastError)) < 30) {
-                $this->aiWarning = 'AI responses may be delayed; recent errors were detected.';
-            }
         }
 
-        if (!$this->isCalendarConnected) {
-            $this->calendarWarning = 'Calendar is not connected. Connect to keep meetings in sync.';
+        if (! $this->isCalendarConnected) {
+            $this->calendarWarning = 'Calendar is not connected. Connect to keep meetings and focus windows accurate.';
         } elseif ($this->user->calendar_import_date && $this->user->calendar_import_date->lt(now()->subDays(7))) {
             $this->calendarWarning = 'Calendar has not synced in over a week.';
         }
 
-        // Check passport expiration
         $travelProfile = $this->user->travelProfile;
         if ($travelProfile) {
             if ($travelProfile->isPassportExpired()) {
                 $this->passportWarning = 'Your passport has expired. Update your travel profile.';
             } elseif ($travelProfile->isPassportExpiringSoon(6)) {
-                $this->passportWarning = 'Your passport expires ' . $travelProfile->passport_expiration->diffForHumans() . '. Consider renewing soon.';
+                $this->passportWarning = 'Your passport expires '.$travelProfile->passport_expiration->diffForHumans().'. Consider renewing soon.';
             }
         }
 
-        // Check if we should prompt for timezone (no timezone set, or not confirmed in 7 days)
-        $shouldPromptTimezone = !$this->user->timezone
-            || !$this->user->timezone_confirmed_at
+        $shouldPromptTimezone = ! $this->user->timezone
+            || ! $this->user->timezone_confirmed_at
             || $this->user->timezone_confirmed_at->lt(now()->subDays(7));
 
         if ($shouldPromptTimezone) {
             $this->showTimezonePrompt = true;
         }
+
+        $storedConversation = session('workspace.omniConversation', []);
+        if (is_array($storedConversation)) {
+            $this->omniConversation = collect($storedConversation)
+                ->filter(fn ($item) => is_array($item) && isset($item['role'], $item['content']))
+                ->take(-24)
+                ->values()
+                ->all();
+        }
     }
 
-    /**
-     * Get time-appropriate greeting
-     */
     public function getGreetingProperty(): string
     {
         $hour = now()->hour;
@@ -131,6 +102,7 @@ class Dashboard extends Component
         if ($hour < 12) {
             return 'Good morning';
         }
+
         if ($hour < 17) {
             return 'Good afternoon';
         }
@@ -138,698 +110,574 @@ class Dashboard extends Component
         return 'Good evening';
     }
 
-    /**
-     * Get user's first name for display
-     */
     public function getFirstNameProperty(): string
     {
         return explode(' ', $this->user->name)[0];
     }
 
-    /**
-     * Get stats for the dashboard header
-     */
-    public function getStatsProperty(): array
+    public function getWorkspaceDateLabelProperty(): string
     {
-        $userId = $this->user->id;
-        $userName = $this->user->name;
-        $firstName = explode(' ', $userName)[0];
+        return now()->format('l, F j');
+    }
+
+    public function getWorkspaceStatsProperty(): array
+    {
         $today = today();
-        $endOfWeek = now()->endOfWeek();
 
-        // Meetings today (where user logged or is a team member)
-        $meetingsToday = Meeting::whereDate('meeting_date', $today)
-            ->where(function ($q) use ($userId) {
-                $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
-            })
+        $meetingsToday = $this->meetingsForUserQuery()
+            ->whereDate('meeting_date', $today)
             ->count();
 
-        $meetingsTomorrow = Meeting::whereDate('meeting_date', $today->copy()->addDay())
-            ->where(function ($q) use ($userId) {
-                $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
-            })
+        $pendingActionsQuery = $this->pendingActionsQuery();
+        $tasksDueToday = (clone $pendingActionsQuery)
+            ->whereDate('due_date', $today)
             ->count();
 
-        // Actions/Tasks
-        $actionsQuery = Action::where('assigned_to', $userId)->where('status', 'pending');
-        $actionsDueToday = (clone $actionsQuery)->whereDate('due_date', $today)->count();
-        $actionsOverdue = (clone $actionsQuery)->where('due_date', '<', $today)->count();
-        $actionsThisWeek = (clone $actionsQuery)->whereBetween('due_date', [$today, $endOfWeek])->count();
-
-        // Projects
-        $activeProjects = Project::whereIn('status', ['active', 'planning'])
-            ->where(function ($query) use ($userId, $firstName) {
-                $query->where('created_by', $userId)
-                    ->orWhere('lead', 'like', "%{$firstName}%")
-                    ->orWhereHas('staff', fn($q) => $q->where('user_id', $userId));
-            })
+        $tasksOverdue = (clone $pendingActionsQuery)
+            ->whereDate('due_date', '<', $today)
             ->count();
 
-        $projectActionsPending = Action::where('assigned_to', $userId)
-            ->where('status', 'pending')
-            ->whereHas('meeting.projects')
+        $activeProjects = $this->projectsForUserQuery()
+            ->whereIn('status', ['active', 'planning', 'on_hold'])
+            ->count();
+
+        $upcomingTrips = Trip::query()
+            ->whereHas('travelers', fn (Builder $q) => $q->where('users.id', $this->user->id))
+            ->whereIn('status', ['planning', 'booked', 'in_progress'])
+            ->whereDate('start_date', '>=', $today)
+            ->whereDate('start_date', '<=', $today->copy()->addDays(30))
             ->count();
 
         return [
             'meetings_today' => $meetingsToday,
-            'meetings_tomorrow' => $meetingsTomorrow,
-            'actions_due_today' => $actionsDueToday,
-            'actions_overdue' => $actionsOverdue,
-            'actions_this_week' => $actionsThisWeek,
+            'tasks_due_today' => $tasksDueToday,
+            'tasks_overdue' => $tasksOverdue,
             'active_projects' => $activeProjects,
-            'project_actions_pending' => $projectActionsPending,
+            'upcoming_trips' => $upcomingTrips,
         ];
     }
 
-    /**
-     * Get today's meetings
-     */
-    public function getTodaysMeetingsProperty()
+    public function getNextMeetingProperty(): ?array
     {
-        $userId = $this->user->id;
-
-        return Meeting::with(['organizations', 'projects'])
-            ->whereDate('meeting_date', today())
-            ->where(function ($q) use ($userId) {
-                $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
-            })
+        $meetings = $this->meetingsForUserQuery()
+            ->with(['organizations'])
+            ->whereDate('meeting_date', '>=', today())
             ->orderBy('meeting_date')
-            ->get();
-    }
-
-    /**
-     * Get tomorrow's meeting count
-     */
-    public function getTomorrowMeetingsCountProperty(): int
-    {
-        $userId = $this->user->id;
-
-        return Meeting::whereDate('meeting_date', today()->addDay())
-            ->where(function ($q) use ($userId) {
-                $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
-            })
-            ->count();
-    }
-
-    /**
-     * Get user's upcoming meetings for the week
-     */
-    public function getUpcomingMeetingsProperty()
-    {
-        $userId = $this->user->id;
-
-        return Meeting::with(['organizations', 'projects'])
-            ->where('meeting_date', '>=', today())
-            ->where('meeting_date', '<=', today()->addWeek())
-            ->where(function ($q) use ($userId) {
-                $q->where('user_id', $userId)
-                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $userId));
-            })
-            ->orderBy('meeting_date')
-            ->limit(10)
-            ->get();
-    }
-
-    /**
-     * Get user's pending actions/tasks
-     */
-    public function getMyActionsProperty()
-    {
-        return Action::where('assigned_to', $this->user->id)
-            ->where('status', 'pending')
-            ->with('meeting.organizations')
-            ->orderByRaw('CASE WHEN due_date IS NOT NULL AND due_date < ? THEN 0 ELSE 1 END', [today()->toDateString()])
-            ->orderBy('due_date')
-            ->limit(10)
-            ->get()
-            ->map(function ($action) {
-                $action->is_overdue = $action->due_date && $action->due_date < today();
-
-                return $action;
-            });
-    }
-
-    /**
-     * Get user's projects
-     */
-    public function getMyProjectsProperty()
-    {
-        $userId = $this->user->id;
-        $firstName = explode(' ', $this->user->name)[0];
-
-        return Project::whereIn('status', ['active', 'planning', 'on_hold'])
-            ->where(function ($query) use ($userId, $firstName) {
-                $query->where('created_by', $userId)
-                    ->orWhere('lead', 'like', "%{$firstName}%")
-                    ->orWhereHas('staff', fn($q) => $q->where('user_id', $userId));
-            })
-            ->withCount([
-                'milestones as milestones_total_count',
-                'milestones as milestones_completed_count' => fn($q) => $q->where('status', 'completed'),
-                'openQuestions',
-            ])
-            ->orderBy('updated_at', 'desc')
-            ->get()
-            ->map(function ($project) {
-                $total = $project->milestones_total_count;
-                $completed = $project->milestones_completed_count;
-                $project->progress_percent = $total > 0
-                    ? round(($completed / $total) * 100)
-                    : 0;
-                $project->pending_milestones_count = $total - $completed;
-
-                return $project;
-            });
-    }
-
-    /**
-     * Get items needing attention
-     */
-    public function getNeedsAttentionProperty()
-    {
-        $userId = $this->user->id;
-        $items = collect();
-
-        // Overdue actions
-        $overdueActions = Action::where('assigned_to', $userId)
-            ->where('status', 'pending')
-            ->where('due_date', '<', today())
-            ->with('meeting.organizations')
+            ->limit(30)
             ->get();
 
-        if ($overdueActions->isNotEmpty()) {
-            $items->push([
-                'severity' => 'overdue',
-                'title' => $overdueActions->count() . ' task' . ($overdueActions->count() > 1 ? 's' : '') . ' overdue',
-                'items' => $overdueActions->map(fn($a) => [
-                    'label' => $a->description,
-                    'url' => $a->meeting ? route('meetings.show', $a->meeting) : route('dashboard', [], false) . '#my-tasks',
-                ]),
-            ]);
+        $next = $meetings
+            ->map(function (Meeting $meeting) {
+                $startAt = $this->meetingDateTime($meeting, (string) $meeting->meeting_time);
+                $endAt = $this->meetingDateTime($meeting, (string) $meeting->meeting_end_time, $startAt?->copy()->addHour());
+
+                return [
+                    'meeting' => $meeting,
+                    'start_at' => $startAt,
+                    'end_at' => $endAt,
+                ];
+            })
+            ->filter(fn (array $item) => $item['start_at'] && $item['start_at']->greaterThanOrEqualTo(now()->subMinutes(15)))
+            ->sortBy('start_at')
+            ->first();
+
+        if (! $next) {
+            return null;
         }
 
-        // Meetings needing notes (past meetings without notes)
-        $needsNotes = Meeting::whereDate('meeting_date', '<', today())
-            ->whereDate('meeting_date', '>=', today()->subDays(7))
-            ->where('user_id', $userId)
-            ->whereNull('raw_notes')
-            ->orWhere('raw_notes', '')
+        /** @var Meeting $meeting */
+        $meeting = $next['meeting'];
+        /** @var Carbon $startAt */
+        $startAt = $next['start_at'];
+        /** @var Carbon|null $endAt */
+        $endAt = $next['end_at'];
+
+        return [
+            'id' => $meeting->id,
+            'title' => $meeting->title ?: ($meeting->organizations->pluck('name')->first() ?: 'Upcoming meeting'),
+            'starts_at' => $startAt,
+            'ends_at' => $endAt,
+            'date_label' => $startAt->isToday() ? 'Today' : $startAt->format('D, M j'),
+            'time_label' => $startAt->format('g:i A').($endAt ? ' - '.$endAt->format('g:i A') : ''),
+            'relative_label' => $startAt->isFuture() ? $startAt->diffForHumans(now(), true).' from now' : 'Starting now',
+            'location' => $meeting->location ?: 'Location TBD',
+            'organization' => $meeting->organizations->pluck('name')->first(),
+            'key_ask' => $meeting->key_ask,
+            'url' => route('meetings.show', $meeting),
+        ];
+    }
+
+    public function getFocusNarrativeProperty(): string
+    {
+        $stats = $this->workspaceStats;
+        $nextMeeting = $this->nextMeeting;
+
+        $sentences = [];
+
+        if ($nextMeeting && $nextMeeting['starts_at'] instanceof Carbon && $nextMeeting['starts_at']->isFuture()) {
+            $minutes = now()->diffInMinutes($nextMeeting['starts_at']);
+            $hours = round($minutes / 60, 1);
+            if ($hours >= 1) {
+                $sentences[] = "You have about {$hours} hour".($hours == 1.0 ? '' : 's')." of focus time before {$nextMeeting['title']}.";
+            } else {
+                $sentences[] = "{$nextMeeting['title']} is coming up in {$minutes} minutes.";
+            }
+        } else {
+            $sentences[] = 'Your calendar is clear right now, so this is a good block for deep work.';
+        }
+
+        if ($stats['tasks_overdue'] > 0) {
+            $sentences[] = "{$stats['tasks_overdue']} overdue task".($stats['tasks_overdue'] === 1 ? ' needs' : 's need')." attention.";
+        } elseif ($stats['tasks_due_today'] > 0) {
+            $sentences[] = "{$stats['tasks_due_today']} task".($stats['tasks_due_today'] === 1 ? ' is' : 's are')." due today.";
+        } else {
+            $sentences[] = 'No task deadlines are due today.';
+        }
+
+        if ($stats['upcoming_trips'] > 0) {
+            $sentences[] = "You have {$stats['upcoming_trips']} upcoming trip".($stats['upcoming_trips'] === 1 ? '' : 's')." in the next 30 days.";
+        }
+
+        return implode(' ', $sentences);
+    }
+
+    public function getUrgentTasksProperty()
+    {
+        return $this->pendingActionsQuery()
+            ->with(['project'])
+            ->where(function (Builder $q) {
+                $q->where('priority', 'high')
+                    ->orWhereDate('due_date', '<=', today());
+            })
+            ->orderByRaw('CASE WHEN due_date IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('due_date')
+            ->limit(6)
+            ->get();
+    }
+
+    public function getNowTasksProperty()
+    {
+        return $this->pendingActionsQuery()
+            ->where(function (Builder $q) {
+                $q->whereDate('due_date', '<', today())
+                    ->orWhereDate('due_date', today());
+            })
+            ->orderBy('due_date')
             ->limit(5)
             ->get();
-
-        if ($needsNotes->isNotEmpty()) {
-            $items->push([
-                'severity' => 'urgent',
-                'title' => $needsNotes->count() . ' meeting' . ($needsNotes->count() > 1 ? 's' : '') . ' need notes',
-                'items' => $needsNotes->map(fn($m) => [
-                    'label' => ($m->title ?: $m->organizations->pluck('name')->first() ?: 'Meeting') . ' (' . $m->meeting_date->format('M j') . ')',
-                    'url' => route('meetings.show', $m),
-                ]),
-            ]);
-        }
-
-        // Grants ending soon (admin only)
-        if ($this->user->isAdmin()) {
-            // Grants ending soon
-            $grantsEnding = Grant::with('funder')
-                ->where('status', 'active')
-                ->where('end_date', '<=', now()->addMonths(2))
-                ->where('end_date', '>=', now())
-                ->get();
-
-            if ($grantsEnding->isNotEmpty()) {
-                $items->push([
-                    'severity' => 'info',
-                    'title' => $grantsEnding->count() . ' grant' . ($grantsEnding->count() > 1 ? 's' : '') . ' ending soon',
-                    'items' => $grantsEnding->map(fn($g) => [
-                        'label' => $g->name . ' (' . $g->end_date->format('M j') . ')',
-                        'url' => route('grants.show', $g),
-                    ]),
-                ]);
-            }
-        }
-
-        return $items->sortBy(fn($i) => $i['severity'] === 'overdue' ? 0 : ($i['severity'] === 'urgent' ? 1 : 2));
     }
 
-    /**
-     * Get funding alerts (admin only)
-     */
-    public function getFundingAlertsProperty()
+    public function getNextTasksProperty()
     {
-        if (!$this->user->isAdmin()) {
-            return collect();
-        }
-
-        $alerts = collect();
-
-        // Grants ending soon
-        Grant::with('funder')
-            ->where('status', 'active')
-            ->where('end_date', '<=', now()->addMonths(2))
-            ->where('end_date', '>=', now())
-            ->each(function ($grant) use ($alerts) {
-                $alerts->push([
-                    'type' => 'due_soon',
-                    'title' => $grant->name,
-                    'funder' => $grant->funder->name ?? 'Unknown',
-                    'url' => route('grants.show', $grant),
-                ]);
-            });
-
-        return $alerts->take(6);
-    }
-
-    /**
-     * Get recent press coverage
-     */
-    public function getRecentCoverageProperty()
-    {
-        return PressClip::approved()
-            ->with(['staffMentioned', 'outlet'])
-            ->latest('published_at')
-            ->limit(4)
+        return $this->pendingActionsQuery()
+            ->whereBetween('due_date', [today()->copy()->addDay(), today()->copy()->addDays(7)])
+            ->orderBy('due_date')
+            ->limit(5)
             ->get();
     }
 
-    /**
-     * Complete an action/task
-     */
+    public function getLaterTasksProperty()
+    {
+        return $this->pendingActionsQuery()
+            ->where(function (Builder $q) {
+                $q->whereDate('due_date', '>', today()->copy()->addDays(7))
+                    ->orWhereNull('due_date');
+            })
+            ->orderByRaw('CASE WHEN due_date IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('due_date')
+            ->limit(5)
+            ->get();
+    }
+
+    public function getDailyPulseProperty(): array
+    {
+        $accomplishment = Accomplishment::query()
+            ->visibleTo($this->user)
+            ->latest('date')
+            ->first();
+
+        if ($accomplishment) {
+            return [
+                'title' => 'Recent Team Win',
+                'body' => $accomplishment->title,
+                'meta' => $accomplishment->user?->name ? 'Shared by '.$accomplishment->user->name : 'Team update',
+                'url' => route('accomplishments.index'),
+            ];
+        }
+
+        $clip = PressClip::query()->approved()->latest('published_at')->first();
+        if ($clip) {
+            return [
+                'title' => 'Latest Coverage',
+                'body' => $clip->title,
+                'meta' => ($clip->outlet_display_name ?: 'Media').($clip->published_at ? ' · '.$clip->published_at->format('M j') : ''),
+                'url' => route('media.index'),
+            ];
+        }
+
+        return [
+            'title' => 'Daily Pulse',
+            'body' => 'No critical alerts right now. Use this block for strategic work.',
+            'meta' => 'Stay focused on outcomes, not busywork.',
+            'url' => route('dashboard'),
+        ];
+    }
+
+    public function getSmartActionsProperty(): array
+    {
+        $actions = [
+            [
+                'key' => 'focus',
+                'label' => 'What should I focus on?',
+                'command' => 'What should I focus on first today based on my meetings and tasks?',
+                'auto_submit' => true,
+            ],
+            [
+                'key' => 'task',
+                'label' => 'Capture a task',
+                'command' => '/task ',
+                'auto_submit' => false,
+            ],
+            [
+                'key' => 'remind',
+                'label' => 'Add reminder',
+                'command' => '/remind ',
+                'auto_submit' => false,
+            ],
+        ];
+
+        if ($this->nextMeeting) {
+            $actions[] = [
+                'key' => 'prep_next_meeting',
+                'label' => 'Prep next meeting',
+                'command' => 'Give me a short prep brief for my next meeting: '.$this->nextMeeting['title'],
+                'auto_submit' => true,
+            ];
+        }
+
+        return $actions;
+    }
+
+    public function useSmartAction(string $key): void
+    {
+        $action = collect($this->smartActions)->firstWhere('key', $key);
+        if (! $action) {
+            return;
+        }
+
+        $this->omniInput = (string) $action['command'];
+
+        if (($action['auto_submit'] ?? false) === true) {
+            $this->submitOmni();
+        }
+    }
+
+    public function submitOmni(): void
+    {
+        $command = trim($this->omniInput);
+        if ($command === '') {
+            return;
+        }
+
+        if (Str::length($command) > 2000) {
+            $this->addConversationMessage('assistant', 'That message is too long for one command. Please split it into smaller chunks.');
+            $this->omniInput = '';
+
+            return;
+        }
+
+        $chatLimit = config('ai.limits.chat', ['max' => 30, 'decay_seconds' => 60]);
+        $chatKey = 'ai-workspace-omni:'.($this->user?->id ?? 'guest');
+        if (RateLimiter::tooManyAttempts($chatKey, $chatLimit['max'])) {
+            $this->addConversationMessage('assistant', 'You are sending commands too quickly. Please wait a moment.');
+            $this->omniInput = '';
+
+            return;
+        }
+
+        RateLimiter::hit($chatKey, $chatLimit['decay_seconds']);
+
+        $this->omniBusy = true;
+        $this->addConversationMessage('user', $command);
+        $this->omniInput = '';
+
+        try {
+            $normalized = Str::lower($command);
+
+            if (Str::startsWith($normalized, ['/task', 'task:'])) {
+                $result = $this->createTaskFromDirective($command, false);
+                $this->addConversationMessage('assistant', $result);
+            } elseif (Str::startsWith($normalized, ['/remind', 'remind', 'reminder'])) {
+                $result = $this->createTaskFromDirective($command, true);
+                $this->addConversationMessage('assistant', $result);
+            } elseif (Str::startsWith($normalized, ['/help', 'help'])) {
+                $this->addConversationMessage(
+                    'assistant',
+                    "Try:\n• /task Draft donor follow-up | due:today | priority:high\n• /remind Send receipts | due:tomorrow\nOr just ask a question in plain language."
+                );
+            } elseif (Str::startsWith($normalized, ['/sync calendar'])) {
+                $this->syncCalendar();
+                $this->addConversationMessage('assistant', 'Calendar sync started. I updated your workspace context.');
+            } else {
+                $historyForAi = collect($this->omniConversation)
+                    ->take(-10)
+                    ->map(fn (array $message) => [
+                        'role' => $message['role'],
+                        'content' => $message['content'],
+                    ])
+                    ->values()
+                    ->all();
+
+                $response = app(ChatService::class)->query($command, $historyForAi);
+                $this->addConversationMessage('assistant', $response);
+            }
+        } catch (\Throwable $exception) {
+            \Log::warning('Workspace omni command failed', [
+                'user_id' => $this->user?->id,
+                'command' => $command,
+                'error' => $exception->getMessage(),
+            ]);
+
+            $this->addConversationMessage('assistant', 'I hit a processing error. Please try again with a shorter or clearer command.');
+        } finally {
+            $this->omniBusy = false;
+        }
+    }
+
     public function completeAction(int $actionId): void
     {
-        $action = Action::find($actionId);
-
-        if ($action && $action->assigned_to === $this->user->id) {
-            $action->update(['status' => 'completed']);
-        }
-    }
-
-    /**
-     * Soft delete a task
-     */
-    public function deleteTask(int $actionId): void
-    {
-        $action = Action::find($actionId);
-
-        if ($action && $action->assigned_to === $this->user->id) {
-            $action->delete();
-            $this->dispatch('notify', type: 'success', message: 'Task deleted. You can restore it from the archived tasks.');
-        }
-    }
-
-    /**
-     * Restore a soft-deleted or completed task
-     */
-    public function restoreTask(int $actionId): void
-    {
-        $action = Action::withTrashed()->find($actionId);
-
-        if ($action && $action->assigned_to === $this->user->id) {
-            $action->restore();
-            $action->update(['status' => 'pending']);
-            $this->dispatch('notify', type: 'success', message: 'Task restored!');
-        }
-    }
-
-    /**
-     * Toggle archived tasks visibility
-     */
-    public function toggleArchivedTasks(): void
-    {
-        $this->showArchivedTasks = !$this->showArchivedTasks;
-    }
-
-    /**
-     * Get archived (completed or deleted) tasks
-     */
-    public function getArchivedActionsProperty()
-    {
-        return Action::withTrashed()
+        $action = Action::query()
+            ->where('id', $actionId)
             ->where('assigned_to', $this->user->id)
-            ->where(function ($q) {
-                $q->where('status', 'completed')
-                    ->orWhereNotNull('deleted_at');
-            })
-            ->orderBy('updated_at', 'desc')
-            ->limit(10)
-            ->get();
+            ->where('status', 'pending')
+            ->first();
+
+        if (! $action) {
+            return;
+        }
+
+        $action->update([
+            'status' => 'complete',
+            'completed_at' => now(),
+        ]);
+
+        $this->dispatch('notify', type: 'success', message: 'Task marked complete.');
     }
 
-    /**
-     * Sync calendar
-     */
-    public function syncCalendar()
+    public function syncCalendar(): void
     {
-        if (!$this->isCalendarConnected) {
+        if (! $this->isCalendarConnected) {
             return;
         }
 
         $this->isSyncing = true;
 
         try {
-            // Dispatch sync job synchronously for immediate feedback
             SyncCalendarEvents::dispatchSync($this->user);
-        } catch (\Exception $e) {
-            // Log but don't throw - we still want to update UI
-            \Log::warning('Calendar sync from dashboard failed: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            \Log::warning('Workspace calendar sync failed: '.$e->getMessage());
         }
 
-        // Refresh user data from database to get updated calendar_import_date
         $this->user->refresh();
-
-        // Update display from actual database value
         $this->lastSyncAt = $this->user->calendar_import_date
             ? $this->user->calendar_import_date->diffForHumans()
             : 'just now';
 
-        // Clear the calendar warning since we just synced
         $this->calendarWarning = null;
-
         $this->isSyncing = false;
     }
 
-    /**
-     * Send chat message
-     */
-    public function sendChat()
+    protected function addConversationMessage(string $role, string $content): void
     {
-        if (empty(trim($this->chatQuery))) {
-            return;
-        }
-
-        if (!config('ai.enabled')) {
-            $this->chatHistory[] = [
-                'role' => 'assistant',
-                'content' => 'AI features are disabled by the administrator.',
-                'timestamp' => now()->format('g:i A'),
-            ];
-
-            return;
-        }
-
-        $chatLimit = config('ai.limits.chat', ['max' => 30, 'decay_seconds' => 60]);
-        $chatKey = 'ai-dashboard-chat:' . ($this->user?->id ?? 'guest');
-        if (RateLimiter::tooManyAttempts($chatKey, $chatLimit['max'])) {
-            $this->chatHistory[] = [
-                'role' => 'assistant',
-                'content' => 'You are sending messages too quickly. Please wait a moment.',
-                'timestamp' => now()->format('g:i A'),
-            ];
-
-            return;
-        }
-        RateLimiter::hit($chatKey, $chatLimit['decay_seconds']);
-
-        $this->isProcessing = true;
-        $query = $this->chatQuery;
-        $this->chatQuery = '';
-
-        // Add user message to history
-        $this->chatHistory[] = [
-            'role' => 'user',
-            'content' => $query,
+        $this->omniConversation[] = [
+            'role' => $role,
+            'content' => trim($content),
             'timestamp' => now()->format('g:i A'),
         ];
 
-        // Get AI response
-        $response = app(ChatService::class)->query($query, $this->chatHistory);
-
-        // Add assistant response to history
-        $this->chatHistory[] = [
-            'role' => 'assistant',
-            'content' => $response,
-            'timestamp' => now()->format('g:i A'),
-        ];
-
-        $this->isProcessing = false;
-
-        // Dispatch event for scroll
-        $this->dispatch('chatUpdated');
-    }
-
-    public function clearChat()
-    {
-        $this->chatHistory = [];
-    }
-
-    // === Task Management ===
-
-    public function toggleAddTask(): void
-    {
-        $this->showAddTask = !$this->showAddTask;
-        if (!$this->showAddTask) {
-            $this->resetTaskForm();
+        if (count($this->omniConversation) > 24) {
+            $this->omniConversation = array_slice($this->omniConversation, -24);
         }
+
+        session(['workspace.omniConversation' => $this->omniConversation]);
     }
 
-    public function resetTaskForm(): void
+    protected function createTaskFromDirective(string $command, bool $isReminder): string
     {
-        $this->newTaskTitle = '';
-        $this->newTaskDescription = '';
-        $this->newTaskDueDate = null;
-        $this->newTaskPriority = 'medium';
-        $this->newTaskProjectId = null;
-        $this->editingTaskId = null;
-    }
+        $parsed = $this->parseTaskDirective($command, $isReminder);
+        $title = trim((string) Arr::get($parsed, 'title', ''));
 
-    public function createTask(): void
-    {
-        $this->validate([
-            'newTaskTitle' => 'required|string|max:255',
-            'newTaskDescription' => 'nullable|string|max:1000',
-            'newTaskDueDate' => 'nullable|date',
-            'newTaskPriority' => 'required|in:high,medium,low',
-            'newTaskProjectId' => 'nullable|exists:projects,id',
-        ]);
+        if ($title === '') {
+            return $isReminder
+                ? 'Reminder not created. Try: /remind Follow up with team | due:tomorrow'
+                : 'Task not created. Try: /task Draft donor update | due:today | priority:high';
+        }
 
-        Action::create([
-            'title' => $this->newTaskTitle,
-            'description' => $this->newTaskDescription ?: $this->newTaskTitle,
-            'due_date' => $this->newTaskDueDate,
-            'priority' => $this->newTaskPriority,
+        $action = Action::create([
+            'title' => $title,
+            'description' => (string) Arr::get($parsed, 'description', $title),
+            'due_date' => Arr::get($parsed, 'due_date'),
+            'priority' => Arr::get($parsed, 'priority', $isReminder ? 'low' : 'medium'),
             'status' => 'pending',
             'source' => 'manual',
             'assigned_to' => $this->user->id,
-            'project_id' => $this->newTaskProjectId,
+            'project_id' => Arr::get($parsed, 'project_id'),
         ]);
 
-        $this->resetTaskForm();
-        $this->showAddTask = false;
-        $this->dispatch('notify', type: 'success', message: 'Task created successfully!');
+        $due = $action->due_date ? Carbon::parse($action->due_date)->format('M j') : 'no due date';
+        $priority = ucfirst((string) $action->priority);
+        $projectName = $action->project?->name;
+
+        return 'Created '.($isReminder ? 'reminder' : 'task').": "
+            .$action->title
+            .' ('.$priority.', due '.$due.')'
+            .($projectName ? ' under '.$projectName : '.');
     }
 
-    public function startEditTask(int $taskId): void
+    protected function parseTaskDirective(string $command, bool $isReminder): array
     {
-        $task = Action::where('id', $taskId)
-            ->where('assigned_to', $this->user->id)
-            ->first();
+        $clean = preg_replace('/^\/?(task|remind(?:er)?):?\s*/i', '', trim($command));
+        $parts = array_map('trim', explode('|', (string) $clean));
 
-        if ($task) {
-            $this->editingTaskId = $taskId;
-            $this->newTaskTitle = $task->title ?? $task->description;
-            $this->newTaskDescription = $task->description ?? '';
-            $this->newTaskDueDate = $task->due_date?->format('Y-m-d');
-            $this->newTaskPriority = $task->priority ?? 'medium';
-            $this->newTaskProjectId = $task->project_id;
-            $this->showAddTask = true;
-        }
-    }
+        $title = (string) array_shift($parts);
+        $description = $title;
+        $priority = $isReminder ? 'low' : 'medium';
+        $dueDate = null;
+        $projectId = null;
 
-    public function updateTask(): void
-    {
-        $this->validate([
-            'newTaskTitle' => 'required|string|max:255',
-            'newTaskDescription' => 'nullable|string|max:1000',
-            'newTaskDueDate' => 'nullable|date',
-            'newTaskPriority' => 'required|in:high,medium,low',
-            'newTaskProjectId' => 'nullable|exists:projects,id',
-        ]);
+        foreach ($parts as $part) {
+            $lower = Str::lower($part);
 
-        $task = Action::where('id', $this->editingTaskId)
-            ->where('assigned_to', $this->user->id)
-            ->first();
+            if (Str::startsWith($lower, 'due:')) {
+                $dueDate = $this->parseDueDateToken(trim(substr($part, 4)));
+                continue;
+            }
 
-        if ($task) {
-            $task->update([
-                'title' => $this->newTaskTitle,
-                'description' => $this->newTaskDescription ?: $this->newTaskTitle,
-                'due_date' => $this->newTaskDueDate,
-                'priority' => $this->newTaskPriority,
-                'project_id' => $this->newTaskProjectId,
-            ]);
-        }
+            if (Str::startsWith($lower, 'priority:')) {
+                $candidate = trim(Str::lower(substr($part, 9)));
+                if (in_array($candidate, ['high', 'medium', 'low'], true)) {
+                    $priority = $candidate;
+                }
+                continue;
+            }
 
-        $this->resetTaskForm();
-        $this->showAddTask = false;
-        $this->dispatch('notify', type: 'success', message: 'Task updated successfully!');
-    }
+            if (Str::startsWith($lower, 'project:')) {
+                $projectName = trim(substr($part, 8));
+                if ($projectName !== '') {
+                    $projectId = $this->resolveUserProjectIdByName($projectName);
+                }
+                continue;
+            }
 
-    public function cancelEditTask(): void
-    {
-        $this->resetTaskForm();
-        $this->showAddTask = false;
-    }
-
-    public function toggleAiSuggestions(): void
-    {
-        $this->showAiSuggestions = !$this->showAiSuggestions;
-
-        if ($this->showAiSuggestions && empty($this->aiSuggestedTasks)) {
-            $this->loadAiSuggestions();
-        }
-    }
-
-    public function loadAiSuggestions(): void
-    {
-        if (!config('ai.enabled')) {
-            $this->aiSuggestedTasks = [];
-
-            return;
+            if (Str::startsWith($lower, 'description:')) {
+                $description = trim(substr($part, 12));
+            }
         }
 
-        $this->isLoadingSuggestions = true;
+        if ($dueDate === null) {
+            if (preg_match('/\b(today)\b/i', $title)) {
+                $dueDate = today()->toDateString();
+                $title = trim(preg_replace('/\btoday\b/i', '', $title) ?? $title);
+            } elseif (preg_match('/\b(tomorrow)\b/i', $title)) {
+                $dueDate = today()->addDay()->toDateString();
+                $title = trim(preg_replace('/\btomorrow\b/i', '', $title) ?? $title);
+            }
+        }
+
+        if ($title === '') {
+            $title = $description;
+        }
+
+        return [
+            'title' => $title,
+            'description' => $description,
+            'priority' => $priority,
+            'due_date' => $dueDate,
+            'project_id' => $projectId,
+        ];
+    }
+
+    protected function parseDueDateToken(?string $token): ?string
+    {
+        $token = trim((string) $token);
+        if ($token === '') {
+            return null;
+        }
+
+        $lower = Str::lower($token);
+        if ($lower === 'today') {
+            return today()->toDateString();
+        }
+        if ($lower === 'tomorrow') {
+            return today()->addDay()->toDateString();
+        }
+        if ($lower === 'next-week' || $lower === 'next week') {
+            return today()->addWeek()->toDateString();
+        }
 
         try {
-            // Gather context from user's projects, meetings, and calendar
-            $context = $this->gatherTaskSuggestionContext();
-
-            // Use AI to suggest tasks
-            $apiKey = config('services.anthropic.api_key');
-            if (empty($apiKey)) {
-                $this->aiSuggestedTasks = [];
-                $this->isLoadingSuggestions = false;
-
-                return;
-            }
-
-            $response = \App\Support\AI\AnthropicClient::send([
-                'system' => 'You are a productivity assistant helping a nonprofit professional manage their tasks. Based on the context provided, suggest 3-5 actionable tasks they should work on. Respond with a JSON array of tasks, each with: title, description, priority (high/medium/low), suggested_due_date (YYYY-MM-DD format or null), and reason (why this task is important now). Only suggest concrete, actionable tasks.',
-                'messages' => [
-                    ['role' => 'user', 'content' => "Based on my current work context, suggest tasks I should add to my to-do list:\n\n{$context}"],
-                ],
-                'max_tokens' => 1500,
-            ]);
-
-            $content = $response['content'][0]['text'] ?? '';
-
-            // Parse JSON from response
-            if (preg_match('/\[.*\]/s', $content, $matches)) {
-                $this->aiSuggestedTasks = json_decode($matches[0], true) ?? [];
-            } else {
-                $this->aiSuggestedTasks = [];
-            }
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('AI Task Suggestions Error: ' . $e->getMessage());
-            $this->aiSuggestedTasks = [];
+            return Carbon::parse($token)->toDateString();
+        } catch (\Throwable) {
+            return null;
         }
-
-        $this->isLoadingSuggestions = false;
     }
 
-    protected function gatherTaskSuggestionContext(): string
+    protected function resolveUserProjectIdByName(string $projectName): ?int
     {
-        $context = [];
-
-        // Current user's projects
-        $projects = $this->myProjects;
-        if ($projects->isNotEmpty()) {
-            $context[] = "## My Active Projects:\n";
-            foreach ($projects->take(5) as $project) {
-                $context[] = "- {$project->name} (Progress: {$project->progress_percent}%, {$project->pending_milestones_count} milestones pending)";
-            }
-        }
-
-        // Upcoming meetings this week
-        $meetings = Meeting::with('organizations')
-            ->whereBetween('meeting_date', [now(), now()->addWeek()])
-            ->where(function ($q) {
-                $q->where('user_id', $this->user->id)
-                    ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', $this->user->id));
-            })
-            ->limit(5)
-            ->get();
-
-        if ($meetings->isNotEmpty()) {
-            $context[] = "\n## Upcoming Meetings This Week:\n";
-            foreach ($meetings as $meeting) {
-                $title = $meeting->title ?: $meeting->organizations->pluck('name')->first() ?: 'Meeting';
-                $context[] = "- {$title} on {$meeting->meeting_date->format('M j')}";
-            }
-        }
-
-        // Recent items needing attention
-        $needsAttention = $this->needsAttention;
-        if ($needsAttention->isNotEmpty()) {
-            $context[] = "\n## Items Needing Attention:\n";
-            foreach ($needsAttention as $item) {
-                $context[] = "- {$item['title']}";
-            }
-        }
-
-        // Overdue tasks
-        $overdueCount = Action::where('assigned_to', $this->user->id)
-            ->pending()
-            ->where('due_date', '<', today())
-            ->count();
-
-        if ($overdueCount > 0) {
-            $context[] = "\n## Warning: {$overdueCount} overdue tasks!";
-        }
-
-        return implode("\n", $context);
+        return $this->projectsForUserQuery()
+            ->where('name', 'like', '%'.$projectName.'%')
+            ->value('id');
     }
 
-    public function addSuggestedTask(int $index): void
+    protected function meetingsForUserQuery(): Builder
     {
-        if (!isset($this->aiSuggestedTasks[$index])) {
-            return;
-        }
+        $userId = (int) $this->user->id;
 
-        $suggestion = $this->aiSuggestedTasks[$index];
-
-        Action::create([
-            'title' => $suggestion['title'],
-            'description' => $suggestion['description'] ?? $suggestion['title'],
-            'due_date' => $suggestion['suggested_due_date'] ?? null,
-            'priority' => $suggestion['priority'] ?? 'medium',
-            'status' => 'pending',
-            'source' => 'ai_suggested',
-            'assigned_to' => $this->user->id,
-        ]);
-
-        // Remove from suggestions
-        unset($this->aiSuggestedTasks[$index]);
-        $this->aiSuggestedTasks = array_values($this->aiSuggestedTasks);
-
-        $this->dispatch('notify', type: 'success', message: 'Task added from AI suggestion!');
+        return Meeting::query()
+            ->where(function (Builder $q) use ($userId) {
+                $q->where('user_id', $userId)
+                    ->orWhereHas('teamMembers', fn (Builder $t) => $t->where('users.id', $userId));
+            });
     }
 
-    public function dismissSuggestion(int $index): void
+    protected function pendingActionsQuery(): Builder
     {
-        unset($this->aiSuggestedTasks[$index]);
-        $this->aiSuggestedTasks = array_values($this->aiSuggestedTasks);
+        return Action::query()
+            ->where('assigned_to', $this->user->id)
+            ->where('status', 'pending');
     }
 
-    /**
-     * Get user's available projects for task assignment
-     */
-    public function getAvailableProjectsProperty()
+    protected function projectsForUserQuery(): Builder
     {
-        $userId = $this->user->id;
-        $firstName = explode(' ', $this->user->name)[0];
+        $userId = (int) $this->user->id;
+        $firstName = explode(' ', (string) $this->user->name)[0];
 
-        return Project::whereIn('status', ['active', 'planning'])
-            ->where(function ($query) use ($userId, $firstName) {
+        return Project::query()
+            ->where(function (Builder $query) use ($userId, $firstName) {
                 $query->where('created_by', $userId)
-                    ->orWhere('lead', 'like', "%{$firstName}%")
-                    ->orWhereHas('staff', fn($q) => $q->where('user_id', $userId));
-            })
-            ->orderBy('name')
-            ->get(['id', 'name']);
+                    ->orWhere('lead', 'like', '%'.$firstName.'%')
+                    ->orWhereHas('staff', fn (Builder $q) => $q->where('user_id', $userId));
+            });
+    }
+
+    protected function meetingDateTime(Meeting $meeting, ?string $timeValue, ?Carbon $fallback = null): ?Carbon
+    {
+        if (! $meeting->meeting_date) {
+            return $fallback;
+        }
+
+        $base = Carbon::parse($meeting->meeting_date->format('Y-m-d'));
+
+        if ($timeValue && trim($timeValue) !== '') {
+            try {
+                $parsedTime = Carbon::parse($timeValue)->format('H:i:s');
+                return Carbon::parse($base->format('Y-m-d').' '.$parsedTime);
+            } catch (\Throwable) {
+                // Fall through to fallback behavior.
+            }
+        }
+
+        return $fallback ?? $base->setTime(9, 0, 0);
     }
 
     public function render()
@@ -837,17 +685,17 @@ class Dashboard extends Component
         return view('livewire.dashboard', [
             'greeting' => $this->greeting,
             'firstName' => $this->firstName,
-            'stats' => $this->stats,
-            'todaysMeetings' => $this->todaysMeetings,
-            'tomorrowMeetingsCount' => $this->tomorrowMeetingsCount,
-            'upcomingMeetings' => $this->upcomingMeetings,
-            'myActions' => $this->myActions,
-            'myProjects' => $this->myProjects,
-            'needsAttention' => $this->needsAttention,
-            'fundingAlerts' => $this->fundingAlerts,
-            'recentCoverage' => $this->recentCoverage,
-            'availableProjects' => $this->availableProjects,
-            'archivedActions' => $this->showArchivedTasks ? $this->archivedActions : collect(),
+            'workspaceDateLabel' => $this->workspaceDateLabel,
+            'focusNarrative' => $this->focusNarrative,
+            'workspaceStats' => $this->workspaceStats,
+            'nextMeeting' => $this->nextMeeting,
+            'urgentTasks' => $this->urgentTasks,
+            'nowTasks' => $this->nowTasks,
+            'nextTasks' => $this->nextTasks,
+            'laterTasks' => $this->laterTasks,
+            'dailyPulse' => $this->dailyPulse,
+            'smartActions' => $this->smartActions,
+            'recentMessages' => array_slice($this->omniConversation, -8),
         ]);
     }
 }
