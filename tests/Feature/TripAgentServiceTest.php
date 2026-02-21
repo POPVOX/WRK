@@ -172,6 +172,95 @@ test('trip agent imports itinerary segments from long message text', function ()
     expect((int) ($segmentImportLog['created_count'] ?? 0))->toBe(2);
 });
 
+test('trip agent splits imported itinerary segments across mentioned travelers', function () {
+    config()->set('services.anthropic.api_key', 'test-anthropic-key');
+    config()->set('ai.enabled', true);
+
+    Http::fake([
+        'https://api.anthropic.com/v1/messages' => Http::sequence()
+            ->push([
+                'content' => [
+                    [
+                        'text' => json_encode([
+                            'assistant_response' => 'Processing itinerary details.',
+                            'summary' => 'No actionable update detected',
+                            'changes' => [],
+                        ], JSON_THROW_ON_ERROR),
+                    ],
+                ],
+            ], 200)
+            ->push([
+                'content' => [
+                    [
+                        'text' => json_encode([
+                            'segments' => [
+                                [
+                                    'type' => 'flight',
+                                    'carrier' => 'American Airlines',
+                                    'carrier_code' => 'AA',
+                                    'segment_number' => '1679',
+                                    'departure_location' => 'DCA',
+                                    'arrival_location' => 'MIA',
+                                    'departure_datetime' => '2026-02-22T07:00',
+                                    'arrival_datetime' => '2026-02-22T10:03',
+                                    'seat_assignment' => '27A',
+                                    'cabin_class' => 'economy',
+                                    'confidence' => 0.93,
+                                ],
+                                [
+                                    'type' => 'flight',
+                                    'carrier' => 'American Airlines',
+                                    'carrier_code' => 'AA',
+                                    'segment_number' => '2742',
+                                    'departure_location' => 'UVF',
+                                    'arrival_location' => 'MIA',
+                                    'departure_datetime' => '2026-02-27T15:48',
+                                    'arrival_datetime' => '2026-02-27T18:55',
+                                    'seat_assignment' => '22F',
+                                    'cabin_class' => 'economy',
+                                    'confidence' => 0.91,
+                                ],
+                            ],
+                            'parsing_notes' => 'Parsed two flight segments',
+                        ], JSON_THROW_ON_ERROR),
+                    ],
+                ],
+            ], 200),
+    ]);
+
+    $owner = User::factory()->admin()->create();
+    $aubrey = User::factory()->create(['name' => 'Aubrey Wilson']);
+    $ben = User::factory()->create(['name' => 'Ben Harris']);
+    $bryan = User::factory()->create(['name' => 'Bryan Dease']);
+
+    $trip = createTripForAgentTest($owner);
+    $trip->travelers()->attach($aubrey->id, ['role' => 'participant']);
+    $trip->travelers()->attach($ben->id, ['role' => 'participant']);
+    $trip->travelers()->attach($bryan->id, ['role' => 'participant']);
+
+    $service = app(TripAgentService::class);
+    $result = $service->proposeChanges(
+        $trip,
+        $owner,
+        "Please update these flights for Aubrey/Ben/Bryan.\nAA1679 DCA to MIA Feb 22 7:00am arrive 10:03am seat 27A.\nAA2742 UVF to MIA Feb 27 3:48pm arrive 6:55pm seat 22F."
+    );
+
+    $action = $result['action'];
+    $trip->refresh();
+
+    expect($action)->not->toBeNull();
+    expect($action->status)->toBe('applied');
+    expect(TripSegment::where('trip_id', $trip->id)->count())->toBe(6);
+    expect(TripSegment::where('trip_id', $trip->id)->where('user_id', $aubrey->id)->count())->toBe(2);
+    expect(TripSegment::where('trip_id', $trip->id)->where('user_id', $ben->id)->count())->toBe(2);
+    expect(TripSegment::where('trip_id', $trip->id)->where('user_id', $bryan->id)->count())->toBe(2);
+
+    $executionLog = $action->execution_log ?? [];
+    $segmentImportLog = collect($executionLog)->firstWhere('type', 'import_itinerary_segments');
+    expect($segmentImportLog)->not->toBeNull();
+    expect((int) ($segmentImportLog['assignment_count'] ?? 0))->toBe(3);
+});
+
 test('trip agent applies approved action to trip dates and lodging', function () {
     $user = User::factory()->admin()->create();
     $trip = createTripForAgentTest($user);

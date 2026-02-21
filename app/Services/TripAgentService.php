@@ -569,12 +569,18 @@ PROMPT;
             return null;
         }
 
-        $assignment = $this->resolveSegmentAssignment($trip, $user);
+        $assignments = $this->detectMentionedTravelerAssignments($trip, $message);
+        if ($assignments === []) {
+            $assignments[] = $this->resolveSegmentAssignment($trip, $user);
+        }
+
+        $primaryAssignment = $assignments[0];
 
         return [
             'type' => 'import_itinerary_segments',
-            'user_id' => $assignment['user_id'],
-            'trip_guest_id' => $assignment['trip_guest_id'],
+            'user_id' => $primaryAssignment['user_id'],
+            'trip_guest_id' => $primaryAssignment['trip_guest_id'],
+            'assignments' => $assignments,
             'segments' => array_values($segments),
             'source' => 'message_parser',
             'parsing_notes' => $this->nullableTrimmedString($result['parsing_notes'] ?? null),
@@ -743,54 +749,54 @@ PROMPT;
             return null;
         }
 
-        $assignment = $this->resolveSegmentAssignment(
-            $trip,
-            $user,
-            isset($change['user_id']) && is_numeric($change['user_id']) ? (int) $change['user_id'] : null,
-            isset($change['trip_guest_id']) && is_numeric($change['trip_guest_id']) ? (int) $change['trip_guest_id'] : null
-        );
+        $assignments = $this->normalizeAssignmentsForImport($trip, $user, $change);
 
         $created = 0;
         $updated = 0;
         $skipped = 0;
+        $assignmentLabels = [];
 
-        foreach ($segments as $rawSegment) {
-            if (! is_array($rawSegment)) {
-                $skipped++;
-                continue;
-            }
+        foreach ($assignments as $assignment) {
+            $assignmentLabels[] = $this->resolveAssignmentLabel($trip, $assignment);
 
-            $segment = $this->normalizeSegmentForImport($rawSegment);
-            if ($segment === null) {
-                $skipped++;
-                continue;
-            }
+            foreach ($segments as $rawSegment) {
+                if (! is_array($rawSegment)) {
+                    $skipped++;
+                    continue;
+                }
 
-            $existing = $trip->segments()
-                ->where('user_id', $assignment['user_id'])
-                ->where('trip_guest_id', $assignment['trip_guest_id'])
-                ->where('type', $segment['type'])
-                ->where('departure_location', $segment['departure_location'])
-                ->where('arrival_location', $segment['arrival_location'])
-                ->where('departure_datetime', $segment['departure_datetime'])
-                ->first();
+                $segment = $this->normalizeSegmentForImport($rawSegment);
+                if ($segment === null) {
+                    $skipped++;
+                    continue;
+                }
 
-            if ($existing) {
-                $existing->update(array_merge($segment, [
+                $existing = $trip->segments()
+                    ->where('user_id', $assignment['user_id'])
+                    ->where('trip_guest_id', $assignment['trip_guest_id'])
+                    ->where('type', $segment['type'])
+                    ->where('departure_location', $segment['departure_location'])
+                    ->where('arrival_location', $segment['arrival_location'])
+                    ->where('departure_datetime', $segment['departure_datetime'])
+                    ->first();
+
+                if ($existing) {
+                    $existing->update(array_merge($segment, [
+                        'user_id' => $assignment['user_id'],
+                        'trip_guest_id' => $assignment['trip_guest_id'],
+                        'ai_extracted' => true,
+                    ]));
+                    $updated++;
+                    continue;
+                }
+
+                $trip->segments()->create(array_merge($segment, [
                     'user_id' => $assignment['user_id'],
                     'trip_guest_id' => $assignment['trip_guest_id'],
                     'ai_extracted' => true,
                 ]));
-                $updated++;
-                continue;
+                $created++;
             }
-
-            $trip->segments()->create(array_merge($segment, [
-                'user_id' => $assignment['user_id'],
-                'trip_guest_id' => $assignment['trip_guest_id'],
-                'ai_extracted' => true,
-            ]));
-            $created++;
         }
 
         return [
@@ -799,8 +805,8 @@ PROMPT;
             'created_count' => $created,
             'updated_count' => $updated,
             'skipped_count' => $skipped,
-            'assigned_user_id' => $assignment['user_id'],
-            'assigned_trip_guest_id' => $assignment['trip_guest_id'],
+            'assignment_count' => count($assignments),
+            'assignment_labels' => array_values(array_unique(array_filter($assignmentLabels))),
         ];
     }
 
@@ -875,6 +881,148 @@ PROMPT;
                 ? round((float) $segment['confidence'], 2)
                 : null,
         ];
+    }
+
+    /**
+     * @return array<int,array{user_id:int|null,trip_guest_id:int|null}>
+     */
+    protected function detectMentionedTravelerAssignments(Trip $trip, string $message): array
+    {
+        $trip->loadMissing(['travelers', 'guests']);
+
+        $found = [];
+
+        foreach ($trip->travelers as $traveler) {
+            $tokens = $this->buildTravelerSearchTokens((string) $traveler->name);
+            foreach ($tokens as $token) {
+                if ($this->messageContainsTravelerToken($message, $token)) {
+                    $found["user:{$traveler->id}"] = [
+                        'user_id' => $traveler->id,
+                        'trip_guest_id' => null,
+                    ];
+                    break;
+                }
+            }
+        }
+
+        foreach ($trip->guests as $guest) {
+            $tokens = $this->buildTravelerSearchTokens((string) $guest->name);
+            foreach ($tokens as $token) {
+                if ($this->messageContainsTravelerToken($message, $token)) {
+                    $found["guest:{$guest->id}"] = [
+                        'user_id' => null,
+                        'trip_guest_id' => $guest->id,
+                    ];
+                    break;
+                }
+            }
+        }
+
+        return array_values($found);
+    }
+
+    /**
+     * @param  array<string,mixed>  $change
+     * @return array<int,array{user_id:int|null,trip_guest_id:int|null}>
+     */
+    protected function normalizeAssignmentsForImport(Trip $trip, User $user, array $change): array
+    {
+        $resolved = [];
+        $candidates = is_array($change['assignments'] ?? null) ? $change['assignments'] : [];
+
+        foreach ($candidates as $candidate) {
+            if (! is_array($candidate)) {
+                continue;
+            }
+
+            $assignment = $this->resolveSegmentAssignment(
+                $trip,
+                $user,
+                isset($candidate['user_id']) && is_numeric($candidate['user_id']) ? (int) $candidate['user_id'] : null,
+                isset($candidate['trip_guest_id']) && is_numeric($candidate['trip_guest_id']) ? (int) $candidate['trip_guest_id'] : null
+            );
+
+            $resolved[$this->assignmentKey($assignment)] = $assignment;
+        }
+
+        if ($resolved !== []) {
+            return array_values($resolved);
+        }
+
+        $fallback = $this->resolveSegmentAssignment(
+            $trip,
+            $user,
+            isset($change['user_id']) && is_numeric($change['user_id']) ? (int) $change['user_id'] : null,
+            isset($change['trip_guest_id']) && is_numeric($change['trip_guest_id']) ? (int) $change['trip_guest_id'] : null
+        );
+
+        return [$fallback];
+    }
+
+    /**
+     * @param  array{user_id:int|null,trip_guest_id:int|null}  $assignment
+     */
+    protected function assignmentKey(array $assignment): string
+    {
+        return ((string) ($assignment['user_id'] ?? 'null')).':'.((string) ($assignment['trip_guest_id'] ?? 'null'));
+    }
+
+    protected function messageContainsTravelerToken(string $message, string $token): bool
+    {
+        $token = trim(Str::lower($token));
+        if ($token === '') {
+            return false;
+        }
+
+        return (bool) preg_match('/\b'.preg_quote($token, '/').'\b/u', Str::lower($message));
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    protected function buildTravelerSearchTokens(string $name): array
+    {
+        $parts = preg_split('/\s+/', trim($name)) ?: [];
+        $tokens = [trim($name)];
+
+        if (count($parts) > 0) {
+            $tokens[] = $parts[0];
+        }
+
+        if (count($parts) > 1) {
+            $tokens[] = $parts[count($parts) - 1];
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            static fn (string $part): string => trim($part),
+            $tokens
+        ), static fn (string $token): bool => strlen($token) >= 3)));
+    }
+
+    /**
+     * @param  array{user_id:int|null,trip_guest_id:int|null}  $assignment
+     */
+    protected function resolveAssignmentLabel(Trip $trip, array $assignment): string
+    {
+        $trip->loadMissing(['travelers', 'guests']);
+
+        $userId = $assignment['user_id'] ?? null;
+        if ($userId !== null) {
+            $traveler = $trip->travelers->firstWhere('id', $userId);
+            if ($traveler) {
+                return (string) $traveler->name;
+            }
+        }
+
+        $guestId = $assignment['trip_guest_id'] ?? null;
+        if ($guestId !== null) {
+            $guest = $trip->guests->firstWhere('id', $guestId);
+            if ($guest) {
+                return (string) $guest->name;
+            }
+        }
+
+        return 'Unassigned traveler';
     }
 
     /**
@@ -958,7 +1106,14 @@ PROMPT;
                 $created = (int) ($entry['created_count'] ?? 0);
                 $updated = (int) ($entry['updated_count'] ?? 0);
                 $skipped = (int) ($entry['skipped_count'] ?? 0);
-                $parts[] = "Imported itinerary segments: {$created} created, {$updated} updated, {$skipped} skipped";
+                $assignmentCount = (int) ($entry['assignment_count'] ?? 1);
+                $labels = is_array($entry['assignment_labels'] ?? null) ? array_values(array_filter($entry['assignment_labels'])) : [];
+                $suffix = $assignmentCount > 1 ? " across {$assignmentCount} travelers" : '';
+                if ($labels !== []) {
+                    $suffix .= ' ('.implode(', ', array_slice($labels, 0, 4)).')';
+                }
+
+                $parts[] = "Imported itinerary segments: {$created} created, {$updated} updated, {$skipped} skipped{$suffix}";
             }
         }
 
