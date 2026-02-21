@@ -1,5 +1,10 @@
 # WRK v2 Data Contract
 
+Related:
+- `docs/WRK_AI_Architecture_Brief_FINAL.md`
+- `docs/WRK_V2_SCHEMA_PROPOSAL.md`
+- `docs/BOX_TAXONOMY_AND_PERMISSION_MAPPING.md`
+
 ## Goal
 Define a stable, shared data model for WRK v2 so product, integrations, and agents all operate on the same canonical entities.
 
@@ -27,6 +32,7 @@ Use globally unique IDs with entity prefixes:
 - `evt_` (calendar event)
 - `mtg_` (meeting)
 - `prj_` (project)
+- `ctr_` (contract)
 - `trp_` (trip)
 - `gnt_` (grant/funding)
 - `doc_` (document record)
@@ -91,6 +97,15 @@ Key relationships:
 - parent-child project hierarchy
 - linked to meetings, documents, grants, travel
 
+### Contracts (`ctr_`)
+Required fields:
+- `id`, `organization_id`, `name`, `status`, `effective_start_at` (nullable), `effective_end_at` (nullable), `visibility`
+
+Key relationships:
+- belongs to one organization (required)
+- optional links to projects and grants
+- has many supporting documents (agreements, billing, reporting, compliance)
+
 ### Travel (`trp_`)
 Required fields:
 - `id`, `name`, `status`, `start_at`, `end_at`, `created_by`
@@ -112,7 +127,7 @@ Required fields:
 - `id`, `source` (`box` | `upload` | `link`), `external_id` (for Box file id), `title`, `mime_type`, `visibility`
 
 Optional metadata:
-- `project_id`, `meeting_id`, `organization_id`, `person_id`, `grant_id`, `trip_id`, `doc_type`, `topics`
+- `project_id`, `meeting_id`, `organization_id`, `person_id`, `grant_id`, `contract_id`, `trip_id`, `doc_type`, `topics`
 
 Rules:
 - Box file metadata is mirrored into WRK document records.
@@ -124,7 +139,7 @@ Required fields:
 - decision: `id`, `title`, `summary`, `decided_at` (nullable)
 
 Key relationships:
-- each may link to meetings/projects/organizations/people/grants
+- each may link to meetings/projects/organizations/people/grants/contracts
 
 ### Knowledge Artifacts (`fact_`, `ins_`)
 Required fields:
@@ -146,6 +161,7 @@ Rules:
 - Retrieval must enforce ACL at query time:
   - entity row-level visibility
   - document ACL visibility
+  - contract visibility (`management`, `admin`)
   - grant visibility (`all`, `management`, `admin`)
 
 ## Event Contract

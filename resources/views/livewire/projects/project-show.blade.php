@@ -507,12 +507,18 @@
                     <!-- Documents Tab -->
                     @if($activeTab === 'documents')
                         <div class="space-y-4">
-                            <div class="flex justify-between items-center">
+                            <div class="flex flex-wrap justify-between items-center gap-2">
                                 <h4 class="font-medium text-gray-900 dark:text-white">Documents</h4>
-                                <button wire:click="toggleDocumentForm"
-                                    class="px-3 py-1.5 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm">
-                                    {{ $showDocumentForm ? 'Cancel' : '+ Add Document' }}
-                                </button>
+                                <div class="flex items-center gap-2">
+                                    <button wire:click="toggleBoxLinkForm"
+                                        class="px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 rounded-md hover:bg-emerald-700 shadow-sm">
+                                        {{ $showBoxLinkForm ? 'Cancel Box Link' : '+ Link Box File' }}
+                                    </button>
+                                    <button wire:click="toggleDocumentForm"
+                                        class="px-3 py-1.5 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm">
+                                        {{ $showDocumentForm ? 'Cancel' : '+ Add Document' }}
+                                    </button>
+                                </div>
                             </div>
 
                             @if($showDocumentForm)
@@ -557,9 +563,142 @@
                                 </form>
                             @endif
 
-                            @if($project->documents->count())
+                            <div class="p-4 bg-emerald-50/70 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg space-y-3">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div>
+                                        <h5 class="font-medium text-emerald-900 dark:text-emerald-100">Box Links</h5>
+                                        <p class="text-xs text-emerald-700 dark:text-emerald-200">
+                                            Link synced Box files to this project and keep metadata in sync.
+                                        </p>
+                                    </div>
+                                    @if(!$showBoxLinkForm && $projectBoxLinks->isNotEmpty())
+                                        <span class="text-xs px-2 py-1 rounded-full bg-white/70 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-100">
+                                            {{ $projectBoxLinks->count() }} linked
+                                        </span>
+                                    @endif
+                                </div>
+
+                                @if($showBoxLinkForm)
+                                    <div class="space-y-3">
+                                        <div class="grid gap-3 md:grid-cols-4">
+                                            <div class="md:col-span-3">
+                                                <input type="text"
+                                                    wire:model.live.debounce.300ms="boxItemSearch"
+                                                    placeholder="Search Box files by name, path, or Box ID"
+                                                    class="w-full rounded-md border-emerald-300 dark:bg-gray-800 dark:border-emerald-700 dark:text-white">
+                                            </div>
+                                            <div>
+                                                <select wire:model="boxLinkVisibility"
+                                                    class="w-full rounded-md border-emerald-300 dark:bg-gray-800 dark:border-emerald-700 dark:text-white">
+                                                    @foreach($boxVisibilityOptions as $value => $label)
+                                                        <option value="{{ $value }}">{{ $label }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        @if(strlen(trim($boxItemSearch)) < 2)
+                                            <p class="text-xs text-emerald-700 dark:text-emerald-200">
+                                                Type at least 2 characters to search files already synced from Box metadata.
+                                            </p>
+                                        @elseif($boxItemResults->isEmpty())
+                                            <p class="text-sm text-emerald-800 dark:text-emerald-200">
+                                                No Box files found for "{{ $boxItemSearch }}".
+                                            </p>
+                                        @else
+                                            <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                                                @foreach($boxItemResults as $item)
+                                                    <div class="flex items-start justify-between gap-3 p-3 bg-white dark:bg-gray-800 rounded-md border border-emerald-200 dark:border-emerald-800">
+                                                        <div class="min-w-0">
+                                                            <div class="font-medium text-gray-900 dark:text-white truncate">
+                                                                {{ $item->name }}
+                                                            </div>
+                                                            <div class="text-xs text-gray-600 dark:text-gray-300 truncate">
+                                                                {{ $item->path_display ?: 'No path available' }}
+                                                            </div>
+                                                            <div class="text-xs text-gray-500 dark:text-gray-400">
+                                                                Box ID {{ $item->box_item_id }}
+                                                                @if($item->size) · {{ number_format($item->size) }} bytes @endif
+                                                            </div>
+                                                        </div>
+                                                        <button wire:click="linkExistingBoxItem({{ $item->id }})"
+                                                            class="shrink-0 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 rounded-md hover:bg-emerald-700">
+                                                            Link
+                                                        </button>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endif
+
+                                @if($projectBoxLinks->isNotEmpty())
+                                    <div class="space-y-2">
+                                        @foreach($projectBoxLinks as $link)
+                                            @php
+                                                $statusClass = match($link->sync_status) {
+                                                    'synced' => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200',
+                                                    'failed' => 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-200',
+                                                    default => 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200',
+                                                };
+                                            @endphp
+                                            <div class="flex items-start justify-between gap-3 p-3 bg-white dark:bg-gray-800 border border-emerald-200 dark:border-emerald-800 rounded-md">
+                                                <div class="min-w-0">
+                                                    <div class="font-medium text-gray-900 dark:text-white truncate">
+                                                        {{ $link->boxItem?->name ?? 'Unknown Box file' }}
+                                                    </div>
+                                                    <div class="text-xs text-gray-600 dark:text-gray-300 truncate">
+                                                        {{ $link->boxItem?->path_display ?: 'No path available' }}
+                                                    </div>
+                                                    <div class="flex flex-wrap items-center gap-2 mt-1 text-xs">
+                                                        <span class="px-2 py-0.5 rounded-full {{ $statusClass }}">
+                                                            {{ strtoupper($link->sync_status) }}
+                                                        </span>
+                                                        <span class="text-gray-500 dark:text-gray-400">
+                                                            visibility: {{ $link->visibility }}
+                                                        </span>
+                                                        @if($link->last_synced_at)
+                                                            <span class="text-gray-500 dark:text-gray-400">
+                                                                synced {{ $link->last_synced_at->diffForHumans() }}
+                                                            </span>
+                                                        @endif
+                                                        @if($link->projectDocument)
+                                                            <a href="{{ $link->projectDocument->getAccessUrl() }}" target="_blank"
+                                                                class="text-indigo-600 dark:text-indigo-300 hover:underline">
+                                                                {{ $link->projectDocument->title }}
+                                                            </a>
+                                                        @endif
+                                                    </div>
+                                                    @if($link->last_error)
+                                                        <div class="text-xs text-red-600 dark:text-red-300 mt-1">
+                                                            {{ \Illuminate\Support\Str::limit($link->last_error, 160) }}
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                                <div class="flex items-center gap-2 shrink-0">
+                                                    <button wire:click="syncBoxLink({{ $link->id }})"
+                                                        class="px-2.5 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700">
+                                                        Sync
+                                                    </button>
+                                                    <button wire:click="unlinkBoxLink({{ $link->id }})"
+                                                        wire:confirm="Unlink this Box file from the project?"
+                                                        class="px-2.5 py-1.5 text-xs font-semibold rounded-md bg-red-600 text-white hover:bg-red-700">
+                                                        Unlink
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    <p class="text-sm text-emerald-800 dark:text-emerald-200">
+                                        No Box files are linked to this project yet.
+                                    </p>
+                                @endif
+                            </div>
+
+                            @if($projectDocuments->count())
                                 <div class="space-y-3">
-                                    @foreach($project->documents as $doc)
+                                    @foreach($projectDocuments as $doc)
                                         <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                                             <div class="flex items-center gap-3">
                                                 @if($doc->type === 'link')
@@ -588,6 +727,7 @@
                                                         Added {{ $doc->created_at->diffForHumans() }}
                                                         @if($doc->uploadedBy) by {{ $doc->uploadedBy->name }} @endif
                                                         @if($doc->formatted_size) · {{ $doc->formatted_size }} @endif
+                                                        @if($doc->boxLink) · Box-linked @endif
                                                     </div>
                                                 </div>
                                             </div>

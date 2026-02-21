@@ -201,6 +201,17 @@
 
 ---
 
+## 🧭 Architecture Docs
+
+- **Docs index:** `docs/README.md`
+- **Operating architecture brief (current):** `docs/WRK_AI_Architecture_Brief_FINAL.md`
+- **Data contract:** `docs/WRK_V2_DATA_CONTRACT.md`
+- **Schema proposal:** `docs/WRK_V2_SCHEMA_PROPOSAL.md`
+- **Box taxonomy and ACL mapping:** `docs/BOX_TAXONOMY_AND_PERMISSION_MAPPING.md`
+- **Slack agent MVP scope:** `docs/SLACK_AGENT_MVP_SCOPE.md`
+
+---
+
 ## 🚀 Getting Started
 
 ```bash

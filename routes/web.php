@@ -1,16 +1,23 @@
 <?php
 
 use App\Http\Controllers\GoogleAuthController;
+use App\Http\Controllers\Webhooks\BoxWebhookController;
 use App\Livewire\Dashboard;
 use App\Livewire\Meetings\MeetingCapture;
 use App\Livewire\Meetings\MeetingDetail;
 use App\Livewire\Meetings\MeetingList;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome');
 
 // Account Activation (public route for existing staff)
 Route::get('/activate/{token}', \App\Livewire\Auth\ActivateAccount::class)->name('activate');
+
+// Box webhook (public endpoint; signature-validated in controller)
+Route::post('/webhooks/box', [BoxWebhookController::class, 'handle'])
+    ->withoutMiddleware([ValidateCsrfToken::class])
+    ->name('webhooks.box');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard

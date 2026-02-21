@@ -125,6 +125,12 @@ class Project extends Model
         return $this->hasMany(ProjectDocument::class)->orderBy('created_at', 'desc');
     }
 
+    // Box file links mapped to this project
+    public function boxDocumentLinks(): HasMany
+    {
+        return $this->hasMany(BoxProjectDocumentLink::class)->latest('updated_at');
+    }
+
     // Notes (activity log)
     public function notes(): HasMany
     {
@@ -274,7 +280,7 @@ class Project extends Model
     public function needsStatusRefresh(): bool
     {
         // Refresh if: never generated
-        if (!$this->ai_status_generated_at) {
+        if (! $this->ai_status_generated_at) {
             return true;
         }
 
@@ -324,7 +330,7 @@ class Project extends Model
     public function getLeadDisplayAttribute(): ?string
     {
         // First, check if lead field is set
-        if (!empty($this->lead)) {
+        if (! empty($this->lead)) {
             return $this->lead;
         }
 

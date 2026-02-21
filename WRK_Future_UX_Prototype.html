@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WRK Future UX — Interactive Vision Prototype</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: #0f1117; color: #e1e4ea; overflow: hidden; height: 100vh; }
+  .skip-link { position: absolute; left: -9999px; top: 8px; z-index: 1000; padding: 8px 12px; background: #6c8cff; color: #fff; border-radius: 6px; text-decoration: none; font-size: 13px; }
+  .skip-link:focus { left: 12px; }
+
+  /* Top nav */
+  .top-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; background: #161822; border-bottom: 1px solid #252836; z-index: 100; position: relative; }
+  .top-bar .logo { font-weight: 700; font-size: 18px; color: #fff; letter-spacing: 1px; }
+  .top-bar .logo span { color: #6c8cff; }
+  .top-bar .subtitle { font-size: 12px; color: #6b7280; margin-left: 12px; font-weight: 400; }
+  .phase-tabs { display: flex; gap: 4px; }
+  .phase-tab { padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; background: transparent; color: #9ca3af; appearance: none; -webkit-appearance: none; }
+  .phase-tab:hover { background: #1e2235; color: #e1e4ea; }
+  .phase-tab.active { background: #252b45; color: #8ba4ff; border-color: #3b4a7a; }
+
+  /* Layout */
+  .main-layout { display: flex; height: calc(100vh - 53px); }
+
+  /* Sidebar */
+  .sidebar { width: 220px; background: #161822; border-right: 1px solid #252836; padding: 16px 0; flex-shrink: 0; overflow-y: auto; }
+  .sidebar .section-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.2px; color: #4b5563; padding: 12px 16px 6px; }
+  .sidebar .nav-item { width: 100%; text-align: left; padding: 8px 16px; font-size: 13px; color: #9ca3af; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s; border: none; border-left: 2px solid transparent; background: transparent; font-family: inherit; }
+  .sidebar .nav-item:hover { background: #1e2235; color: #e1e4ea; }
+  .sidebar .nav-item.active { background: #1e2235; color: #8ba4ff; border-left-color: #6c8cff; }
+  .sidebar .nav-item .icon { width: 16px; text-align: center; font-size: 14px; }
+  .sidebar .nav-item .badge { margin-left: auto; background: #ef4444; color: #fff; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; }
+  .sidebar .nav-item .badge.blue { background: #3b82f6; }
+  .sidebar .nav-item .badge.amber { background: #f59e0b; }
+
+  /* Content */
+  .content { flex: 1; overflow-y: auto; padding: 0; }
+
+  /* Scenario view */
+  .scenario { display: none; }
+  .scenario.active { display: block; }
+
+  /* Cards */
+  .screen-container { padding: 32px; max-width: 1200px; }
+  .screen-title { font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .screen-desc { font-size: 14px; color: #6b7280; margin-bottom: 24px; line-height: 1.5; }
+
+  .card { background: #1a1d2e; border: 1px solid #252836; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .card-title { font-size: 14px; font-weight: 600; color: #e1e4ea; }
+  .card-badge { font-size: 11px; padding: 3px 10px; border-radius: 12px; font-weight: 500; }
+  .card-badge.ai { background: rgba(139,164,255,0.15); color: #8ba4ff; }
+  .card-badge.human { background: rgba(34,197,94,0.15); color: #22c55e; }
+  .card-badge.pending { background: rgba(245,158,11,0.15); color: #f59e0b; }
+  .card-badge.agent { background: rgba(168,85,247,0.15); color: #a855f7; }
+  .missing-callout { margin-top: 16px; padding: 16px; background: rgba(139,164,255,0.06); border: 1px dashed rgba(139,164,255,0.2); border-radius: 10px; }
+
+  /* Dashboard grid */
+  .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .dash-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+
+  /* Agent message */
+  .agent-msg { display: flex; gap: 12px; padding: 14px; background: rgba(139,164,255,0.06); border: 1px solid rgba(139,164,255,0.15); border-radius: 10px; margin-bottom: 12px; }
+  .agent-avatar { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #6c8cff, #a855f7); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .agent-content { flex: 1; }
+  .agent-name { font-size: 12px; font-weight: 600; color: #8ba4ff; margin-bottom: 4px; }
+  .agent-text { font-size: 13px; color: #c9cdd5; line-height: 1.55; }
+  .agent-text strong { color: #e1e4ea; font-weight: 600; }
+  .agent-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .agent-btn { padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; border: none; cursor: pointer; transition: all 0.15s; }
+  .agent-btn.primary { background: #6c8cff; color: #fff; }
+  .agent-btn.primary:hover { background: #5a7aee; }
+  .agent-btn.secondary { background: #252836; color: #9ca3af; border: 1px solid #363a4e; }
+  .agent-btn.secondary:hover { background: #2d3148; color: #e1e4ea; }
+  .agent-btn.danger { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+  /* Slack mock */
+  .slack-container { background: #1a1025; border: 1px solid #2d2240; border-radius: 12px; overflow: hidden; }
+  .slack-header { background: #231636; padding: 12px 16px; border-bottom: 1px solid #2d2240; display: flex; align-items: center; gap: 8px; }
+  .slack-header .hash { color: #9b7abf; font-size: 16px; }
+  .slack-header .channel { font-size: 14px; font-weight: 600; color: #e1d5f0; }
+  .slack-body { padding: 16px; }
+  .slack-msg { display: flex; gap: 10px; margin-bottom: 16px; }
+  .slack-msg:last-child { margin-bottom: 0; }
+  .slack-ava { width: 36px; height: 36px; border-radius: 6px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .slack-ava.bot { background: linear-gradient(135deg, #6c8cff, #a855f7); }
+  .slack-ava.user { background: #4a3d6b; color: #d4bff0; font-size: 13px; font-weight: 600; }
+  .slack-msg-content { flex: 1; }
+  .slack-msg-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+  .slack-msg-name { font-size: 13px; font-weight: 600; color: #e1d5f0; }
+  .slack-msg-name.bot { color: #8ba4ff; }
+  .slack-app-badge { font-size: 9px; background: #2d2240; color: #9b7abf; padding: 1px 5px; border-radius: 3px; font-weight: 500; }
+  .slack-msg-time { font-size: 11px; color: #6b5a80; }
+  .slack-msg-text { font-size: 13px; color: #c9bfe0; line-height: 1.5; }
+  .slack-msg-text strong { color: #e1d5f0; }
+  .slack-attachment { background: #231636; border-left: 3px solid #6c8cff; padding: 10px 12px; border-radius: 0 6px 6px 0; margin-top: 8px; }
+  .slack-attachment-title { font-size: 13px; font-weight: 600; color: #8ba4ff; margin-bottom: 4px; }
+  .slack-attachment-text { font-size: 12px; color: #9b8abf; line-height: 1.5; }
+  .slack-buttons { display: flex; gap: 6px; margin-top: 8px; }
+  .slack-btn { padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 500; border: 1px solid #3d2f5a; background: #2d2240; color: #d4bff0; cursor: pointer; }
+  .slack-btn:hover { background: #3d2f5a; }
+  .slack-btn.green { border-color: #166534; background: #14532d; color: #4ade80; }
+  .slack-thread-indicator { font-size: 11px; color: #6c8cff; margin-top: 6px; cursor: pointer; }
+  .slack-thread-indicator:hover { text-decoration: underline; }
+
+  /* Email mock */
+  .email-container { background: #1a1d2e; border: 1px solid #252836; border-radius: 12px; overflow: hidden; }
+  .email-header { background: #1e2235; padding: 14px 16px; border-bottom: 1px solid #252836; }
+  .email-subject { font-size: 15px; font-weight: 600; color: #e1e4ea; margin-bottom: 6px; }
+  .email-meta { font-size: 12px; color: #6b7280; }
+  .email-meta strong { color: #9ca3af; }
+  .email-body { padding: 16px; font-size: 13px; color: #c9cdd5; line-height: 1.65; }
+  .email-body p { margin-bottom: 12px; }
+
+  /* Contact card */
+  .contact-hero { display: flex; gap: 20px; align-items: flex-start; padding: 20px; background: #1a1d2e; border: 1px solid #252836; border-radius: 12px; margin-bottom: 16px; }
+  .contact-avatar-lg { width: 64px; height: 64px; border-radius: 12px; background: linear-gradient(135deg, #3b82f6, #6366f1); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 600; color: #fff; flex-shrink: 0; }
+  .contact-info { flex: 1; }
+  .contact-name-lg { font-size: 20px; font-weight: 600; color: #fff; margin-bottom: 2px; }
+  .contact-org { font-size: 14px; color: #6c8cff; margin-bottom: 8px; }
+  .contact-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .contact-tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #252836; color: #9ca3af; }
+  .contact-tag.funder { background: rgba(34,197,94,0.15); color: #22c55e; }
+  .contact-tag.key { background: rgba(245,158,11,0.15); color: #f59e0b; }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 24px; }
+  .timeline::before { content: ''; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: #252836; }
+  .timeline-item { position: relative; margin-bottom: 16px; }
+  .timeline-item::before { content: ''; position: absolute; left: -20px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: #252836; border: 2px solid #363a4e; }
+  .timeline-item.ai::before { background: #6c8cff; border-color: #8ba4ff; }
+  .timeline-item .tl-date { font-size: 11px; color: #4b5563; margin-bottom: 2px; }
+  .timeline-item .tl-text { font-size: 13px; color: #c9cdd5; line-height: 1.45; }
+  .timeline-item .tl-text strong { color: #e1e4ea; }
+
+  /* Approval flow */
+  .approval-card { background: #1a1d2e; border: 1px solid rgba(245,158,11,0.3); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .approval-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .approval-icon { font-size: 16px; }
+  .approval-title { font-size: 14px; font-weight: 600; color: #f59e0b; }
+  .approval-body { font-size: 13px; color: #c9cdd5; line-height: 1.55; margin-bottom: 12px; }
+  .approval-diff { background: #111318; border-radius: 6px; padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; margin-bottom: 12px; }
+  .approval-diff .add { color: #4ade80; }
+  .approval-diff .remove { color: #ef4444; text-decoration: line-through; }
+
+  /* Tabs inside scenario */
+  .inner-tabs { display: flex; gap: 2px; margin-bottom: 20px; background: #111318; border-radius: 8px; padding: 3px; display: inline-flex; }
+  .inner-tab { padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; color: #6b7280; transition: all 0.15s; }
+  .inner-tab:hover { color: #e1e4ea; }
+  .inner-tab.active { background: #252b45; color: #8ba4ff; }
+
+  .inner-panel { display: none; }
+  .inner-panel.active { display: block; }
+
+  /* Metric card */
+  .metric { text-align: center; padding: 16px; }
+  .metric-value { font-size: 28px; font-weight: 700; color: #fff; }
+  .metric-label { font-size: 12px; color: #6b7280; margin-top: 4px; }
+  .metric-change { font-size: 11px; margin-top: 4px; }
+  .metric-change.up { color: #22c55e; }
+  .metric-change.down { color: #ef4444; }
+
+  /* Chat UI */
+  .chat-input-area { display: flex; gap: 8px; padding: 12px; background: #111318; border-radius: 10px; margin-top: 16px; }
+  .chat-input { flex: 1; background: transparent; border: none; color: #e1e4ea; font-size: 13px; font-family: inherit; outline: none; }
+  .chat-input::placeholder { color: #4b5563; }
+  .chat-send { padding: 6px 16px; background: #6c8cff; color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; }
+
+  /* Provenance */
+  .provenance { font-size: 11px; color: #4b5563; margin-top: 8px; padding-top: 8px; border-top: 1px solid #252836; }
+  .provenance a { color: #6c8cff; text-decoration: none; }
+  .provenance a:hover { text-decoration: underline; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #363a4e; border-radius: 3px; }
+  *:focus-visible { outline: 2px solid #8ba4ff; outline-offset: 2px; border-radius: 4px; }
+
+  /* Phase label */
+  .phase-label { display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; padding: 3px 10px; border-radius: 4px; margin-bottom: 16px; }
+  .phase-label.p1 { background: rgba(59,130,246,0.15); color: #60a5fa; }
+  .phase-label.p2 { background: rgba(168,85,247,0.15); color: #a855f7; }
+  .phase-label.p3 { background: rgba(236,72,153,0.15); color: #ec4899; }
+
+  /* Pulse animation for live elements */
+  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .pulse { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #22c55e; animation: pulse-dot 2s infinite; margin-right: 6px; }
+
+  /* Mobile note */
+  .mobile-container { background: #1a1d2e; border: 2px solid #252836; border-radius: 24px; width: 320px; overflow: hidden; margin: 0 auto; }
+  .mobile-status { background: #111318; padding: 6px 16px; display: flex; justify-content: space-between; font-size: 11px; color: #6b7280; }
+  .mobile-header { background: #1e2235; padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+  .mobile-title { font-size: 15px; font-weight: 600; color: #fff; }
+  .mobile-body { padding: 12px; max-height: 400px; overflow-y: auto; }
+  .mobile-card { background: #252836; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+  .mobile-card-title { font-size: 13px; font-weight: 600; color: #e1e4ea; margin-bottom: 4px; }
+  .mobile-card-text { font-size: 12px; color: #9ca3af; line-height: 1.45; }
+
+  .two-col { display: flex; gap: 24px; align-items: flex-start; }
+  .two-col > * { flex: 1; }
+
+  @media (max-width: 1024px) {
+    .screen-container { padding: 24px; }
+    .dash-grid.three { grid-template-columns: 1fr 1fr; }
+  }
+
+  @media (max-width: 780px) {
+    body { overflow: auto; height: auto; min-height: 100vh; }
+    .top-bar { flex-direction: column; align-items: flex-start; gap: 12px; padding: 12px 16px; }
+    .phase-tabs { flex-wrap: wrap; }
+    .main-layout { flex-direction: column; height: auto; min-height: calc(100vh - 53px); }
+    .sidebar { width: 100%; border-right: none; border-bottom: 1px solid #252836; padding: 8px 0; max-height: 220px; }
+    .content { overflow: visible; }
+    .screen-container { padding: 16px; }
+    .dash-grid, .dash-grid.three { grid-template-columns: 1fr; }
+    .contact-hero, .agent-msg, .two-col { flex-direction: column; }
+    .mobile-container { width: 100%; max-width: 360px; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="top-bar">
+  <div style="display:flex;align-items:center;">
+    <div class="logo">W<span>R</span>K</div>
+    <div class="subtitle">Future UX Vision — Interactive Prototype</div>
+  </div>
+  <div class="phase-tabs" role="tablist" aria-label="Roadmap phases">
+    <button type="button" class="phase-tab active" role="tab" aria-selected="true" data-phase="today">Today</button>
+    <button type="button" class="phase-tab" role="tab" aria-selected="false" data-phase="p1">Phase 1: Knowledge</button>
+    <button type="button" class="phase-tab" role="tab" aria-selected="false" data-phase="p2">Phase 2: Agents</button>
+    <button type="button" class="phase-tab" role="tab" aria-selected="false" data-phase="p3">Phase 3: Colleagues</button>
+  </div>
+</div>
+
+<div class="main-layout">
+  <div class="sidebar" id="sidebar" role="navigation" aria-label="Screen navigation"></div>
+  <main class="content" id="content" tabindex="-1"></main>
+</div>
+
+<script>
+function renderScreenFrame({ phaseClass, phaseText, title, desc, body }) {
+  return `
+    <section class="screen-container">
+      <div class="phase-label ${phaseClass}">${phaseText}</div>
+      <h1 class="screen-title">${title}</h1>
+      <p class="screen-desc">${desc}</p>
+      ${body}
+    </section>`;
+}
+
+function renderMissingCallout({ label = "What's missing:", message, centered = false, style = '' }) {
+  const centerStyle = centered ? 'text-align:center;' : '';
+  const styleAttr = style ? ` style="${style}"` : '';
+  return `
+    <div class="missing-callout"${styleAttr}>
+      <div style="font-size:13px;color:#6b7280;${centerStyle}">
+        <strong style="color:#8ba4ff;">${label}</strong> ${message}
+      </div>
+    </div>`;
+}
+
+function renderMetricCard(value, label, change = '') {
+  return `
+    <div class="card">
+      <div class="metric">
+        <div class="metric-value">${value}</div>
+        <div class="metric-label">${label}</div>
+        ${change}
+      </div>
+    </div>`;
+}
+
+function renderCard({ title, body, badge = '', badgeClass = '' }) {
+  const badgeHtml = badge ? `<div class="card-badge ${badgeClass}">${badge}</div>` : '';
+  return `
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">${title}</div>
+        ${badgeHtml}
+      </div>
+      ${body}
+    </div>`;
+}
+
+function renderAgentMessage({ avatar = 'W', name, text, provenance = '', actions = '', className = '', namePrefix = '', style = '' }) {
+  const classes = ['agent-msg', className].filter(Boolean).join(' ');
+  const styleAttr = style ? ` style="${style}"` : '';
+  return `
+    <div class="${classes}"${styleAttr}>
+      <div class="agent-avatar">${avatar}</div>
+      <div class="agent-content">
+        <div class="agent-name">${namePrefix}${name}</div>
+        <div class="agent-text">${text}</div>
+        ${provenance ? `<div class="provenance">${provenance}</div>` : ''}
+        ${actions ? `<div class="agent-actions">${actions}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+const phases = {
+  today: {
+    nav: [
+      { section: 'WORKSPACE', items: [
+        { id: 'today-dash', icon: '◻', label: 'Dashboard' },
+        { id: 'today-meetings', icon: '◷', label: 'Meetings' },
+        { id: 'today-contacts', icon: '◉', label: 'People' },
+        { id: 'today-knowledge', icon: '◈', label: 'Knowledge Hub' },
+      ]}
+    ],
+    screens: {
+      'today-dash': () => renderScreenFrame({
+        phaseClass: 'p1',
+        phaseText: 'Current State — WRK v1',
+        title: 'Dashboard',
+        desc: 'The current WRK dashboard shows static summaries. Users navigate to specific modules to find what they need. AI features exist (meeting prep, grant analysis) but are invoked manually.',
+        body: `
+          <div class="dash-grid three">
+            ${renderMetricCard('12', 'Active Projects')}
+            ${renderMetricCard('8', 'Meetings This Week')}
+            ${renderMetricCard('3', 'Reports Due')}
+          </div>
+          ${renderCard({
+            title: 'Upcoming Meetings',
+            body: `
+              <div style="font-size:13px;color:#9ca3af;line-height:1.8;">
+                <div>Today 2:00 PM — <strong style="color:#e1e4ea">Arnold & Porter check-in</strong> — Zoom</div>
+                <div>Today 4:30 PM — <strong style="color:#e1e4ea">Democracy Fund quarterly</strong> — Google Meet</div>
+                <div>Tomorrow 10:00 AM — <strong style="color:#e1e4ea">Hill staff briefing prep</strong> — In person</div>
+              </div>`,
+          })}
+          ${renderCard({
+            title: 'Recent Activity',
+            body: `
+              <div style="font-size:13px;color:#9ca3af;line-height:1.8;">
+                <div>Marci added meeting notes for "Hewlett Foundation call"</div>
+                <div>Josh updated project status for "Congressional Data Coalition"</div>
+                <div>Marci uploaded document to "FY26 Budget" grant</div>
+              </div>`,
+          })}
+          ${renderMissingCallout({
+            label: "What's missing today:",
+            message: 'Staff must manually check each module. No proactive surfacing of what needs attention, no cross-module intelligence, no AI-initiated workflows.',
+            centered: true,
+            style: 'margin-top:24px;',
+          })}
+        `,
+      }),
+      'today-meetings': () => renderScreenFrame({
+        phaseClass: 'p1',
+        phaseText: 'Current State',
+        title: 'Meeting Prep (Today)',
+        desc: "AI meeting prep exists but is invoked manually. It produces a one-shot brief. There's no feedback loop and no follow-through after the meeting.",
+        body: `
+          ${renderCard({
+            title: 'Arnold & Porter check-in — Today 2:00 PM',
+            badge: 'AI Prep Available',
+            badgeClass: 'ai',
+            body: `
+              <div style="font-size:13px;color:#9ca3af;padding:12px;background:#111318;border-radius:8px;">
+                <div style="margin-bottom:8px;"><strong style="color:#e1e4ea;">Attendees:</strong> Sarah Chen, Michael Torres</div>
+                <div style="margin-bottom:8px;"><strong style="color:#e1e4ea;">Organization:</strong> Arnold & Porter</div>
+                <div style="margin-bottom:8px;"><strong style="color:#e1e4ea;">Suggested Topics:</strong> Pro bono engagement, Hill strategy coordination</div>
+                <div><strong style="color:#e1e4ea;">Last Met:</strong> January 15, 2026</div>
+              </div>`,
+          })}
+          ${renderMissingCallout({
+            message: 'No awareness of open commitments from last meeting. No draft agenda. No automatic follow-up tracking afterward. No connection to the contract or active project milestones.',
+          })}
+        `,
+      }),
+      'today-contacts': () => renderScreenFrame({
+        phaseClass: 'p1',
+        phaseText: 'Current State',
+        title: 'People & Contacts (Today)',
+        desc: 'Contact records show basic info and meeting history. Relationship context requires manually reviewing past meetings one by one.',
+        body: `
+          <div class="contact-hero">
+            <div class="contact-avatar-lg">SC</div>
+            <div class="contact-info">
+              <div class="contact-name-lg">Sarah Chen</div>
+              <div class="contact-org">Arnold & Porter — Partner</div>
+              <div class="contact-tags">
+                <span class="contact-tag">Washington, DC</span>
+                <span class="contact-tag">5 meetings</span>
+              </div>
+            </div>
+          </div>
+          ${renderCard({
+            title: 'Meeting History',
+            body: `
+              <div style="font-size:13px;color:#9ca3af;line-height:2;">
+                Jan 15, 2026 — Arnold & Porter check-in<br>
+                Nov 20, 2025 — Pro bono strategy session<br>
+                Oct 8, 2025 — Hill briefing coordination<br>
+                Sep 12, 2025 — Initial engagement meeting<br>
+              </div>`,
+          })}
+          ${renderMissingCallout({
+            message: 'No relationship summary. No open commitments view. No "what do we know about this person across all interactions?" No connection to contracts or deliverables involving their organization.',
+          })}
+        `,
+      }),
+      'today-knowledge': () => renderScreenFrame({
+        phaseClass: 'p1',
+        phaseText: 'Current State',
+        title: 'Knowledge Hub (Today)',
+        desc: "A simple chat interface for searching across WRK data. Useful, but answers lack provenance and can't take action.",
+        body: `
+          ${renderCard({
+            title: 'Current Knowledge Hub response',
+            body: `
+              <div style="padding:8px 12px;background:#111318;border-radius:8px;margin-bottom:12px;">
+                <div style="font-size:13px;color:#6c8cff;margin-bottom:4px;">You asked:</div>
+                <div style="font-size:14px;color:#e1e4ea;">What's our relationship with the Hewlett Foundation?</div>
+              </div>
+              <div style="font-size:13px;color:#c9cdd5;line-height:1.6;">
+                POPVOX has an active relationship with the Hewlett Foundation. They are a current funder with one active grant for the "Open Government Data" project. You've had 7 meetings with them in the past 6 months. The last meeting was on February 10, 2026.
+              </div>`,
+          })}
+          ${renderMissingCallout({
+            message: `No source citations. No links to specific meetings or documents. Can't ask follow-up questions like "draft a thank-you email" or "what did we commit to?" No proactive insights.`,
+          })}
+        `,
+      })
+    }
+  },
+
+  p1: {
+    nav: [
+      { section: 'WORKSPACE', items: [
+        { id: 'p1-morning', icon: '☀', label: 'Morning Brief' },
+        { id: 'p1-contact', icon: '◉', label: 'Relationship View' },
+        { id: 'p1-knowledge', icon: '◈', label: 'Knowledge Hub v2' },
+        { id: 'p1-contracts', icon: '◫', label: 'Contracts' },
+      ]},
+      { section: 'SURFACES', items: [
+        { id: 'p1-slack', icon: '⊞', label: 'Slack' },
+        { id: 'p1-mobile', icon: '▣', label: 'Mobile' },
+      ]}
+    ],
+    screens: {
+      'p1-morning': () => renderScreenFrame({
+        phaseClass: 'p1',
+        phaseText: 'Phase 1 — Knowledge Foundation',
+        title: 'Morning Brief',
+        desc: 'The dashboard becomes a personalized daily briefing. AI synthesizes what matters to <em>you</em> today across all modules — meetings, commitments, deadlines, relationship signals.',
+        body: `
+          ${renderAgentMessage({
+            name: 'WRK Morning Brief — Thursday, Feb 20',
+            namePrefix: '<span class="pulse"></span>',
+            text: `
+              <strong>3 things that need your attention today:</strong><br><br>
+              1. Your <strong>2:00 PM meeting with Arnold & Porter</strong> — Sarah Chen mentioned in your last call (Jan 15) that she'd share a draft MOU for the Hill briefing series. It hasn't arrived. You may want to follow up before today's meeting.<br><br>
+              2. The <strong>Democracy Fund Q1 report</strong> is due in 12 days. The project team has updated milestones through January, but the narrative section is still empty. I've pulled the relevant meeting notes and project updates into a draft outline.<br><br>
+              3. <strong>Rep. Johnson's office</strong> replied to your scheduling request yesterday at 5:47 PM. They proposed March 5 for the appropriations briefing. No one on the team has responded yet.
+            `,
+            provenance: 'Sources: <a href="#">mtg_2026_0115_arnoldporter</a> · <a href="#">gnt_democracyfund_q1</a> · <a href="#">Slack #scheduling 2/19</a>',
+          })}
+
+          <div class="dash-grid">
+            ${renderCard({
+              title: "Today's Meetings",
+              body: `
+                <div style="font-size:13px;color:#9ca3af;">
+                  <div style="padding:8px 0;border-bottom:1px solid #252836;">
+                    <div style="color:#e1e4ea;font-weight:500;">2:00 PM — Arnold & Porter check-in</div>
+                    <div style="margin-top:4px;"><span style="color:#f59e0b;">⚠ 1 open commitment from last meeting</span></div>
+                  </div>
+                  <div style="padding:8px 0;">
+                    <div style="color:#e1e4ea;font-weight:500;">4:30 PM — Democracy Fund quarterly</div>
+                    <div style="margin-top:4px;"><span style="color:#22c55e;">✓ Prep brief ready</span></div>
+                  </div>
+                </div>`,
+            })}
+            ${renderCard({
+              title: 'Deadlines This Week',
+              body: `
+                <div style="font-size:13px;color:#9ca3af;">
+                  <div style="padding:8px 0;border-bottom:1px solid #252836;">
+                    <span style="color:#ef4444;">● Overdue</span> — Style guide review for CDC website<br>
+                    <span style="font-size:11px;">Assigned to Josh · was due Feb 18</span>
+                  </div>
+                  <div style="padding:8px 0;">
+                    <span style="color:#f59e0b;">● Due Friday</span> — Subcontractor invoice approval<br>
+                    <span style="font-size:11px;">Arnold & Porter contract · ctr_ap_2026_hillbrief</span>
+                  </div>
+                </div>`,
+            })}
+          </div>
+        `,
+      }),
+
+      'p1-contact': () => renderScreenFrame({
+        phaseClass: 'p1',
+        phaseText: 'Phase 1 — Knowledge Foundation',
+        title: 'Relationship Intelligence',
+        desc: 'Contact views become relationship views. AI synthesizes everything WRK knows about this person and their organization into a living relationship brief.',
+        body: `
+          <div class="contact-hero">
+            <div class="contact-avatar-lg">SC</div>
+            <div class="contact-info">
+              <div class="contact-name-lg">Sarah Chen</div>
+              <div class="contact-org">Arnold & Porter — Partner, Pro Bono Practice</div>
+              <div class="contact-tags">
+                <span class="contact-tag key">Key Relationship</span>
+                <span class="contact-tag">Washington, DC</span>
+                <span class="contact-tag">5 meetings</span>
+                <span class="contact-tag">1 active contract</span>
+              </div>
+            </div>
+          </div>
+
+          ${renderAgentMessage({
+            name: 'Relationship Summary',
+            text: `
+              Sarah has been POPVOX's primary contact at Arnold & Porter since September 2025. The relationship centers on <strong>pro bono legal support for the Hill briefing series</strong> (project: Congressional Data Coalition). She's consistently responsive and has driven the engagement from A&P's side.<br><br>
+              <strong>Open commitments:</strong> Sarah agreed to share a draft MOU for the Hill briefing series (Jan 15). Not yet received.<br><br>
+              <strong>Our commitments:</strong> We promised to send the updated briefing schedule by end of January. <span style="color:#ef4444;">This is overdue.</span><br><br>
+              <strong>Relationship trajectory:</strong> Engagement is deepening — meetings have increased from quarterly to monthly since November. She introduced us to Michael Torres (litigation associate) who may contribute research capacity.
+            `,
+            provenance: 'Based on: <a href="#">5 meetings</a> · <a href="#">12 meeting notes</a> · <a href="#">ctr_ap_2026_hillbrief</a> · <a href="#">prj_cdc</a>',
+          })}
+
+          ${renderCard({
+            title: 'Interaction Timeline',
+            body: `
+              <div class="timeline">
+                <div class="timeline-item ai"><div class="tl-date">Today · AI insight</div><div class="tl-text"><strong>Meeting in 3 hours.</strong> Open commitment from Jan 15 (draft MOU) not yet received. Consider following up.</div></div>
+                <div class="timeline-item"><div class="tl-date">Jan 15, 2026</div><div class="tl-text">Check-in meeting. Discussed Hill briefing logistics. Sarah agreed to <strong>share draft MOU</strong>. We committed to <strong>send updated briefing schedule</strong>.</div></div>
+                <div class="timeline-item"><div class="tl-date">Nov 20, 2025</div><div class="tl-text">Pro bono strategy session. Agreed on scope for 2026 engagement. Sarah introduced <strong>Michael Torres</strong>.</div></div>
+                <div class="timeline-item"><div class="tl-date">Oct 8, 2025</div><div class="tl-text">Hill briefing coordination. Discussed logistics for December event.</div></div>
+              </div>`,
+          })}
+        `,
+      }),
+
+      'p1-knowledge': () => renderScreenFrame({
+        phaseClass: 'p1',
+        phaseText: 'Phase 1 — Knowledge Foundation',
+        title: 'Knowledge Hub v2',
+        desc: 'The Knowledge Hub evolves from a simple chatbox to a cited, cross-referenced research assistant. Every answer traces back to specific meetings, documents, and records.',
+        body: `
+          <div class="card">
+            <div style="padding:10px 14px;background:#111318;border-radius:8px;margin-bottom:16px;">
+              <div style="font-size:12px;color:#6c8cff;margin-bottom:4px;">You asked:</div>
+              <div style="font-size:14px;color:#e1e4ea;">What commitments have we made to funders in the last 30 days?</div>
+            </div>
+
+            ${renderAgentMessage({
+              name: 'Knowledge Hub',
+              style: 'margin:0;',
+              text: `
+                I found <strong>7 commitments</strong> made to funders across 4 meetings in the last 30 days:<br><br>
+                <strong>Hewlett Foundation</strong> (Feb 10 meeting):<br>
+                — Send updated impact metrics for the Open Government Data project by Feb 28<br>
+                — Share draft blog post on legislative data standards before publication<br><br>
+                <strong>Democracy Fund</strong> (Feb 5 meeting):<br>
+                — Submit Q1 narrative report by March 4<br>
+                — Provide updated budget projection for the CDC project extension<br><br>
+                <strong>Arnold & Porter</strong> (Jan 15 meeting):<br>
+                — Send updated Hill briefing schedule <span style="color:#ef4444;">(overdue — was due end of January)</span><br><br>
+                <strong>Knight Foundation</strong> (Jan 22 meeting):<br>
+                — Follow up with data on CBO transparency pilot outcomes<br>
+                — Connect their comms team with our media contact at Hewlett
+              `,
+              provenance: 'Sources: <a href="#">mtg_2026_0210_hewlett</a> · <a href="#">mtg_2026_0205_demfund</a> · <a href="#">mtg_2026_0115_arnoldporter</a> · <a href="#">mtg_2026_0122_knight</a>',
+              actions: `
+                <button class="agent-btn primary">Create action items from these</button>
+                <button class="agent-btn secondary">Export as checklist</button>`,
+            })}
+          </div>
+
+          <div class="chat-input-area">
+            <input class="chat-input" placeholder="Ask anything about your organization's knowledge..." readonly>
+            <button class="chat-send" type="button">Ask</button>
+          </div>
+        `,
+      }),
+
+      'p1-contracts': () => renderScreenFrame({
+        phaseClass: 'p1',
+        phaseText: 'Phase 1 — Knowledge Foundation',
+        title: 'Contract Intelligence',
+        desc: 'Contracts become a first-class entity with AI-powered monitoring. Key dates, compliance requirements, and deliverables are extracted from Box documents and surfaced proactively.',
+        body: `
+          ${renderCard({
+            title: 'ctr_ap_2026_hillbrief — Arnold & Porter Hill Briefing Series',
+            badge: 'AI Monitored',
+            badgeClass: 'ai',
+            body: `
+              <div class="dash-grid" style="margin-bottom:0;">
+                <div style="font-size:13px;color:#9ca3af;">
+                  <div style="margin-bottom:6px;"><strong style="color:#e1e4ea;">Organization:</strong> Arnold & Porter</div>
+                  <div style="margin-bottom:6px;"><strong style="color:#e1e4ea;">Project:</strong> Congressional Data Coalition</div>
+                  <div style="margin-bottom:6px;"><strong style="color:#e1e4ea;">Status:</strong> <span style="color:#22c55e;">Active</span></div>
+                  <div><strong style="color:#e1e4ea;">Effective:</strong> Jan 1 — Dec 31, 2026</div>
+                </div>
+                <div style="font-size:13px;color:#9ca3af;">
+                  <div style="margin-bottom:6px;"><strong style="color:#e1e4ea;">Visibility:</strong> Management</div>
+                  <div style="margin-bottom:6px;"><strong style="color:#e1e4ea;">Documents:</strong> 4 in Box</div>
+                  <div style="margin-bottom:6px;"><strong style="color:#e1e4ea;">Next milestone:</strong> MOU finalization</div>
+                  <div><strong style="color:#e1e4ea;">Linked grant:</strong> gnt_ap_probono_2026</div>
+                </div>
+              </div>`,
+          })}
+
+          ${renderAgentMessage({
+            name: 'Contract Insights',
+            text: `
+              I've analyzed the 4 documents in <strong>Contracts/Arnold_Porter/ctr_ap_2026_hillbrief/</strong>:<br><br>
+              <strong>Key terms extracted:</strong><br>
+              — Pro bono engagement, no direct cost to POPVOX<br>
+              — A&P provides up to 200 hours of associate time for research<br>
+              — POPVOX responsible for event logistics and Hill staff coordination<br>
+              — Quarterly check-ins required (next due: end of March)<br><br>
+              <strong>⚠ Attention:</strong> The engagement letter references an MOU that hasn't been uploaded to Box yet. This may be the document Sarah Chen committed to sharing on Jan 15.
+            `,
+            provenance: 'Sources: <a href="#">Box: 01_Agreements/engagement_letter.pdf</a> · <a href="#">Box: 01_Agreements/scope_of_work.docx</a> · <a href="#">mtg_2026_0115_arnoldporter</a>',
+          })}
+        `,
+      }),
+
+      'p1-slack': () => renderScreenFrame({
+        phaseClass: 'p1',
+        phaseText: 'Phase 1 — In Slack',
+        title: 'WRK Surfaces in Slack',
+        desc: 'WRK begins appearing in Slack as a read-only assistant. It responds to questions and surfaces relevant context without taking any autonomous actions.',
+        body: `
+          <div class="slack-container">
+            <div class="slack-header">
+              <span class="hash">#</span>
+              <span class="channel">team-general</span>
+            </div>
+            <div class="slack-body">
+              <div class="slack-msg">
+                <div class="slack-ava user">MK</div>
+                <div class="slack-msg-content">
+                  <div class="slack-msg-header">
+                    <span class="slack-msg-name">Marci</span>
+                    <span class="slack-msg-time">9:15 AM</span>
+                  </div>
+                  <div class="slack-msg-text">@wrk what do we have coming up with the Knight Foundation?</div>
+                </div>
+              </div>
+              <div class="slack-msg">
+                <div class="slack-ava bot">W</div>
+                <div class="slack-msg-content">
+                  <div class="slack-msg-header">
+                    <span class="slack-msg-name bot">WRK</span>
+                    <span class="slack-app-badge">APP</span>
+                    <span class="slack-msg-time">9:15 AM</span>
+                  </div>
+                  <div class="slack-msg-text">Here's what I know about <strong>Knight Foundation</strong>:</div>
+                  <div class="slack-attachment">
+                    <div class="slack-attachment-title">Knight Foundation — Relationship Summary</div>
+                    <div class="slack-attachment-text">
+                      <strong>Status:</strong> Current funder · 1 active grant<br>
+                      <strong>Last meeting:</strong> Jan 22 — discussed CBO transparency pilot outcomes<br>
+                      <strong>Open commitments (ours):</strong><br>
+                      · Follow up with CBO pilot data (from Jan 22)<br>
+                      · Connect their comms team with Hewlett media contact (from Jan 22)<br>
+                      <strong>Next scheduled:</strong> No meeting on calendar yet<br>
+                      <strong>Grant status:</strong> "Transparency in Appropriations" — active, next report due April 1
+                    </div>
+                  </div>
+                  <div class="slack-thread-indicator">View in WRK →</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="height:16px;"></div>
+          <div class="slack-container">
+            <div class="slack-header">
+              <span class="hash">#</span>
+              <span class="channel">meetings</span>
+            </div>
+            <div class="slack-body">
+              <div class="slack-msg">
+                <div class="slack-ava bot">W</div>
+                <div class="slack-msg-content">
+                  <div class="slack-msg-header">
+                    <span class="slack-msg-name bot">WRK</span>
+                    <span class="slack-app-badge">APP</span>
+                    <span class="slack-msg-time">8:00 AM</span>
+                  </div>
+                  <div class="slack-msg-text"><strong>Today's meetings for the team:</strong></div>
+                  <div class="slack-attachment">
+                    <div class="slack-attachment-text">
+                      <strong>2:00 PM</strong> — Arnold & Porter check-in (Marci) · <span style="color:#f59e0b;">1 open commitment</span><br>
+                      <strong>4:30 PM</strong> — Democracy Fund quarterly (Marci, Josh) · <span style="color:#22c55e;">Prep ready</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `,
+      }),
+
+      'p1-mobile': () => renderScreenFrame({
+        phaseClass: 'p1',
+        phaseText: 'Phase 1 — Mobile',
+        title: 'Mobile Quick Glance',
+        desc: 'A lightweight mobile view surfaces the morning brief and meeting prep for on-the-go access — especially useful before walking into a meeting on the Hill.',
+        body: `
+          <div class="mobile-container">
+            <div class="mobile-status"><span>9:41 AM</span><span>WRK</span></div>
+            <div class="mobile-header">
+              <div style="width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,#6c8cff,#a855f7);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;">W</div>
+              <div class="mobile-title">Your Day</div>
+            </div>
+            <div class="mobile-body">
+              <div class="mobile-card" style="border-left:3px solid #f59e0b;">
+                <div class="mobile-card-title">⚠ Before your 2 PM</div>
+                <div class="mobile-card-text">Sarah Chen (A&P) was going to send draft MOU — hasn't arrived. Our briefing schedule is overdue too.</div>
+              </div>
+              <div class="mobile-card">
+                <div class="mobile-card-title">2:00 PM — Arnold & Porter</div>
+                <div class="mobile-card-text">Sarah Chen, Michael Torres · Zoom<br>Topics: MOU status, Hill briefing schedule, associate research capacity</div>
+              </div>
+              <div class="mobile-card">
+                <div class="mobile-card-title">4:30 PM — Democracy Fund</div>
+                <div class="mobile-card-text">Quarterly review · Google Meet<br>Key: Q1 report due March 4. Budget projection needed for CDC extension.</div>
+              </div>
+              <div class="mobile-card" style="border-left:3px solid #ef4444;">
+                <div class="mobile-card-title">Overdue</div>
+                <div class="mobile-card-text">Style guide review (Josh) — 2 days overdue<br>Briefing schedule to A&P — ~3 weeks overdue</div>
+              </div>
+            </div>
+          </div>
+        `,
+      })
+    }
+  },
+
+  p2: {
+    nav: [
+      { section: 'WORKSPACE', items: [
+        { id: 'p2-approvals', icon: '⊘', label: 'Agent Inbox', badge: '3', badgeClass: 'amber' },
+        { id: 'p2-meeting-after', icon: '◷', label: 'Post-Meeting Flow' },
+        { id: 'p2-grant-report', icon: '◫', label: 'Report Drafting' },
+      ]},
+      { section: 'SURFACES', items: [
+        { id: 'p2-slack', icon: '⊞', label: 'Slack Workflows' },
+        { id: 'p2-email', icon: '✉', label: 'Email Drafts' },
+      ]}
+    ],
+    screens: {
+      'p2-approvals': () => `
+        <div class="screen-container">
+          <div class="phase-label p2">Phase 2 — Governed Agents</div>
+          <div class="screen-title">Agent Inbox</div>
+          <div class="screen-desc">Agents can now draft actions and propose changes — but nothing happens without your approval. The Agent Inbox is where you review, edit, and approve everything AI wants to do on your behalf.</div>
+
+          <div class="approval-card">
+            <div class="approval-header">
+              <span class="approval-icon">✉</span>
+              <span class="approval-title">Draft follow-up email — Arnold & Porter meeting</span>
+            </div>
+            <div class="approval-body">
+              WRK drafted a follow-up email to Sarah Chen based on today's meeting notes. It references the MOU timeline agreement and the briefing schedule you committed to send.
+            </div>
+            <div class="email-container" style="margin-bottom:12px;">
+              <div class="email-header">
+                <div class="email-subject">Following up — Hill Briefing Series next steps</div>
+                <div class="email-meta">To: <strong>sarah.chen@arnoldporter.com</strong> · From: marci@popvox.org</div>
+              </div>
+              <div class="email-body">
+                <p>Hi Sarah,</p>
+                <p>Great talking with you and Michael today. Wanted to capture our next steps:</p>
+                <p>From your side: You'll circulate the draft MOU internally by end of next week (Feb 28). From our side: I'm attaching the updated briefing schedule we discussed — apologies for the delay on this.</p>
+                <p>We also agreed that Michael will start the background research on appropriations data access by March 1, and we'll set up a working session once he has initial findings.</p>
+                <p>Thanks for the continued partnership on this. Talk soon,<br>Marci</p>
+              </div>
+            </div>
+            <div class="agent-actions">
+              <button class="agent-btn primary">Approve & Send</button>
+              <button class="agent-btn secondary">Edit Draft</button>
+              <button class="agent-btn danger">Dismiss</button>
+            </div>
+            <div class="provenance">Agent: meeting_followup · Sources: <a href="#">mtg_2026_0220_arnoldporter</a> · Confidence: high</div>
+          </div>
+
+          <div class="approval-card">
+            <div class="approval-header">
+              <span class="approval-icon">☑</span>
+              <span class="approval-title">Create 3 action items from today's meetings</span>
+            </div>
+            <div class="approval-body">
+              WRK extracted commitments from today's Arnold & Porter and Democracy Fund meetings and wants to create tracked action items:
+            </div>
+            <div style="font-size:13px;color:#c9cdd5;background:#111318;border-radius:8px;padding:12px;margin-bottom:12px;">
+              <div style="margin-bottom:8px;">1. <strong>Send updated briefing schedule to Sarah Chen</strong> — Assigned: Marci · Due: Feb 21</div>
+              <div style="margin-bottom:8px;">2. <strong>Draft Q1 narrative for Democracy Fund report</strong> — Assigned: Josh · Due: Feb 28</div>
+              <div>3. <strong>Schedule working session with Michael Torres (A&P)</strong> — Assigned: Marci · Due: Mar 7</div>
+            </div>
+            <div class="agent-actions">
+              <button class="agent-btn primary">Create All</button>
+              <button class="agent-btn secondary">Review & Edit</button>
+              <button class="agent-btn danger">Dismiss</button>
+            </div>
+            <div class="provenance">Agent: commitment_tracker · Sources: <a href="#">mtg_2026_0220_arnoldporter</a> · <a href="#">mtg_2026_0220_demfund</a></div>
+          </div>
+
+          <div class="approval-card">
+            <div class="approval-header">
+              <span class="approval-icon">📊</span>
+              <span class="approval-title">Update project status — Congressional Data Coalition</span>
+            </div>
+            <div class="approval-body">
+              Based on this week's meetings and completed milestones, WRK suggests updating the project status:
+            </div>
+            <div class="approval-diff">
+              <div class="remove">Status: On Track — "Awaiting partner confirmation"</div>
+              <div class="add">Status: On Track — "MOU in review with A&P. Research phase starting March 1. Q1 briefing scheduled."</div>
+            </div>
+            <div class="agent-actions">
+              <button class="agent-btn primary">Apply Update</button>
+              <button class="agent-btn secondary">Edit</button>
+              <button class="agent-btn danger">Dismiss</button>
+            </div>
+            <div class="provenance">Agent: project_status · Confidence: medium-high</div>
+          </div>
+        </div>`,
+
+      'p2-meeting-after': () => `
+        <div class="screen-container">
+          <div class="phase-label p2">Phase 2 — Governed Agents</div>
+          <div class="screen-title">Post-Meeting Workflow</div>
+          <div class="screen-desc">After you save meeting notes, WRK agents automatically extract structured information and propose a full set of follow-up actions — all requiring your approval.</div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Arnold & Porter check-in — Feb 20, 2:00 PM</div>
+              <div class="card-badge human">Notes saved by Marci</div>
+            </div>
+            <div style="font-size:13px;color:#9ca3af;padding:12px;background:#111318;border-radius:8px;">
+              Met with Sarah and Michael. Discussed MOU timeline — Sarah will circulate internally by Feb 28. We need to send the updated briefing schedule (I have it ready, just need to send). Michael will start appropriations research by March 1. Agreed to a working session after his initial findings. Democracy Fund report came up briefly — Josh needs to start the narrative section...
+            </div>
+          </div>
+
+          <div style="text-align:center;padding:12px;font-size:13px;color:#4b5563;">
+            ↓ WRK agents process your notes and propose: ↓
+          </div>
+
+          <div class="dash-grid">
+            <div class="card">
+              <div class="card-header"><div class="card-title">Extracted Entities</div><div class="card-badge ai">Auto-detected</div></div>
+              <div style="font-size:13px;color:#9ca3af;line-height:1.8;">
+                <strong style="color:#e1e4ea;">People:</strong> Sarah Chen, Michael Torres<br>
+                <strong style="color:#e1e4ea;">Org:</strong> Arnold & Porter<br>
+                <strong style="color:#e1e4ea;">Projects:</strong> Congressional Data Coalition<br>
+                <strong style="color:#e1e4ea;">Contract:</strong> ctr_ap_2026_hillbrief<br>
+                <strong style="color:#e1e4ea;">Also mentioned:</strong> Democracy Fund, Josh
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><div class="card-title">Commitments Detected</div><div class="card-badge pending">Pending Review</div></div>
+              <div style="font-size:13px;color:#9ca3af;line-height:1.8;">
+                <strong style="color:#6c8cff;">Theirs:</strong><br>
+                · Sarah: circulate MOU by Feb 28<br>
+                · Michael: start research by Mar 1<br><br>
+                <strong style="color:#22c55e;">Ours:</strong><br>
+                · Send briefing schedule (Marci, ASAP)<br>
+                · Schedule working session (after Mar 1)
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align:center;padding:8px;font-size:13px;color:#4b5563;">
+            ↓ And queues these for your approval in the Agent Inbox ↓
+          </div>
+
+          <div style="font-size:13px;color:#9ca3af;background:#1a1d2e;border:1px solid #252836;border-radius:10px;padding:16px;">
+            <div style="margin-bottom:8px;">☑ <strong style="color:#e1e4ea;">Create 4 action items</strong> from commitments</div>
+            <div style="margin-bottom:8px;">✉ <strong style="color:#e1e4ea;">Draft follow-up email</strong> to Sarah Chen</div>
+            <div style="margin-bottom:8px;">📊 <strong style="color:#e1e4ea;">Update project status</strong> for Congressional Data Coalition</div>
+            <div>📋 <strong style="color:#e1e4ea;">Update relationship notes</strong> for Sarah Chen and Michael Torres</div>
+          </div>
+        </div>`,
+
+      'p2-grant-report': () => `
+        <div class="screen-container">
+          <div class="phase-label p2">Phase 2 — Governed Agents</div>
+          <div class="screen-title">AI-Assisted Report Drafting</div>
+          <div class="screen-desc">Grant reports are one of the most time-intensive tasks for a small team. WRK agents pull from meetings, project updates, milestones, and documents to draft a report aligned to funder requirements — for your review and editing.</div>
+
+          <div class="agent-msg">
+            <div class="agent-avatar">W</div>
+            <div class="agent-content">
+              <div class="agent-name">Grant Report Agent</div>
+              <div class="agent-text">
+                The <strong>Democracy Fund Q1 2026 report</strong> is due March 4. I've assembled a draft based on:<br><br>
+                · 4 project milestones completed this quarter<br>
+                · 6 meetings with relevant stakeholders<br>
+                · 2 project status updates from the team<br>
+                · The reporting template from the grant agreement<br>
+                · Last quarter's report (for tone and format consistency)<br><br>
+                The draft covers: Executive Summary, Key Activities, Outcomes & Metrics, Challenges, and Next Quarter Plans. <strong>I've flagged 2 sections that need your input</strong> — the Outcomes metrics and the budget narrative.
+              </div>
+              <div class="provenance">
+                Sources: <a href="#">gnt_demfund_opengov</a> · <a href="#">prj_cdc</a> (4 milestones) · <a href="#">6 meetings</a> · <a href="#">Box: 03_Reporting/template.docx</a>
+              </div>
+              <div class="agent-actions">
+                <button class="agent-btn primary">Open Draft in Editor</button>
+                <button class="agent-btn secondary">View Source Materials</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><div class="card-title">Draft Preview — Sections</div></div>
+            <div style="font-size:13px;color:#9ca3af;">
+              <div style="padding:8px 0;border-bottom:1px solid #252836;display:flex;justify-content:space-between;">
+                <span><strong style="color:#e1e4ea;">1. Executive Summary</strong></span>
+                <span style="color:#22c55e;">✓ Draft complete</span>
+              </div>
+              <div style="padding:8px 0;border-bottom:1px solid #252836;display:flex;justify-content:space-between;">
+                <span><strong style="color:#e1e4ea;">2. Key Activities</strong></span>
+                <span style="color:#22c55e;">✓ Draft complete</span>
+              </div>
+              <div style="padding:8px 0;border-bottom:1px solid #252836;display:flex;justify-content:space-between;">
+                <span><strong style="color:#e1e4ea;">3. Outcomes & Metrics</strong></span>
+                <span style="color:#f59e0b;">⚠ Needs your input</span>
+              </div>
+              <div style="padding:8px 0;border-bottom:1px solid #252836;display:flex;justify-content:space-between;">
+                <span><strong style="color:#e1e4ea;">4. Challenges & Lessons</strong></span>
+                <span style="color:#22c55e;">✓ Draft complete</span>
+              </div>
+              <div style="padding:8px 0;border-bottom:1px solid #252836;display:flex;justify-content:space-between;">
+                <span><strong style="color:#e1e4ea;">5. Budget Narrative</strong></span>
+                <span style="color:#f59e0b;">⚠ Needs your input</span>
+              </div>
+              <div style="padding:8px 0;display:flex;justify-content:space-between;">
+                <span><strong style="color:#e1e4ea;">6. Next Quarter Plans</strong></span>
+                <span style="color:#22c55e;">✓ Draft complete</span>
+              </div>
+            </div>
+          </div>
+        </div>`,
+
+      'p2-slack': () => `
+        <div class="screen-container">
+          <div class="phase-label p2">Phase 2 — In Slack</div>
+          <div class="screen-title">Slack Approval Workflows</div>
+          <div class="screen-desc">WRK agents can now propose actions directly in Slack. Quick approvals happen inline; complex ones link back to WRK. The team can interact with WRK without leaving Slack.</div>
+
+          <div class="slack-container">
+            <div class="slack-header">
+              <span class="hash">#</span>
+              <span class="channel">wrk-agent-inbox</span>
+            </div>
+            <div class="slack-body">
+              <div class="slack-msg">
+                <div class="slack-ava bot">W</div>
+                <div class="slack-msg-content">
+                  <div class="slack-msg-header">
+                    <span class="slack-msg-name bot">WRK Agent</span>
+                    <span class="slack-app-badge">APP</span>
+                    <span class="slack-msg-time">3:45 PM</span>
+                  </div>
+                  <div class="slack-msg-text"><strong>Post-meeting actions ready for review</strong> — Arnold & Porter check-in</div>
+                  <div class="slack-attachment">
+                    <div class="slack-attachment-title">📋 3 proposed actions</div>
+                    <div class="slack-attachment-text">
+                      1. ✉ <strong>Send follow-up email</strong> to Sarah Chen with briefing schedule<br>
+                      2. ☑ <strong>Create action item:</strong> "Schedule working session with Michael Torres" — Due: Mar 7<br>
+                      3. 📊 <strong>Update project status</strong> for CDC
+                    </div>
+                  </div>
+                  <div class="slack-buttons">
+                    <button class="slack-btn green">✓ Approve All</button>
+                    <button class="slack-btn">Review in WRK</button>
+                    <button class="slack-btn">Dismiss</button>
+                  </div>
+                </div>
+              </div>
+              <div class="slack-msg">
+                <div class="slack-ava user">MK</div>
+                <div class="slack-msg-content">
+                  <div class="slack-msg-header">
+                    <span class="slack-msg-name">Marci</span>
+                    <span class="slack-msg-time">3:47 PM</span>
+                  </div>
+                  <div class="slack-msg-text">Approve the action items. Let me review the email first though.</div>
+                </div>
+              </div>
+              <div class="slack-msg">
+                <div class="slack-ava bot">W</div>
+                <div class="slack-msg-content">
+                  <div class="slack-msg-header">
+                    <span class="slack-msg-name bot">WRK Agent</span>
+                    <span class="slack-app-badge">APP</span>
+                    <span class="slack-msg-time">3:47 PM</span>
+                  </div>
+                  <div class="slack-msg-text">
+                    ✅ <strong>2 action items created.</strong> The email draft is in your <a href="#" style="color:#6c8cff;">Agent Inbox</a> for review.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:16px;"></div>
+
+          <div class="slack-container">
+            <div class="slack-header">
+              <span class="hash">#</span>
+              <span class="channel">team-general</span>
+            </div>
+            <div class="slack-body">
+              <div class="slack-msg">
+                <div class="slack-ava user" style="background:#4a6b3d;color:#b0f090;">JR</div>
+                <div class="slack-msg-content">
+                  <div class="slack-msg-header">
+                    <span class="slack-msg-name">Josh</span>
+                    <span class="slack-msg-time">4:10 PM</span>
+                  </div>
+                  <div class="slack-msg-text">@wrk what's the status on the Democracy Fund report?</div>
+                </div>
+              </div>
+              <div class="slack-msg">
+                <div class="slack-ava bot">W</div>
+                <div class="slack-msg-content">
+                  <div class="slack-msg-header">
+                    <span class="slack-msg-name bot">WRK</span>
+                    <span class="slack-app-badge">APP</span>
+                    <span class="slack-msg-time">4:10 PM</span>
+                  </div>
+                  <div class="slack-msg-text">The Q1 report draft is <strong>~70% complete</strong>. Four sections are drafted from meeting notes and milestones. <strong>Two sections need your input:</strong> Outcomes & Metrics, and Budget Narrative. The report is due <strong>March 4</strong> (12 days). Want me to share the draft with you?</div>
+                  <div class="slack-buttons">
+                    <button class="slack-btn">Share Draft</button>
+                    <button class="slack-btn">Open in WRK</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`,
+
+      'p2-email': () => `
+        <div class="screen-container">
+          <div class="phase-label p2">Phase 2 — Email</div>
+          <div class="screen-title">Drafted Communications</div>
+          <div class="screen-desc">WRK drafts context-rich emails based on meeting outcomes, relationship history, and organizational voice. Every draft requires human review before sending.</div>
+
+          <div class="email-container">
+            <div class="email-header">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div class="email-subject">Following up — Hill Briefing Series next steps</div>
+                <div class="card-badge agent">AI Draft</div>
+              </div>
+              <div class="email-meta">
+                To: <strong>sarah.chen@arnoldporter.com</strong><br>
+                CC: <strong>michael.torres@arnoldporter.com</strong><br>
+                From: marci@popvox.org<br>
+                Attachments: Hill_Briefing_Schedule_2026_v3.pdf
+              </div>
+            </div>
+            <div class="email-body">
+              <p>Hi Sarah,</p>
+              <p>Great talking with you and Michael today. Wanted to capture our next steps and finally get you that briefing schedule — attached, with apologies for the delay.</p>
+              <p>From our conversation today:</p>
+              <p><strong>Your side:</strong> You'll circulate the draft MOU internally by February 28, with the goal of having a final version we can both sign by mid-March.</p>
+              <p><strong>Our side:</strong> The briefing schedule is attached. Michael will start the appropriations data access research by March 1, and we'll set up a working session once he has initial findings — I'll reach out to coordinate timing.</p>
+              <p>We also briefly discussed the potential for expanding the series to include a session on CBO data transparency. I'll loop back on that once we've confirmed the initial schedule with Hill offices.</p>
+              <p>Thanks for the continued partnership on this. Looking forward to seeing the MOU draft.</p>
+              <p>Best,<br>Marci</p>
+            </div>
+          </div>
+          <div style="margin-top:12px;">
+            <div class="agent-actions">
+              <button class="agent-btn primary">Approve & Send</button>
+              <button class="agent-btn secondary">Edit in Composer</button>
+              <button class="agent-btn secondary">Adjust Tone</button>
+              <button class="agent-btn danger">Discard</button>
+            </div>
+            <div class="provenance">
+              Agent: email_drafter · Sources: <a href="#">mtg_2026_0220_arnoldporter</a> · <a href="#">mtg_2026_0115_arnoldporter</a> · <a href="#">ctr_ap_2026_hillbrief</a> · Style: matched to Marci's previous emails
+            </div>
+          </div>
+        </div>`
+    }
+  },
+
+  p3: {
+    nav: [
+      { section: 'WORKSPACE', items: [
+        { id: 'p3-orchestration', icon: '◈', label: 'Agent Orchestration' },
+        { id: 'p3-relationship', icon: '◉', label: 'Proactive Relationships' },
+        { id: 'p3-legislative', icon: '◫', label: 'Legislative Office View' },
+      ]},
+      { section: 'SURFACES', items: [
+        { id: 'p3-slack', icon: '⊞', label: 'Agent-to-Agent' },
+        { id: 'p3-audit', icon: '⊡', label: 'Audit Trail' },
+      ]}
+    ],
+    screens: {
+      'p3-orchestration': () => `
+        <div class="screen-container">
+          <div class="phase-label p3">Phase 3 — Institutional Colleagues</div>
+          <div class="screen-title">Agent Orchestration Dashboard</div>
+          <div class="screen-desc">Multiple specialized agents operate semi-autonomously within defined boundaries. Low-risk actions execute automatically; high-impact actions still require approval. The team monitors agent activity like they'd monitor a colleague's work.</div>
+
+          <div class="dash-grid three">
+            <div class="card"><div class="metric"><div class="metric-value" style="color:#22c55e;">94%</div><div class="metric-label">Agent Accuracy (30d)</div><div class="metric-change up">↑ from 87% last month</div></div></div>
+            <div class="card"><div class="metric"><div class="metric-value">23</div><div class="metric-label">Actions Taken Today</div><div class="metric-change" style="color:#9ca3af;">18 auto · 5 approved</div></div></div>
+            <div class="card"><div class="metric"><div class="metric-value">2</div><div class="metric-label">Pending Approvals</div><div class="metric-change" style="color:#f59e0b;">1 high-priority</div></div></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><div class="card-title"><span class="pulse"></span>Active Agents</div></div>
+            <div style="font-size:13px;">
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #252836;color:#9ca3af;">
+                <div><strong style="color:#8ba4ff;">Meeting Intelligence</strong><br>Extracts entities, commitments, and actions from meeting notes</div>
+                <div style="text-align:right;"><span style="color:#22c55e;">Auto-approved</span> for entity extraction<br><span style="color:#f59e0b;">Approval required</span> for action creation</div>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #252836;color:#9ca3af;">
+                <div><strong style="color:#a855f7;">Relationship Manager</strong><br>Maintains relationship summaries, flags follow-up needs</div>
+                <div style="text-align:right;"><span style="color:#22c55e;">Auto-approved</span> for summary updates<br><span style="color:#f59e0b;">Approval required</span> for outreach suggestions</div>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #252836;color:#9ca3af;">
+                <div><strong style="color:#ec4899;">Compliance Monitor</strong><br>Tracks grant deadlines, contract milestones, reporting requirements</div>
+                <div style="text-align:right;"><span style="color:#22c55e;">Auto-approved</span> for deadline alerts<br><span style="color:#ef4444;">Never auto</span> for filing actions</div>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:10px 0;color:#9ca3af;">
+                <div><strong style="color:#22c55e;">Knowledge Curator</strong><br>Indexes documents, extracts facts, maintains knowledge graph</div>
+                <div style="text-align:right;"><span style="color:#22c55e;">Auto-approved</span> for indexing<br><span style="color:#f59e0b;">Approval required</span> for fact publication</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><div class="card-title">Today's Agent Activity Feed</div></div>
+            <div class="timeline">
+              <div class="timeline-item ai"><div class="tl-date">3:52 PM · Meeting Intelligence</div><div class="tl-text">Processed notes from Arnold & Porter meeting. Extracted 2 people, 1 contract, 4 commitments. <strong>Created 3 action items</strong> (approved by Marci via Slack).</div></div>
+              <div class="timeline-item ai"><div class="tl-date">3:50 PM · Relationship Manager</div><div class="tl-text">Updated relationship summaries for Sarah Chen and Michael Torres. <strong>Auto-approved</strong> (low-risk: summary update only).</div></div>
+              <div class="timeline-item ai"><div class="tl-date">2:00 PM · Knowledge Curator</div><div class="tl-text">Indexed 2 new documents uploaded to Box (Contracts/Arnold_Porter/). Updated knowledge graph with 5 new facts.</div></div>
+              <div class="timeline-item ai"><div class="tl-date">8:15 AM · Compliance Monitor</div><div class="tl-text">Scanned upcoming deadlines. Flagged Democracy Fund Q1 report (12 days). Sent morning brief with deadline summary.</div></div>
+              <div class="timeline-item"><div class="tl-date">8:00 AM · System</div><div class="tl-text">Morning brief generated and delivered to Slack #team-general and mobile.</div></div>
+            </div>
+          </div>
+        </div>`,
+
+      'p3-relationship': () => `
+        <div class="screen-container">
+          <div class="phase-label p3">Phase 3 — Institutional Colleagues</div>
+          <div class="screen-title">Proactive Relationship Intelligence</div>
+          <div class="screen-desc">The Relationship Manager agent monitors your entire network and proactively surfaces opportunities, risks, and patterns. It's like having a chief of staff who knows every interaction the organization has ever had.</div>
+
+          <div class="agent-msg">
+            <div class="agent-avatar" style="background:linear-gradient(135deg,#a855f7,#ec4899);">R</div>
+            <div class="agent-content">
+              <div class="agent-name" style="color:#a855f7;">Relationship Manager — Weekly Digest</div>
+              <div class="agent-text">
+                <strong>Relationships that need attention:</strong><br><br>
+                <strong>1. Knight Foundation</strong> — You have 2 open commitments from Jan 22 (CBO data and comms intro) and no meeting scheduled. Engagement frequency has dropped from monthly to nothing in 29 days. <em>Suggest: schedule a check-in this week.</em><br><br>
+                <strong>2. Rep. Johnson's office</strong> — They proposed March 5 for the appropriations briefing 2 days ago and no one has responded. This is a time-sensitive relationship. <em>Suggest: respond today.</em><br><br>
+                <strong>3. Sunlight Foundation</strong> — They mentioned POPVOX positively in a blog post yesterday. You haven't engaged with them since October. <em>Suggest: send a thank-you note and explore collaboration.</em>
+              </div>
+              <div class="agent-actions">
+                <button class="agent-btn primary">Draft responses for all 3</button>
+                <button class="agent-btn secondary">Just Knight and Johnson</button>
+              </div>
+              <div class="provenance">
+                Agent: relationship_manager · Sources: 47 meetings, 12 commitments, Slack monitoring, media scan
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><div class="card-title">Relationship Health Map</div></div>
+            <div style="font-size:13px;color:#9ca3af;">
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #252836;">
+                <span><strong style="color:#e1e4ea;">Arnold & Porter</strong></span>
+                <span style="color:#22c55e;">● Strong — meeting today, active contract</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #252836;">
+                <span><strong style="color:#e1e4ea;">Democracy Fund</strong></span>
+                <span style="color:#22c55e;">● Strong — quarterly meeting today, grant active</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #252836;">
+                <span><strong style="color:#e1e4ea;">Hewlett Foundation</strong></span>
+                <span style="color:#22c55e;">● Strong — met Feb 10, grant active</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #252836;">
+                <span><strong style="color:#e1e4ea;">Knight Foundation</strong></span>
+                <span style="color:#f59e0b;">● Cooling — 29 days since contact, open commitments</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #252836;">
+                <span><strong style="color:#e1e4ea;">Rep. Johnson's office</strong></span>
+                <span style="color:#ef4444;">● Needs response — 2 day wait on scheduling</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;">
+                <span><strong style="color:#e1e4ea;">Sunlight Foundation</strong></span>
+                <span style="color:#6b7280;">○ Dormant — last contact Oct 2025, opportunity detected</span>
+              </div>
+            </div>
+          </div>
+        </div>`,
+
+      'p3-legislative': () => `
+        <div class="screen-container">
+          <div class="phase-label p3">Phase 3 — The Bigger Vision</div>
+          <div class="screen-title">Legislative Office Adaptation</div>
+          <div class="screen-desc">The same architecture, adapted for a Congressional office. The same principles — progressive autonomy, provenance, ACL-aware retrieval — but with constituent relationships, legislative tracking, and committee work as the core domains.</div>
+
+          <div class="agent-msg">
+            <div class="agent-avatar" style="background:linear-gradient(135deg,#1d4ed8,#7c3aed);">L</div>
+            <div class="agent-content">
+              <div class="agent-name" style="color:#60a5fa;"><span class="pulse"></span>Morning Brief — Office of Rep. Example</div>
+              <div class="agent-text">
+                <strong>Today's priorities:</strong><br><br>
+                1. <strong>Appropriations subcommittee hearing at 10 AM</strong> — Briefing packet ready. 3 witnesses scheduled. Key question areas prepared based on member priorities and constituent input.<br><br>
+                2. <strong>14 constituent cases updated overnight</strong> — 2 require LA response today (VA benefits and IRS). The VA case has been open 45 days — escalation recommended.<br><br>
+                3. <strong>H.R. 4521 markup tomorrow</strong> — LC has flagged 2 amendment opportunities aligned with member priorities. Draft amendment language available for review.<br><br>
+                4. <strong>Meeting with PhRMA lobbyist at 3 PM</strong> — Relationship context: this is the 4th meeting. Previous meetings focused on drug pricing provisions. They committed to sending CBO score data last time — not received. 12 constituent letters opposing their position received this month.
+              </div>
+              <div class="provenance">
+                Sources: committee calendar · case management system · legislative tracker · constituent correspondence · meeting history<br>
+                <em style="color:#4b5563;">All sources internal. No external data shared. Full audit trail available.</em>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><div class="card-title">What Translates from WRK</div></div>
+            <div style="font-size:13px;color:#9ca3af;line-height:1.7;">
+              <div style="padding:8px 0;border-bottom:1px solid #252836;">
+                <strong style="color:#e1e4ea;">Meetings → Meetings</strong><br>
+                Same prep briefs, commitment tracking, and follow-up workflows — but for constituent meetings, lobbyist meetings, colleague meetings, and hearings.
+              </div>
+              <div style="padding:8px 0;border-bottom:1px solid #252836;">
+                <strong style="color:#e1e4ea;">People/Orgs → Stakeholder Relationships</strong><br>
+                Same relationship intelligence — but tracking constituents, advocacy groups, lobbyists, other offices, agencies, and committee staff.
+              </div>
+              <div style="padding:8px 0;border-bottom:1px solid #252836;">
+                <strong style="color:#e1e4ea;">Projects → Legislative Priorities</strong><br>
+                Same project tracking — but for bills, amendments, oversight investigations, and policy initiatives.
+              </div>
+              <div style="padding:8px 0;border-bottom:1px solid #252836;">
+                <strong style="color:#e1e4ea;">Contracts/Grants → Constituent Cases</strong><br>
+                Same entity management — but tracking casework across agencies, with deadlines, escalation rules, and constituent-specific ACLs.
+              </div>
+              <div style="padding:8px 0;">
+                <strong style="color:#e1e4ea;">Provenance & Audit → Accountability</strong><br>
+                The same provenance system ensures every AI-generated brief, every recommended action, every surfaced insight traces back to specific, verifiable sources. Essential for public trust.
+              </div>
+            </div>
+          </div>
+        </div>`,
+
+      'p3-slack': () => `
+        <div class="screen-container">
+          <div class="phase-label p3">Phase 3 — Agent Coordination</div>
+          <div class="screen-title">Agent-to-Agent Coordination</div>
+          <div class="screen-desc">Specialized agents coordinate through Slack channels, keeping the team visible on what's happening. Think of it as agents cc'ing humans on their work — transparent by default.</div>
+
+          <div class="slack-container">
+            <div class="slack-header">
+              <span class="hash">#</span>
+              <span class="channel">wrk-agent-activity</span>
+            </div>
+            <div class="slack-body">
+              <div class="slack-msg">
+                <div class="slack-ava bot" style="background:linear-gradient(135deg,#8ba4ff,#6366f1);">M</div>
+                <div class="slack-msg-content">
+                  <div class="slack-msg-header">
+                    <span class="slack-msg-name bot">Meeting Intelligence</span>
+                    <span class="slack-app-badge">AGENT</span>
+                    <span class="slack-msg-time">3:52 PM</span>
+                  </div>
+                  <div class="slack-msg-text">
+                    Processed meeting notes for <strong>Arnold & Porter check-in</strong>. Extracted: 2 people, 1 contract ref, 4 commitments. Created 3 action items (approved by Marci). Passing relationship updates to <strong>@Relationship Manager</strong>.
+                  </div>
+                </div>
+              </div>
+              <div class="slack-msg">
+                <div class="slack-ava bot" style="background:linear-gradient(135deg,#a855f7,#ec4899);">R</div>
+                <div class="slack-msg-content">
+                  <div class="slack-msg-header">
+                    <span class="slack-msg-name bot">Relationship Manager</span>
+                    <span class="slack-app-badge">AGENT</span>
+                    <span class="slack-msg-time">3:53 PM</span>
+                  </div>
+                  <div class="slack-msg-text">
+                    Updated summaries for <strong>Sarah Chen</strong> and <strong>Michael Torres</strong>. Relationship status for Arnold & Porter remains <strong>Strong</strong>. Noted: MOU deadline set for Feb 28. Will follow up if not received by Feb 27.
+                  </div>
+                </div>
+              </div>
+              <div class="slack-msg">
+                <div class="slack-ava bot" style="background:linear-gradient(135deg,#ec4899,#ef4444);">C</div>
+                <div class="slack-msg-content">
+                  <div class="slack-msg-header">
+                    <span class="slack-msg-name bot">Compliance Monitor</span>
+                    <span class="slack-app-badge">AGENT</span>
+                    <span class="slack-msg-time">3:54 PM</span>
+                  </div>
+                  <div class="slack-msg-text">
+                    Contract <strong>ctr_ap_2026_hillbrief</strong> updated: quarterly check-in completed. Next check-in due end of March. No compliance issues flagged. Passing to <strong>@Knowledge Curator</strong> for indexing.
+                  </div>
+                </div>
+              </div>
+              <div class="slack-msg">
+                <div class="slack-ava bot" style="background:linear-gradient(135deg,#22c55e,#16a34a);">K</div>
+                <div class="slack-msg-content">
+                  <div class="slack-msg-header">
+                    <span class="slack-msg-name bot">Knowledge Curator</span>
+                    <span class="slack-app-badge">AGENT</span>
+                    <span class="slack-msg-time">3:55 PM</span>
+                  </div>
+                  <div class="slack-msg-text">
+                    Indexed meeting outcomes. Added 5 new facts to knowledge graph. Updated entity links: <code>mtg_0220</code> → <code>ctr_ap_2026</code> → <code>prj_cdc</code> → <code>org_arnoldporter</code>.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`,
+
+      'p3-audit': () => `
+        <div class="screen-container">
+          <div class="phase-label p3">Phase 3 — Governance</div>
+          <div class="screen-title">Full Audit Trail</div>
+          <div class="screen-desc">Every agent action — automated or approved — is fully traceable. This is what makes the system viable for legislative offices and grant-funded work. Complete accountability at every level.</div>
+
+          <div class="card">
+            <div class="card-header"><div class="card-title">Audit Log — Feb 20, 2026</div></div>
+            <div style="font-size:12px;font-family:'JetBrains Mono',monospace;">
+              <div style="padding:8px 0;border-bottom:1px solid #1e2235;color:#9ca3af;">
+                <span style="color:#4b5563;">15:52:41</span> <span style="color:#8ba4ff;">meeting_intelligence</span> <span style="color:#22c55e;">EXTRACT</span> entities from mtg_2026_0220_arnoldporter<br>
+                <span style="color:#4b5563;margin-left:80px;">model: claude-sonnet-4-20250514 · confidence: 0.94 · source_refs: [mtg_2026_0220_arnoldporter] · review_state: auto_approved</span>
+              </div>
+              <div style="padding:8px 0;border-bottom:1px solid #1e2235;color:#9ca3af;">
+                <span style="color:#4b5563;">15:52:43</span> <span style="color:#8ba4ff;">meeting_intelligence</span> <span style="color:#f59e0b;">PROPOSE</span> create 3 action items<br>
+                <span style="color:#4b5563;margin-left:80px;">requires_approval: true · approval_level: standard</span>
+              </div>
+              <div style="padding:8px 0;border-bottom:1px solid #1e2235;color:#9ca3af;">
+                <span style="color:#4b5563;">15:47:12</span> <span style="color:#22c55e;">marci (usr_mk)</span> <span style="color:#22c55e;">APPROVE</span> action items via Slack<br>
+                <span style="color:#4b5563;margin-left:80px;">channel: #wrk-agent-inbox · approval_method: slack_button</span>
+              </div>
+              <div style="padding:8px 0;border-bottom:1px solid #1e2235;color:#9ca3af;">
+                <span style="color:#4b5563;">15:47:13</span> <span style="color:#8ba4ff;">meeting_intelligence</span> <span style="color:#22c55e;">CREATE</span> act_2026_0220_001, act_2026_0220_002, act_2026_0220_003<br>
+                <span style="color:#4b5563;margin-left:80px;">approved_by: usr_mk · source: mtg_2026_0220_arnoldporter</span>
+              </div>
+              <div style="padding:8px 0;border-bottom:1px solid #1e2235;color:#9ca3af;">
+                <span style="color:#4b5563;">15:53:01</span> <span style="color:#a855f7;">relationship_manager</span> <span style="color:#22c55e;">UPDATE</span> per_sarahchen relationship summary<br>
+                <span style="color:#4b5563;margin-left:80px;">review_state: auto_approved (low_risk: summary_update) · confidence: 0.91</span>
+              </div>
+              <div style="padding:8px 0;color:#9ca3af;">
+                <span style="color:#4b5563;">15:54:22</span> <span style="color:#22c55e;">knowledge_curator</span> <span style="color:#22c55e;">INDEX</span> 5 facts from mtg_2026_0220_arnoldporter<br>
+                <span style="color:#4b5563;margin-left:80px;">review_state: auto_approved (low_risk: index_only) · entities_linked: [ctr_ap_2026, prj_cdc, org_arnoldporter]</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><div class="card-title">Why This Matters</div></div>
+            <div style="font-size:13px;color:#9ca3af;line-height:1.65;">
+              Every line in this log traces an AI action to: <strong style="color:#e1e4ea;">what triggered it</strong> (a meeting note), <strong style="color:#e1e4ea;">what model produced it</strong> (with version), <strong style="color:#e1e4ea;">what data it used</strong> (source_refs), <strong style="color:#e1e4ea;">how confident it was</strong>, <strong style="color:#e1e4ea;">whether a human approved it</strong>, and <strong style="color:#e1e4ea;">who that human was</strong>.<br><br>
+              For a nonprofit accountable to funders, this is credibility. For a legislative office accountable to constituents, this is the difference between viable and career-ending.
+            </div>
+          </div>
+        </div>`
+    }
+  }
+};
+
+let currentPhase = 'today';
+let currentScreen = null;
+const phaseTabsEl = document.querySelector('.phase-tabs');
+const sidebarEl = document.getElementById('sidebar');
+const contentEl = document.getElementById('content');
+
+function setPhase(phase, sourceEl = null, preferredScreen = null) {
+  if (!phases[phase]) {
+    return;
+  }
+
+  currentPhase = phase;
+  const tabs = Array.from(document.querySelectorAll('.phase-tab'));
+  const activeTab = sourceEl || tabs.find(t => t.dataset.phase === phase) || null;
+
+  tabs.forEach(tab => {
+    const isActive = tab === activeTab;
+    tab.classList.toggle('active', isActive);
+    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    tab.tabIndex = isActive ? 0 : -1;
+  });
+
+  renderSidebar();
+  const nextScreen = preferredScreen && phases[phase].screens[preferredScreen]
+    ? preferredScreen
+    : phases[phase].nav[0].items[0].id;
+  setScreen(nextScreen);
+}
+
+function renderSidebar() {
+  const phase = phases[currentPhase];
+  let html = '';
+  phase.nav.forEach(section => {
+    html += `<div class="section-label">${section.section}</div>`;
+    section.items.forEach(item => {
+      const isActive = currentScreen === item.id;
+      const activeClass = isActive ? ' active' : '';
+      const badge = item.badge ? `<span class="badge ${item.badgeClass || ''}">${item.badge}</span>` : '';
+      html += `<button type="button" class="nav-item${activeClass}" data-screen="${item.id}" aria-current="${isActive ? 'page' : 'false'}">
+        <span class="icon">${item.icon}</span>${item.label}${badge}
+      </button>`;
+    });
+  });
+  sidebarEl.innerHTML = html;
+}
+
+function setScreen(id) {
+  if (!phases[currentPhase] || !phases[currentPhase].screens[id]) {
+    return;
+  }
+
+  currentScreen = id;
+  const renderer = phases[currentPhase].screens[id];
+  if (renderer) {
+    contentEl.innerHTML = renderer();
+  }
+
+  if (window.location.hash !== `#${currentPhase}:${id}`) {
+    window.location.hash = `${currentPhase}:${id}`;
+  }
+
+  renderSidebar();
+}
+
+function getInitialStateFromHash() {
+  const hash = window.location.hash.replace('#', '').trim();
+  if (!hash) {
+    return null;
+  }
+
+  const [phase, screen] = hash.split(':');
+  if (!phase || !screen || !phases[phase] || !phases[phase].screens[screen]) {
+    return null;
+  }
+
+  return { phase, screen };
+}
+
+function bindEvents() {
+  phaseTabsEl.addEventListener('click', function (e) {
+    const button = e.target.closest('.phase-tab[data-phase]');
+    if (!button) {
+      return;
+    }
+
+    setPhase(button.dataset.phase, button);
+  });
+
+  phaseTabsEl.addEventListener('keydown', function (e) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+      return;
+    }
+
+    const tabs = Array.from(phaseTabsEl.querySelectorAll('.phase-tab[data-phase]'));
+    const activeIndex = tabs.indexOf(document.activeElement);
+    if (activeIndex === -1) {
+      return;
+    }
+
+    e.preventDefault();
+    let nextIndex = activeIndex;
+
+    if (e.key === 'ArrowRight') {
+      nextIndex = (activeIndex + 1) % tabs.length;
+    } else if (e.key === 'ArrowLeft') {
+      nextIndex = (activeIndex - 1 + tabs.length) % tabs.length;
+    } else if (e.key === 'Home') {
+      nextIndex = 0;
+    } else if (e.key === 'End') {
+      nextIndex = tabs.length - 1;
+    }
+
+    const nextTab = tabs[nextIndex];
+    nextTab.focus();
+    setPhase(nextTab.dataset.phase, nextTab);
+  });
+
+  sidebarEl.addEventListener('click', function (e) {
+    const button = e.target.closest('.nav-item[data-screen]');
+    if (!button) {
+      return;
+    }
+
+    setScreen(button.dataset.screen);
+  });
+
+  window.addEventListener('hashchange', function () {
+    const nextState = getInitialStateFromHash();
+    if (!nextState) {
+      return;
+    }
+
+    if (nextState.phase !== currentPhase || nextState.screen !== currentScreen) {
+      setPhase(nextState.phase, null, nextState.screen);
+    }
+  });
+}
+
+function initialize() {
+  bindEvents();
+
+  const initialState = getInitialStateFromHash();
+  if (initialState) {
+    setPhase(initialState.phase, null, initialState.screen);
+    return;
+  }
+
+  setPhase('today');
+}
+
+initialize();
+</script>
+</body>
+</html>

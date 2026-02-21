@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Storage;
 
 class ProjectDocument extends Model
@@ -81,6 +82,11 @@ class ProjectDocument extends Model
     public function uploadedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    public function boxLink(): HasOne
+    {
+        return $this->hasOne(BoxProjectDocumentLink::class);
     }
 
     // Get the URL to access the document

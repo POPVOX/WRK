@@ -7,6 +7,8 @@ use App\Jobs\IndexDocumentContent;
 use App\Jobs\RunStyleCheck;
 use App\Jobs\SendChatMessage;
 use App\Jobs\SuggestDocumentTags;
+use App\Models\BoxItem;
+use App\Models\BoxProjectDocumentLink;
 use App\Models\Issue;
 use App\Models\Meeting;
 use App\Models\Organization;
@@ -19,9 +21,11 @@ use App\Models\ProjectMilestone;
 use App\Models\ProjectNote;
 use App\Models\ProjectQuestion;
 use App\Models\User;
+use App\Services\Box\BoxProjectDocumentService;
 use App\Services\ChatService;
 use App\Services\DocumentSafety;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
@@ -113,6 +117,12 @@ class ProjectShow extends Component
 
     public $documentFile = null;
 
+    public bool $showBoxLinkForm = false;
+
+    public string $boxItemSearch = '';
+
+    public string $boxLinkVisibility = 'all';
+
     // Notes
     public bool $showNoteForm = false;
 
@@ -191,6 +201,8 @@ class ProjectShow extends Component
             'createdBy',
             'staff',
             'documents.uploadedBy',
+            'boxDocumentLinks.boxItem',
+            'boxDocumentLinks.projectDocument',
             'notes.user',
             'children',
             'parent',
@@ -287,7 +299,7 @@ class ProjectShow extends Component
     // --- Decisions ---
     public function toggleDecisionForm()
     {
-        $this->showDecisionForm = !$this->showDecisionForm;
+        $this->showDecisionForm = ! $this->showDecisionForm;
         $this->resetDecisionForm();
     }
 
@@ -334,7 +346,7 @@ class ProjectShow extends Component
     // --- Milestones ---
     public function toggleMilestoneForm()
     {
-        $this->showMilestoneForm = !$this->showMilestoneForm;
+        $this->showMilestoneForm = ! $this->showMilestoneForm;
         $this->resetMilestoneForm();
     }
 
@@ -434,7 +446,7 @@ class ProjectShow extends Component
     // --- Questions ---
     public function toggleQuestionForm()
     {
-        $this->showQuestionForm = !$this->showQuestionForm;
+        $this->showQuestionForm = ! $this->showQuestionForm;
         $this->resetQuestionForm();
     }
 
@@ -515,7 +527,7 @@ class ProjectShow extends Component
 
     public function toggleAddOrgModal()
     {
-        $this->showAddOrgModal = !$this->showAddOrgModal;
+        $this->showAddOrgModal = ! $this->showAddOrgModal;
         $this->resetOrgForm();
     }
 
@@ -536,7 +548,7 @@ class ProjectShow extends Component
 
     public function linkOrganization()
     {
-        if (!$this->selectedOrgId) {
+        if (! $this->selectedOrgId) {
             return;
         }
 
@@ -578,7 +590,7 @@ class ProjectShow extends Component
 
     public function toggleAddPersonModal()
     {
-        $this->showAddPersonModal = !$this->showAddPersonModal;
+        $this->showAddPersonModal = ! $this->showAddPersonModal;
         $this->resetPersonForm();
     }
 
@@ -599,7 +611,7 @@ class ProjectShow extends Component
 
     public function linkPerson()
     {
-        if (!$this->selectedPersonId) {
+        if (! $this->selectedPersonId) {
             return;
         }
 
@@ -636,7 +648,7 @@ class ProjectShow extends Component
 
     public function toggleAddIssueModal()
     {
-        $this->showAddIssueModal = !$this->showAddIssueModal;
+        $this->showAddIssueModal = ! $this->showAddIssueModal;
         $this->issueSearch = '';
         $this->selectedIssueId = null;
     }
@@ -650,7 +662,7 @@ class ProjectShow extends Component
 
     public function linkIssue()
     {
-        if (!$this->selectedIssueId) {
+        if (! $this->selectedIssueId) {
             return;
         }
 
@@ -685,7 +697,7 @@ class ProjectShow extends Component
 
     public function toggleAddMeetingModal()
     {
-        $this->showAddMeetingModal = !$this->showAddMeetingModal;
+        $this->showAddMeetingModal = ! $this->showAddMeetingModal;
         $this->meetingSearch = '';
         $this->selectedMeetingId = null;
         $this->meetingRelevance = '';
@@ -700,7 +712,7 @@ class ProjectShow extends Component
 
     public function linkMeeting()
     {
-        if (!$this->selectedMeetingId) {
+        if (! $this->selectedMeetingId) {
             return;
         }
 
@@ -729,7 +741,7 @@ class ProjectShow extends Component
     // --- Staff Management ---
     public function toggleAddStaffModal()
     {
-        $this->showAddStaffModal = !$this->showAddStaffModal;
+        $this->showAddStaffModal = ! $this->showAddStaffModal;
         $this->staffSearch = '';
         $this->selectedStaffId = null;
         $this->staffRole = 'contributor';
@@ -744,7 +756,7 @@ class ProjectShow extends Component
 
     public function addStaff()
     {
-        if (!$this->selectedStaffId) {
+        if (! $this->selectedStaffId) {
             return;
         }
 
@@ -781,7 +793,7 @@ class ProjectShow extends Component
     // --- Documents ---
     public function toggleDocumentForm()
     {
-        $this->showDocumentForm = !$this->showDocumentForm;
+        $this->showDocumentForm = ! $this->showDocumentForm;
         $this->resetDocumentForm();
     }
 
@@ -792,6 +804,99 @@ class ProjectShow extends Component
         $this->documentDescription = '';
         $this->documentUrl = '';
         $this->documentFile = null;
+    }
+
+    public function toggleBoxLinkForm(): void
+    {
+        $this->showBoxLinkForm = ! $this->showBoxLinkForm;
+
+        if (! $this->showBoxLinkForm) {
+            $this->boxItemSearch = '';
+            $this->boxLinkVisibility = 'all';
+        }
+    }
+
+    public function linkExistingBoxItem(int $boxItemId): void
+    {
+        $boxItem = BoxItem::query()
+            ->files()
+            ->whereNull('trashed_at')
+            ->find($boxItemId);
+
+        if (! $boxItem) {
+            $this->dispatch('notify', type: 'error', message: 'Box file not found or no longer available.');
+
+            return;
+        }
+
+        try {
+            $service = app(BoxProjectDocumentService::class);
+            $link = $service->linkItemToProject($boxItem, $this->project, Auth::id(), $this->boxLinkVisibility);
+            $service->syncLink($link);
+
+            $this->project->refresh();
+            $this->project->load(['documents.uploadedBy', 'boxDocumentLinks.boxItem', 'boxDocumentLinks.projectDocument']);
+            $this->boxItemSearch = '';
+            $this->showBoxLinkForm = false;
+
+            $this->dispatch('notify', type: 'success', message: 'Box file linked and synced.');
+        } catch (\Throwable $exception) {
+            $this->dispatch('notify', type: 'error', message: 'Box link failed: '.$exception->getMessage());
+        }
+    }
+
+    public function syncBoxLink(int $linkId): void
+    {
+        $link = BoxProjectDocumentLink::query()
+            ->where('project_id', $this->project->id)
+            ->find($linkId);
+
+        if (! $link) {
+            $this->dispatch('notify', type: 'error', message: 'Box link not found for this project.');
+
+            return;
+        }
+
+        try {
+            app(BoxProjectDocumentService::class)->syncLink($link);
+
+            $this->project->refresh();
+            $this->project->load(['documents.uploadedBy', 'boxDocumentLinks.boxItem', 'boxDocumentLinks.projectDocument']);
+            $this->dispatch('notify', type: 'success', message: 'Box link synced.');
+        } catch (\Throwable $exception) {
+            $this->dispatch('notify', type: 'error', message: 'Sync failed: '.$exception->getMessage());
+        }
+    }
+
+    public function unlinkBoxLink(int $linkId): void
+    {
+        $link = BoxProjectDocumentLink::query()
+            ->with('projectDocument')
+            ->where('project_id', $this->project->id)
+            ->find($linkId);
+
+        if (! $link) {
+            $this->dispatch('notify', type: 'error', message: 'Box link not found for this project.');
+
+            return;
+        }
+
+        DB::transaction(function () use ($link) {
+            $linkedDocument = $link->projectDocument;
+            $link->delete();
+
+            if (
+                $linkedDocument &&
+                $linkedDocument->project_id === $this->project->id &&
+                $linkedDocument->type === 'link'
+            ) {
+                $linkedDocument->delete();
+            }
+        });
+
+        $this->project->refresh();
+        $this->project->load(['documents.uploadedBy', 'boxDocumentLinks.boxItem', 'boxDocumentLinks.projectDocument']);
+        $this->dispatch('notify', type: 'success', message: 'Box link removed.');
     }
 
     public function addDocument()
@@ -838,6 +943,11 @@ class ProjectShow extends Component
     {
         $document = ProjectDocument::findOrFail($documentId);
 
+        BoxProjectDocumentLink::query()
+            ->where('project_id', $this->project->id)
+            ->where('project_document_id', $document->id)
+            ->delete();
+
         if ($document->file_path) {
             \Illuminate\Support\Facades\Storage::disk('public')->delete($document->file_path);
         }
@@ -850,7 +960,7 @@ class ProjectShow extends Component
     // --- Notes ---
     public function toggleNoteForm()
     {
-        $this->showNoteForm = !$this->showNoteForm;
+        $this->showNoteForm = ! $this->showNoteForm;
         $this->noteContent = '';
         $this->noteType = 'general';
     }
@@ -877,7 +987,7 @@ class ProjectShow extends Component
     public function togglePinNote(int $noteId)
     {
         $note = ProjectNote::findOrFail($noteId);
-        $note->update(['is_pinned' => !$note->is_pinned]);
+        $note->update(['is_pinned' => ! $note->is_pinned]);
         $this->project->refresh();
     }
 
@@ -895,7 +1005,7 @@ class ProjectShow extends Component
             return;
         }
 
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             $this->projectChatHistory[] = [
                 'role' => 'assistant',
                 'content' => 'AI features are disabled by the administrator.',
@@ -906,7 +1016,7 @@ class ProjectShow extends Component
         }
 
         $chatLimit = config('ai.limits.chat', ['max' => 30, 'decay_seconds' => 60]);
-        $chatKey = 'ai-project-chat:' . Auth::id() . ':' . $this->project->id;
+        $chatKey = 'ai-project-chat:'.Auth::id().':'.$this->project->id;
         if (RateLimiter::tooManyAttempts($chatKey, $chatLimit['max'])) {
             $this->projectChatHistory[] = [
                 'role' => 'assistant',
@@ -968,7 +1078,7 @@ class ProjectShow extends Component
             ->orderBy('created_at')
             ->get();
 
-        $this->projectChatHistory = $messages->map(fn($m) => [
+        $this->projectChatHistory = $messages->map(fn ($m) => [
             'role' => $m->role,
             'content' => $m->content,
             'timestamp' => $m->created_at->format('g:i A'),
@@ -981,14 +1091,14 @@ class ProjectShow extends Component
             return;
         }
 
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             $this->aiNotice = 'AI features are disabled by the administrator.';
 
             return;
         }
 
         $chatLimit = config('ai.limits.chat', ['max' => 30, 'decay_seconds' => 60]);
-        $chatKey = 'ai-chat:' . Auth::id() . ':' . $this->project->id;
+        $chatKey = 'ai-chat:'.Auth::id().':'.$this->project->id;
         if (RateLimiter::tooManyAttempts($chatKey, $chatLimit['max'])) {
             $this->aiNotice = 'You are sending messages too quickly. Please wait a moment.';
 
@@ -1045,14 +1155,14 @@ PROMPT;
     {
         $context = [];
         $context[] = "**Project Name:** {$this->project->name}";
-        $context[] = '**Description:** ' . ($this->project->description ?? 'No description');
+        $context[] = '**Description:** '.($this->project->description ?? 'No description');
         $context[] = "**Status:** {$this->project->status}";
 
         if ($this->project->project_path) {
             $projectDir = base_path($this->project->project_path);
-            $readmePath = $projectDir . '/README.md';
+            $readmePath = $projectDir.'/README.md';
             if (file_exists($readmePath)) {
-                $context[] = "\n## Project README\n" . file_get_contents($readmePath);
+                $context[] = "\n## Project README\n".file_get_contents($readmePath);
             }
         }
 
@@ -1069,12 +1179,12 @@ PROMPT;
     public function viewDocument(int $documentId): void
     {
         $document = ProjectDocument::find($documentId);
-        if (!$document || $document->project_id !== $this->project->id) {
+        if (! $document || $document->project_id !== $this->project->id) {
             return;
         }
 
         $fullPath = base_path($document->file_path);
-        if (!file_exists($fullPath)) {
+        if (! file_exists($fullPath)) {
             return;
         }
 
@@ -1099,18 +1209,18 @@ PROMPT;
     // --- Style Check Methods ---
     public function runStyleCheckQueued(): void
     {
-        if (!$this->viewingDocumentId) {
+        if (! $this->viewingDocumentId) {
             return;
         }
 
-        if (!config('ai.enabled')) {
+        if (! config('ai.enabled')) {
             $this->styleNotice = 'AI features are disabled.';
 
             return;
         }
 
         $limit = config('ai.limits.style_check', ['max' => 10, 'decay_seconds' => 300]);
-        $key = 'ai-style:' . Auth::id() . ':' . $this->project->id;
+        $key = 'ai-style:'.Auth::id().':'.$this->project->id;
         if (RateLimiter::tooManyAttempts($key, $limit['max'])) {
             $this->styleNotice = 'Too many style checks. Please try again in a few minutes.';
 
@@ -1119,17 +1229,17 @@ PROMPT;
         RateLimiter::hit($key, $limit['decay_seconds']);
 
         $document = ProjectDocument::find($this->viewingDocumentId);
-        if (!$document || $document->project_id !== $this->project->id) {
+        if (! $document || $document->project_id !== $this->project->id) {
             return;
         }
 
         $fullPath = base_path($document->file_path);
-        if (!file_exists($fullPath) || !DocumentSafety::withinBase(base_path(), $fullPath)) {
+        if (! file_exists($fullPath) || ! DocumentSafety::withinBase(base_path(), $fullPath)) {
             return;
         }
 
         $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
-        if (!in_array($ext, ['md', 'markdown', 'txt'], true)) {
+        if (! in_array($ext, ['md', 'markdown', 'txt'], true)) {
             return;
         }
 
@@ -1160,11 +1270,11 @@ PROMPT;
 
     public function checkStyleCheckStatus(): void
     {
-        if (!$this->viewingDocumentId || empty($this->documentContent)) {
+        if (! $this->viewingDocumentId || empty($this->documentContent)) {
             return;
         }
         $document = ProjectDocument::find($this->viewingDocumentId);
-        if (!$document || $document->project_id !== $this->project->id) {
+        if (! $document || $document->project_id !== $this->project->id) {
             return;
         }
 
@@ -1200,30 +1310,30 @@ PROMPT;
 
     public function applyAcceptedSuggestions(): void
     {
-        if (!$this->viewingDocumentId) {
+        if (! $this->viewingDocumentId) {
             return;
         }
 
         $document = ProjectDocument::find($this->viewingDocumentId);
-        if (!$document) {
+        if (! $document) {
             return;
         }
 
         $fullPath = base_path($document->file_path);
-        if (!file_exists($fullPath)) {
+        if (! file_exists($fullPath)) {
             return;
         }
 
         $content = $this->documentContent;
         foreach ($this->styleCheckSuggestions as $suggestion) {
-            if ($suggestion['status'] === 'accepted' && !empty($suggestion['original'])) {
+            if ($suggestion['status'] === 'accepted' && ! empty($suggestion['original'])) {
                 $content = str_replace($suggestion['original'], $suggestion['replacement'], $content);
             }
         }
 
         file_put_contents($fullPath, $content);
         $this->documentContent = $content;
-        $this->styleCheckSuggestions = array_values(array_filter($this->styleCheckSuggestions, fn($s) => $s['status'] !== 'accepted'));
+        $this->styleCheckSuggestions = array_values(array_filter($this->styleCheckSuggestions, fn ($s) => $s['status'] !== 'accepted'));
     }
 
     // --- Document Upload Methods ---
@@ -1235,7 +1345,7 @@ PROMPT;
         ]);
 
         $ext = strtolower($this->uploadFile->getClientOriginalExtension());
-        if (!DocumentSafety::isAllowedExtension($ext)) {
+        if (! DocumentSafety::isAllowedExtension($ext)) {
             $this->aiNotice = 'File type not allowed.';
 
             return;
@@ -1245,8 +1355,8 @@ PROMPT;
             ? \Illuminate\Support\Str::slug($this->uploadTitle)
             : pathinfo($this->uploadFile->getClientOriginalName(), PATHINFO_FILENAME);
 
-        $fileName = \Illuminate\Support\Str::limit(preg_replace('/[^A-Za-z0-9\-_]+/', '-', $baseName), 120, '') . '.' . $ext;
-        $dir = 'project_uploads/' . $this->project->id;
+        $fileName = \Illuminate\Support\Str::limit(preg_replace('/[^A-Za-z0-9\-_]+/', '-', $baseName), 120, '').'.'.$ext;
+        $dir = 'project_uploads/'.$this->project->id;
         $path = $this->uploadFile->storeAs($dir, $fileName, 'public');
 
         $fullPath = Storage::disk('public')->path($path);
@@ -1310,19 +1420,19 @@ PROMPT;
     // --- Document Sync Methods ---
     public function previewSyncDocumentsFromFolder(): void
     {
-        if (!$this->project->project_path) {
+        if (! $this->project->project_path) {
             return;
         }
 
         $projectDir = base_path($this->project->project_path);
-        if (!is_dir($projectDir)) {
+        if (! is_dir($projectDir)) {
             return;
         }
 
         $files = $this->scanDirectory($projectDir, DocumentSafety::allowedExtensions());
         $onDisk = [];
         foreach ($files as $file) {
-            $relativePath = str_replace(base_path() . '/', '', $file);
+            $relativePath = str_replace(base_path().'/', '', $file);
             $onDisk[$relativePath] = [
                 'size' => @filesize($file) ?: null,
                 'hash' => DocumentSafety::hashFile($file),
@@ -1338,7 +1448,7 @@ PROMPT;
         $missing = [];
 
         foreach ($onDisk as $path => $meta) {
-            if (!$existingDocs->has($path)) {
+            if (! $existingDocs->has($path)) {
                 $add[] = ['file_path' => $path, 'title' => $meta['title'], 'file_type' => $meta['ext'], 'file_size' => $meta['size']];
             } else {
                 $doc = $existingDocs[$path];
@@ -1350,7 +1460,7 @@ PROMPT;
         }
 
         foreach ($existingDocs as $doc) {
-            if (!isset($onDisk[$doc->file_path])) {
+            if (! isset($onDisk[$doc->file_path])) {
                 $missing[] = ['file_path' => $doc->file_path, 'title' => $doc->title, 'file_size' => $doc->file_size];
             }
         }
@@ -1367,12 +1477,12 @@ PROMPT;
 
     protected function syncDocumentsFromFolder(): void
     {
-        if (!$this->project->project_path) {
+        if (! $this->project->project_path) {
             return;
         }
 
         $projectDir = base_path($this->project->project_path);
-        if (!is_dir($projectDir)) {
+        if (! is_dir($projectDir)) {
             return;
         }
 
@@ -1380,7 +1490,7 @@ PROMPT;
         $seenPaths = [];
 
         foreach ($files as $file) {
-            $relativePath = str_replace(base_path() . '/', '', $file);
+            $relativePath = str_replace(base_path().'/', '', $file);
             $seenPaths[$relativePath] = true;
             $filename = basename($file);
             $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
@@ -1402,7 +1512,7 @@ PROMPT;
                 $dirty['last_seen_at'] = now();
                 $dirty['missing_on_disk'] = false;
 
-                if (!empty($dirty)) {
+                if (! empty($dirty)) {
                     $existing->update($dirty);
                 }
 
@@ -1432,8 +1542,8 @@ PROMPT;
         foreach ($this->project->documents as $doc) {
             if ($doc->type === 'file') {
                 $isSeen = isset($seenPaths[$doc->file_path]);
-                if ($doc->missing_on_disk !== !$isSeen) {
-                    $doc->update(['missing_on_disk' => !$isSeen]);
+                if ($doc->missing_on_disk !== ! $isSeen) {
+                    $doc->update(['missing_on_disk' => ! $isSeen]);
                 }
             }
         }
@@ -1481,22 +1591,22 @@ PROMPT;
 
         // Search results for modals
         $orgResults = $this->orgSearch && strlen($this->orgSearch) >= 2
-            ? Organization::where('name', 'like', '%' . $this->orgSearch . '%')->limit(10)->get()
+            ? Organization::where('name', 'like', '%'.$this->orgSearch.'%')->limit(10)->get()
             : collect();
 
         $personResults = $this->personSearch && strlen($this->personSearch) >= 2
-            ? Person::with('organization')->where('name', 'like', '%' . $this->personSearch . '%')->limit(10)->get()
+            ? Person::with('organization')->where('name', 'like', '%'.$this->personSearch.'%')->limit(10)->get()
             : collect();
 
         $issueResults = $this->issueSearch && strlen($this->issueSearch) >= 2
-            ? Issue::where('name', 'like', '%' . $this->issueSearch . '%')->limit(10)->get()
+            ? Issue::where('name', 'like', '%'.$this->issueSearch.'%')->limit(10)->get()
             : collect();
 
         $meetingResults = $this->meetingSearch && strlen($this->meetingSearch) >= 2
             ? Meeting::with('organizations')
                 ->where(function ($q) {
-                    $q->where('title', 'like', '%' . $this->meetingSearch . '%')
-                        ->orWhere('raw_notes', 'like', '%' . $this->meetingSearch . '%');
+                    $q->where('title', 'like', '%'.$this->meetingSearch.'%')
+                        ->orWhere('raw_notes', 'like', '%'.$this->meetingSearch.'%');
                 })
                 ->orderBy('meeting_date', 'desc')
                 ->limit(10)
@@ -1505,8 +1615,37 @@ PROMPT;
 
         // Staff search - all users for now
         $staffResults = $this->staffSearch && strlen($this->staffSearch) >= 2
-            ? User::where('name', 'like', '%' . $this->staffSearch . '%')->limit(10)->get()
+            ? User::where('name', 'like', '%'.$this->staffSearch.'%')->limit(10)->get()
             : collect();
+
+        $boxItemResults = collect();
+        $boxSearch = trim($this->boxItemSearch);
+        if ($this->activeTab === 'documents' && mb_strlen($boxSearch) >= 2) {
+            $boxItemResults = BoxItem::query()
+                ->files()
+                ->whereNull('trashed_at')
+                ->where(function ($query) use ($boxSearch) {
+                    $query->where('name', 'like', '%'.$boxSearch.'%')
+                        ->orWhere('path_display', 'like', '%'.$boxSearch.'%')
+                        ->orWhere('box_item_id', 'like', '%'.$boxSearch.'%');
+                })
+                ->orderByDesc('modified_at')
+                ->orderBy('name')
+                ->limit(12)
+                ->get();
+        }
+
+        $projectBoxLinks = BoxProjectDocumentLink::query()
+            ->with(['boxItem', 'projectDocument'])
+            ->where('project_id', $this->project->id)
+            ->orderByRaw("CASE sync_status WHEN 'failed' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END")
+            ->orderByDesc('updated_at')
+            ->get();
+
+        $projectDocuments = $this->project->documents()
+            ->with(['uploadedBy', 'boxLink'])
+            ->orderBy('created_at', 'desc')
+            ->get();
 
         return view('livewire.projects.project-show', [
             'statuses' => Project::STATUSES,
@@ -1519,8 +1658,16 @@ PROMPT;
             'issueResults' => $issueResults,
             'meetingResults' => $meetingResults,
             'staffResults' => $staffResults,
+            'projectDocuments' => $projectDocuments,
+            'boxItemResults' => $boxItemResults,
+            'projectBoxLinks' => $projectBoxLinks,
+            'boxVisibilityOptions' => [
+                'all' => 'All Team',
+                'management' => 'Management',
+                'admin' => 'Admin Only',
+            ],
             'noteTypes' => ProjectNote::NOTE_TYPES,
             'staffRoles' => ['lead' => 'Lead', 'contributor' => 'Contributor', 'observer' => 'Observer'],
-        ])->title($this->project->name . ' - Project');
+        ])->title($this->project->name.' - Project');
     }
 }
