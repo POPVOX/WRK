@@ -4,6 +4,8 @@ namespace App\Livewire\Travel;
 
 use App\Models\Organization;
 use App\Models\Trip;
+use App\Models\TripAgentAction;
+use App\Models\TripAgentConversation;
 use App\Models\TripChecklist;
 use App\Models\TripGuest;
 use App\Models\TripSegment;
@@ -11,6 +13,7 @@ use App\Models\TripSponsorship;
 use App\Models\User;
 use App\Services\ItineraryParserService;
 use App\Services\SponsorshipParserService;
+use App\Services\TripAgentService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
@@ -26,6 +29,13 @@ class TripDetail extends Component
 
     #[Url]
     public string $activeTab = 'overview';
+
+    // Agent conversation
+    public ?int $agentConversationId = null;
+
+    public string $agentMessage = '';
+
+    public bool $agentBusy = false;
 
     // Edit mode
     public bool $editing = false;
@@ -279,7 +289,17 @@ class TripDetail extends Component
 
     public function mount(Trip $trip): void
     {
-        $this->trip = $trip->load([
+        $this->trip = $trip;
+        $this->loadTripRelations();
+
+        $this->agentConversationId = TripAgentConversation::query()
+            ->where('trip_id', $this->trip->id)
+            ->value('id');
+    }
+
+    protected function loadTripRelations(): void
+    {
+        $this->trip->load([
             'travelers.travelProfile',
             'guests.segments',
             'destinations',
@@ -1882,6 +1902,180 @@ class TripDetail extends Component
         return $events->sortBy('datetime')->groupBy(fn($e) => $e['datetime']->format('Y-m-d'))->toArray();
     }
 
+    public function sendAgentMessage(TripAgentService $service): void
+    {
+        if (! $this->canUseTripAgent()) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have access to the trip agent.');
+
+            return;
+        }
+
+        $message = trim($this->agentMessage);
+        if ($message === '') {
+            return;
+        }
+
+        $this->agentBusy = true;
+
+        try {
+            $conversation = $this->ensureAgentConversation($service);
+            $result = $service->proposeChanges($this->trip, Auth::user(), $message, $conversation);
+
+            $this->agentConversationId = $conversation->id;
+            $this->agentMessage = '';
+
+            if ($result['action'] ?? null) {
+                $this->dispatch('notify', type: 'success', message: 'Drafted proposed changes. Review and approve to apply.');
+            } else {
+                $this->dispatch('notify', type: 'success', message: 'Message sent to trip agent.');
+            }
+        } catch (\Throwable $exception) {
+            \Log::warning('Trip agent message failed', [
+                'trip_id' => $this->trip->id,
+                'user_id' => Auth::id(),
+                'error' => $exception->getMessage(),
+            ]);
+
+            $this->dispatch('notify', type: 'error', message: 'Trip agent could not process that message right now.');
+        } finally {
+            $this->agentBusy = false;
+        }
+    }
+
+    public function applyAgentAction(int $actionId, TripAgentService $service): void
+    {
+        if (! $this->canEdit()) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to apply trip agent actions.');
+
+            return;
+        }
+
+        $action = TripAgentAction::query()
+            ->where('id', $actionId)
+            ->whereHas('conversation', fn ($query) => $query->where('trip_id', $this->trip->id))
+            ->first();
+
+        if (! $action) {
+            $this->dispatch('notify', type: 'error', message: 'Trip agent action not found.');
+
+            return;
+        }
+
+        $this->agentBusy = true;
+
+        try {
+            $service->applyAction($action, Auth::user());
+            $this->loadTripRelations();
+            $this->dispatch('notify', type: 'success', message: 'Trip updates applied.');
+        } catch (\Throwable $exception) {
+            \Log::warning('Trip agent apply action failed', [
+                'trip_id' => $this->trip->id,
+                'action_id' => $actionId,
+                'user_id' => Auth::id(),
+                'error' => $exception->getMessage(),
+            ]);
+
+            $this->dispatch('notify', type: 'error', message: 'Could not apply this proposal: '.$exception->getMessage());
+        } finally {
+            $this->agentBusy = false;
+        }
+    }
+
+    public function rejectAgentAction(int $actionId, TripAgentService $service): void
+    {
+        if (! $this->canEdit()) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to reject trip agent actions.');
+
+            return;
+        }
+
+        $action = TripAgentAction::query()
+            ->where('id', $actionId)
+            ->whereHas('conversation', fn ($query) => $query->where('trip_id', $this->trip->id))
+            ->first();
+
+        if (! $action) {
+            $this->dispatch('notify', type: 'error', message: 'Trip agent action not found.');
+
+            return;
+        }
+
+        try {
+            $service->rejectAction($action, Auth::user());
+            $this->dispatch('notify', type: 'success', message: 'Proposal rejected.');
+        } catch (\Throwable $exception) {
+            $this->dispatch('notify', type: 'error', message: 'Could not reject this proposal.');
+        }
+    }
+
+    public function getAgentConversationProperty(): ?TripAgentConversation
+    {
+        if (! $this->agentConversationId) {
+            return null;
+        }
+
+        return TripAgentConversation::query()
+            ->where('id', $this->agentConversationId)
+            ->where('trip_id', $this->trip->id)
+            ->first();
+    }
+
+    public function getAgentMessagesProperty(): \Illuminate\Support\Collection
+    {
+        if (! $this->agentConversation) {
+            return collect();
+        }
+
+        return $this->agentConversation->messages()
+            ->with('user')
+            ->orderBy('created_at')
+            ->limit(100)
+            ->get();
+    }
+
+    public function getPendingAgentActionsProperty(): \Illuminate\Support\Collection
+    {
+        if (! $this->agentConversation) {
+            return collect();
+        }
+
+        return $this->agentConversation->actions()
+            ->with('requester')
+            ->where('status', 'pending')
+            ->orderByDesc('created_at')
+            ->get();
+    }
+
+    protected function canUseTripAgent(): bool
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($this->canEdit()) {
+            return true;
+        }
+
+        return $this->trip->isUserTraveler($user);
+    }
+
+    protected function ensureAgentConversation(TripAgentService $service): TripAgentConversation
+    {
+        $conversation = null;
+        if ($this->agentConversationId) {
+            $conversation = TripAgentConversation::query()
+                ->where('id', $this->agentConversationId)
+                ->where('trip_id', $this->trip->id)
+                ->first();
+        }
+
+        $conversation = $service->ensureConversation($this->trip, Auth::user(), $conversation);
+        $this->agentConversationId = $conversation->id;
+
+        return $conversation;
+    }
+
     public function canEdit(): bool
     {
         $user = Auth::user();
@@ -1918,8 +2112,12 @@ class TripDetail extends Component
             'sponsorshipStats' => $this->sponsorshipStats,
             'timeline' => $this->timeline,
             'canEdit' => $this->canEdit(),
+            'canUseTripAgent' => $this->canUseTripAgent(),
             'countries' => $this->countries,
             'organizations' => $this->organizations,
+            'agentConversation' => $this->agentConversation,
+            'agentMessages' => $this->agentMessages,
+            'pendingAgentActions' => $this->pendingAgentActions,
         ])->title($this->title);
     }
 }

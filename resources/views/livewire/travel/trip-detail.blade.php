@@ -143,6 +143,7 @@
         <nav class="flex gap-8 overflow-x-auto" aria-label="Tabs">
             @foreach([
                 'overview' => 'Overview',
+                'agent' => 'Agent',
                 'itinerary' => 'Itinerary',
                 'expenses' => 'Expenses',
                 'sponsorship' => 'Sponsorship',
@@ -322,6 +323,152 @@
                     </div>
                 </div>
             @endif
+
+        @elseif($activeTab === 'agent')
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                        <div class="flex items-start justify-between gap-4 mb-4">
+                            <div>
+                                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Trip Agent</h3>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                    Describe schedule or lodging changes in plain language. The agent drafts a proposal first, then you approve.
+                                </p>
+                            </div>
+                            @if(!$canUseTripAgent)
+                                <span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                                    Read-only
+                                </span>
+                            @endif
+                        </div>
+
+                        @if($canUseTripAgent)
+                            <div class="space-y-3">
+                                <textarea
+                                    wire:model="agentMessage"
+                                    rows="4"
+                                    placeholder="Example: Move this trip to 2026-03-10 through 2026-03-14 and switch hotel to Hilton Brussels Grand Place, check-in 2026-03-10, check-out 2026-03-14."
+                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
+                                <div class="flex items-center justify-end">
+                                    <button
+                                        wire:click="sendAgentMessage"
+                                        wire:loading.attr="disabled"
+                                        wire:target="sendAgentMessage,applyAgentAction,rejectAgentAction"
+                                        class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-60">
+                                        <span wire:loading.remove wire:target="sendAgentMessage">Draft Proposal</span>
+                                        <span wire:loading wire:target="sendAgentMessage">Thinking...</span>
+                                    </button>
+                                </div>
+                            </div>
+                        @else
+                            <p class="text-sm text-amber-600 dark:text-amber-400">
+                                You can view this thread, but only assigned travelers or editors can submit updates.
+                            </p>
+                        @endif
+                    </div>
+
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                        <h4 class="font-semibold text-gray-900 dark:text-white mb-4">Conversation</h4>
+
+                        @if($agentMessages->isEmpty())
+                            <div class="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
+                                No messages yet. Start by describing the trip changes you want.
+                            </div>
+                        @else
+                            <div class="space-y-4">
+                                @foreach($agentMessages as $message)
+                                    @php
+                                        $isUser = $message->role === 'user';
+                                        $meta = is_array($message->meta) ? $message->meta : [];
+                                    @endphp
+                                    <div class="flex {{ $isUser ? 'justify-end' : 'justify-start' }}">
+                                        <div class="max-w-3xl rounded-xl px-4 py-3 {{ $isUser ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100' }}">
+                                            <div class="text-xs mb-1 {{ $isUser ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-400' }}">
+                                                {{ $isUser ? ($message->user?->name ?? 'You') : 'WRK Trip Agent' }} • {{ $message->created_at->format('M j, g:i A') }}
+                                            </div>
+                                            <div class="whitespace-pre-wrap text-sm">{{ $message->content }}</div>
+
+                                            @if(!empty($meta['proposal_summary']))
+                                                <div class="mt-2 text-xs {{ $isUser ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-300' }}">
+                                                    Proposal: {{ $meta['proposal_summary'] }}
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                        <h4 class="font-semibold text-gray-900 dark:text-white mb-4">Pending Approvals</h4>
+
+                        @if($pendingAgentActions->isEmpty())
+                            <p class="text-sm text-gray-500 dark:text-gray-400">No pending proposals.</p>
+                        @else
+                            <div class="space-y-4">
+                                @foreach($pendingAgentActions as $action)
+                                    @php
+                                        $changes = is_array(data_get($action->payload, 'changes')) ? data_get($action->payload, 'changes') : [];
+                                    @endphp
+                                    <div class="p-4 border border-amber-200 dark:border-amber-800 rounded-lg bg-amber-50/50 dark:bg-amber-900/20">
+                                        <div class="text-sm font-medium text-gray-900 dark:text-white">{{ $action->summary ?: 'Trip updates proposed' }}</div>
+                                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            {{ $action->created_at->format('M j, g:i A') }}
+                                            @if($action->requester)
+                                                • Requested by {{ $action->requester->name }}
+                                            @endif
+                                        </div>
+
+                                        <div class="mt-3 space-y-2">
+                                            @foreach($changes as $change)
+                                                <div class="text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded px-2 py-2">
+                                                    @if(($change['type'] ?? '') === 'update_trip_dates')
+                                                        <div class="font-medium">Trip dates</div>
+                                                        <div>Start: {{ $change['start_date'] ?? 'unchanged' }}</div>
+                                                        <div>End: {{ $change['end_date'] ?? 'unchanged' }}</div>
+                                                    @elseif(($change['type'] ?? '') === 'upsert_lodging')
+                                                        <div class="font-medium">Lodging ({{ $change['target'] ?? 'latest' }})</div>
+                                                        <div>Property: {{ $change['property_name'] ?? 'unchanged' }}</div>
+                                                        <div>City/Country: {{ $change['city'] ?? 'unchanged' }}{{ !empty($change['country']) ? ', '.$change['country'] : '' }}</div>
+                                                        <div>Check-in/out: {{ $change['check_in_date'] ?? 'unchanged' }} → {{ $change['check_out_date'] ?? 'unchanged' }}</div>
+                                                    @else
+                                                        <div class="font-medium">Unsupported change</div>
+                                                        <div>{{ $change['type'] ?? 'unknown' }}</div>
+                                                    @endif
+                                                </div>
+                                            @endforeach
+                                        </div>
+
+                                        <div class="mt-3 flex items-center gap-2">
+                                            @if($canEdit)
+                                                <button
+                                                    wire:click="applyAgentAction({{ $action->id }})"
+                                                    wire:loading.attr="disabled"
+                                                    wire:target="applyAgentAction,rejectAgentAction,sendAgentMessage"
+                                                    class="px-3 py-1.5 text-xs rounded bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60">
+                                                    Apply
+                                                </button>
+                                                <button
+                                                    wire:click="rejectAgentAction({{ $action->id }})"
+                                                    wire:loading.attr="disabled"
+                                                    wire:target="applyAgentAction,rejectAgentAction,sendAgentMessage"
+                                                    class="px-3 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 disabled:opacity-60">
+                                                    Reject
+                                                </button>
+                                            @else
+                                                <span class="text-xs text-gray-500 dark:text-gray-400">Only trip editors can approve/apply.</span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
 
         @elseif($activeTab === 'itinerary')
             <!-- Destinations Section -->
