@@ -27,7 +27,7 @@ class TripDetail extends Component
     public Trip $trip;
 
     #[Url]
-    public string $activeTab = 'overview';
+    public string $activeTab = 'agent';
 
     // Agent conversation
     public ?int $agentConversationId = null;
@@ -291,6 +291,10 @@ class TripDetail extends Component
         $this->trip = $trip;
         $this->loadTripRelations();
 
+        if (! in_array($this->activeTab, ['agent', 'overview', 'itinerary', 'expenses', 'sponsorship', 'events', 'documents', 'checklist', 'notes'], true)) {
+            $this->activeTab = 'agent';
+        }
+
         $this->agentConversationId = TripAgentConversation::query()
             ->where('trip_id', $this->trip->id)
             ->value('id');
@@ -324,6 +328,10 @@ class TripDetail extends Component
 
     public function setTab(string $tab): void
     {
+        if (! in_array($tab, ['agent', 'overview', 'itinerary', 'expenses', 'sponsorship', 'events', 'documents', 'checklist', 'notes'], true)) {
+            return;
+        }
+
         $this->activeTab = $tab;
     }
 
@@ -1949,6 +1957,30 @@ class TripDetail extends Component
         }
     }
 
+    public function useAgentPrompt(string $intent): void
+    {
+        $templates = [
+            'dates' => 'Update this trip dates to YYYY-MM-DD through YYYY-MM-DD. Keep all other details the same.',
+            'hotel' => 'Update lodging to [Hotel Name], [City], [Country], check-in YYYY-MM-DD, check-out YYYY-MM-DD.',
+            'flight' => 'Add this flight segment: [Carrier] [Number], depart [Airport/City] [YYYY-MM-DD HH:MM], arrive [Airport/City] [YYYY-MM-DD HH:MM].',
+            'expense' => 'Log an expense: [Category], [Vendor], [Amount] [Currency], date [YYYY-MM-DD], notes [optional].',
+            'summary' => 'Summarize current trip status, key risks, and the next 3 actions.',
+        ];
+
+        $template = $templates[$intent] ?? null;
+        if ($template === null) {
+            return;
+        }
+
+        if (trim($this->agentMessage) !== '') {
+            $this->agentMessage = trim($this->agentMessage)."\n".$template;
+
+            return;
+        }
+
+        $this->agentMessage = $template;
+    }
+
     public function getAgentConversationProperty(): ?TripAgentConversation
     {
         if (! $this->agentConversationId) {
@@ -1971,6 +2003,19 @@ class TripDetail extends Component
             ->with('user')
             ->orderBy('created_at')
             ->limit(100)
+            ->get();
+    }
+
+    public function getRecentAgentActionsProperty(): \Illuminate\Support\Collection
+    {
+        if (! $this->agentConversation) {
+            return collect();
+        }
+
+        return $this->agentConversation->actions()
+            ->with(['requester', 'executor'])
+            ->orderByDesc('created_at')
+            ->limit(8)
             ->get();
     }
 
@@ -2045,6 +2090,7 @@ class TripDetail extends Component
             'organizations' => $this->organizations,
             'agentConversation' => $this->agentConversation,
             'agentMessages' => $this->agentMessages,
+            'recentAgentActions' => $this->recentAgentActions,
         ])->title($this->title);
     }
 }
