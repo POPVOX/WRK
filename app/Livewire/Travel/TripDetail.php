@@ -14,6 +14,7 @@ use App\Services\ItineraryParserService;
 use App\Services\SponsorshipParserService;
 use App\Services\TripAgentService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -256,6 +257,8 @@ class TripDetail extends Component
     public string $expenseMode = 'manual'; // 'manual', 'smart'
 
     // Expense form fields
+    public ?int $expenseTravelerId = null;
+
     public string $expenseCategory = 'other';
 
     public string $expenseDescription = '';
@@ -1444,6 +1447,32 @@ class TripDetail extends Component
             ->get();
     }
 
+    protected function getDefaultExpenseTravelerId(): int
+    {
+        $user = Auth::user();
+
+        if ($user->isManagement()) {
+            return (int) ($this->trip->travelers->first()?->id ?? $user->id);
+        }
+
+        return (int) $user->id;
+    }
+
+    public function getExpenseTravelerOptionsProperty()
+    {
+        $travelers = $this->trip->travelers;
+        $currentUser = Auth::user();
+
+        if (! $travelers->contains('id', $currentUser->id)) {
+            $travelers = $travelers->push($currentUser);
+        }
+
+        return $travelers
+            ->unique('id')
+            ->sortBy('name')
+            ->values();
+    }
+
     // Expense Management
     public function openAddExpense(): void
     {
@@ -1469,6 +1498,7 @@ class TripDetail extends Component
         $this->reset([
             'editingExpenseId',
             'expenseMode',
+            'expenseTravelerId',
             'expenseCategory',
             'expenseDescription',
             'expenseDate',
@@ -1488,9 +1518,51 @@ class TripDetail extends Component
         $this->expenseCategory = 'other';
         $this->expenseCurrency = 'USD';
         $this->expenseReimbursementStatus = 'pending';
+        $this->expenseTravelerId = $this->getDefaultExpenseTravelerId();
 
         // Default to trip start date
         $this->expenseDate = $this->trip->start_date->format('Y-m-d');
+    }
+
+    public function updatedExpenseReceiptFile(): void
+    {
+        if (! $this->expenseReceiptFile) {
+            return;
+        }
+
+        $this->expenseParseError = null;
+
+        $this->expenseParsing = true;
+
+        try {
+            $path = $this->expenseReceiptFile->getRealPath();
+            if (! $path) {
+                $this->expenseParsing = false;
+                return;
+            }
+
+            $parser = new \App\Services\ExpenseParserService();
+            $result = $parser->extractFromReceipt(
+                $path,
+                $this->expenseReceiptFile->getClientOriginalName()
+            );
+
+            if (isset($result['expense']) && is_array($result['expense'])) {
+                $this->extractedExpense = $result['expense'];
+                $this->applyExtractedExpense($result['expense']);
+                $this->dispatch('notify', type: 'success', message: 'Receipt parsed. Review the extracted fields before saving.');
+            } elseif (! empty($result['error'])) {
+                $this->expenseParseError = $result['error'];
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Expense receipt auto-parse failed', [
+                'trip_id' => $this->trip->id,
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage(),
+            ]);
+        } finally {
+            $this->expenseParsing = false;
+        }
     }
 
     public function parseExpenseText(): void
@@ -1563,20 +1635,32 @@ class TripDetail extends Component
         $this->expenseReceiptNumber = $expense->receipt_number ?? '';
         $this->expenseNotes = $expense->notes ?? '';
         $this->expenseReimbursementStatus = $expense->reimbursement_status ?? 'pending';
+        $this->expenseTravelerId = $expense->user_id;
 
         $this->showAddExpense = true;
     }
 
     public function saveExpense(): void
     {
-        $this->validate([
+        $baseRules = [
             'expenseCategory' => 'required|in:' . implode(',', array_keys(\App\Models\TripExpense::getCategoryOptions())),
             'expenseDescription' => 'required|string|max:255',
             'expenseDate' => 'required|date',
             'expenseAmount' => 'required|numeric|min:0',
-        ]);
+        ];
 
         $user = \Illuminate\Support\Facades\Auth::user();
+        $assignableTravelerIds = $this->expenseTravelerOptions->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        if ($user->isManagement()) {
+            $baseRules['expenseTravelerId'] = ['required', 'integer', Rule::in($assignableTravelerIds)];
+        }
+
+        $this->validate($baseRules);
+
+        $resolvedTravelerId = $user->isManagement()
+            ? (int) $this->expenseTravelerId
+            : $user->id;
 
         $data = [
             'category' => $this->expenseCategory,
@@ -1611,6 +1695,7 @@ class TripDetail extends Component
                 // Management can also update status
                 if ($user->isManagement()) {
                     $data['reimbursement_status'] = $this->expenseReimbursementStatus;
+                    $data['user_id'] = $resolvedTravelerId;
                 }
 
                 $expense->update($data);
@@ -1624,7 +1709,7 @@ class TripDetail extends Component
 
         // Create new expense for current user
         $this->trip->expenses()->create(array_merge($data, [
-            'user_id' => $user->id,
+            'user_id' => $resolvedTravelerId,
             'reimbursement_status' => 'pending',
             'ai_extracted' => $this->extractedExpense !== null,
             'source_text' => $this->expenseSmartText ?: null,

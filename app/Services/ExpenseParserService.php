@@ -53,12 +53,24 @@ class ExpenseParserService
     }
 
     /**
-     * Extract text from uploaded receipt image/PDF (placeholder for OCR).
+     * Extract text from an uploaded receipt.
+     *
+     * PDF parsing is supported now; image OCR is future work.
      */
-    public function extractFromReceipt(string $filePath): array
+    public function extractFromReceipt(string $filePath, ?string $originalName = null): array
     {
-        // For now, we'll try to extract text if it's a PDF
-        if (str_ends_with(strtolower($filePath), '.pdf')) {
+        $isPdf = false;
+
+        if ($originalName && str_ends_with(strtolower($originalName), '.pdf')) {
+            $isPdf = true;
+        }
+
+        if (! $isPdf) {
+            $mimeType = @mime_content_type($filePath);
+            $isPdf = $mimeType === 'application/pdf';
+        }
+
+        if ($isPdf) {
             try {
                 $parser = new \Smalot\PdfParser\Parser();
                 $pdf = $parser->parseFile($filePath);
@@ -72,8 +84,7 @@ class ExpenseParserService
             }
         }
 
-        // For images, we'd need OCR integration (future enhancement)
-        return ['expense' => null, 'error' => 'Could not extract text from receipt. Please enter details manually.'];
+        return ['expense' => null, 'error' => 'Auto-extraction currently works best with PDF receipts. You can still fill details manually or paste receipt text below.'];
     }
 
     protected function getSystemPrompt(): string

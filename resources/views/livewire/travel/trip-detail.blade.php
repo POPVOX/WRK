@@ -2077,6 +2077,43 @@ Total: $867 + $112.71 tax = $979.71"
         </div>
     @endif
 
+    @if($canUseTripAgent && $activeTab !== 'agent')
+        <div class="sticky bottom-4 z-30 mt-8">
+            <div class="bg-white/95 dark:bg-gray-800/95 backdrop-blur rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900 dark:text-white">Travel Agent</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Ask questions or request updates without leaving this view.</div>
+                    </div>
+                    <button wire:click="setTab('agent')" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Open full thread</button>
+                </div>
+
+                <div class="flex flex-wrap gap-2 mb-3">
+                    <button wire:click="useAgentPrompt('dates')" class="px-2.5 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">Change dates</button>
+                    <button wire:click="useAgentPrompt('flight')" class="px-2.5 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">Update flights</button>
+                    <button wire:click="useAgentPrompt('hotel')" class="px-2.5 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">Update hotels</button>
+                    <button wire:click="useAgentPrompt('summary')" class="px-2.5 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">Trip summary</button>
+                </div>
+
+                <div class="flex items-end gap-3">
+                    <textarea
+                        wire:model="agentMessage"
+                        rows="2"
+                        placeholder="Chat with your travel agent..."
+                        class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"></textarea>
+                    <button
+                        wire:click="sendAgentMessage"
+                        wire:loading.attr="disabled"
+                        wire:target="sendAgentMessage"
+                        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm disabled:opacity-60">
+                        <span wire:loading.remove wire:target="sendAgentMessage">Enter</span>
+                        <span wire:loading wire:target="sendAgentMessage">Thinking...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
     {{-- Add/Edit Expense Modal --}}
     @if($showAddExpense)
         <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -2084,11 +2121,11 @@ Total: $867 + $112.71 tax = $979.71"
                 <div class="p-6 border-b border-gray-200 dark:border-gray-700">
                     <div class="flex items-center justify-between">
                         <div>
-                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                                💳 {{ $editingExpenseId ? 'Edit Expense' : 'Add Expense' }}
+                            <h3 class="text-2xl font-semibold text-gray-900 dark:text-white">
+                                {{ $editingExpenseId ? 'Edit Expense' : 'Add Expense' }}
                             </h3>
                             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                {{ $editingExpenseId ? 'Update expense details' : 'Record a trip expense for reimbursement' }}
+                                {{ $editingExpenseId ? 'Update expense details' : 'Upload a receipt and we will help extract details.' }}
                             </p>
                         </div>
                         <button wire:click="closeAddExpense" class="text-gray-400 hover:text-gray-600">
@@ -2099,48 +2136,43 @@ Total: $867 + $112.71 tax = $979.71"
                     </div>
                 </div>
 
-                {{-- Mode Tabs - only show when adding --}}
-                @if(!$editingExpenseId)
-                <div class="flex border-b border-gray-200 dark:border-gray-700 px-6">
-                    <button wire:click="setExpenseMode('manual')" 
-                        class="px-4 py-3 text-sm font-medium {{ $expenseMode === 'manual' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700' }}">
-                        ✏️ Manual Entry
-                    </button>
-                    <button wire:click="setExpenseMode('smart')" 
-                        class="px-4 py-3 text-sm font-medium {{ $expenseMode === 'smart' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700' }}">
-                        ✨ Smart Import
-                    </button>
-                </div>
-                @endif
-
                 <div class="flex-1 overflow-y-auto p-6 space-y-5">
-                    {{-- Smart Import Text Area --}}
-                    @if($expenseMode === 'smart' && !$editingExpenseId)
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Paste Receipt or Expense Details
-                                </label>
-                                <textarea wire:model="expenseSmartText" rows="6" 
-                                    placeholder="Paste your receipt text, credit card statement entry, or expense description...
+                    {{-- Receipt Upload --}}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Receipt Image</label>
+                        <label class="block border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-400 transition-colors">
+                            <input type="file" wire:model="expenseReceiptFile" accept=".pdf,.jpg,.jpeg,.png,.gif" class="hidden">
+                            <div class="space-y-2">
+                                <div class="text-4xl text-gray-400">⇪</div>
+                                <p class="text-lg text-gray-700 dark:text-gray-200">Drag and drop your receipt here, or click to browse</p>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">AI will try to extract key details from your receipt (best with PDF)</p>
+                                @if($expenseReceiptFile)
+                                    <p class="text-sm text-indigo-600 dark:text-indigo-400 font-medium">{{ $expenseReceiptFile->getClientOriginalName() }}</p>
+                                @endif
+                                @if($expenseParsing)
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">Parsing receipt...</p>
+                                @endif
+                            </div>
+                        </label>
+                    </div>
 
-Example:
-UBER TRIP
-Jan 22, 2026
-From: DCA Airport  To: Downtown DC
-$45.67 + $5.00 tip = $50.67"
+                    {{-- Optional text extraction fallback --}}
+                    @if(!$editingExpenseId)
+                        <details class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                            <summary class="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300">Paste receipt text instead</summary>
+                            <div class="mt-3 space-y-3">
+                                <textarea wire:model="expenseSmartText" rows="4"
+                                    placeholder="Paste expense/receipt text for AI extraction..."
                                     class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
+                                <div class="flex justify-end">
+                                    <button wire:click="parseExpenseText"
+                                        class="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
+                                        wire:loading.attr="disabled">
+                                        Extract Details
+                                    </button>
+                                </div>
                             </div>
-                            <div class="flex justify-end">
-                                <button wire:click="parseExpenseText" 
-                                    class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
-                                    wire:loading.attr="disabled">
-                                    <span wire:loading wire:target="parseExpenseText" class="animate-spin">⏳</span>
-                                    <span wire:loading.remove wire:target="parseExpenseText">✨</span>
-                                    Extract Details
-                                </button>
-                            </div>
-                        </div>
+                        </details>
                     @endif
 
                     {{-- Parse Error --}}
@@ -2151,7 +2183,7 @@ $45.67 + $5.00 tip = $50.67"
                     @endif
 
                     {{-- Extraction Success --}}
-                    @if($extractedExpense && $expenseMode === 'smart')
+                    @if($extractedExpense)
                         <div class="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-300 text-sm">
                             ✓ Expense details extracted! Review and edit below.
                             @if(isset($extractedExpense['confidence']))
@@ -2160,11 +2192,24 @@ $45.67 + $5.00 tip = $50.67"
                         </div>
                     @endif
 
-                    {{-- Manual Form Fields --}}
-                    @if($expenseMode === 'manual' || $extractedExpense || $editingExpenseId)
-                        <div class="space-y-4">
-                            {{-- Category & Amount --}}
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {{-- Form Fields --}}
+                    <div class="space-y-4">
+                            {{-- Traveler + Category --}}
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Traveler</label>
+                                    <select wire:model="expenseTravelerId"
+                                        @disabled(!Auth::user()->isManagement())
+                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-50 disabled:text-gray-600 dark:disabled:bg-gray-700/60 dark:disabled:text-gray-300">
+                                        @foreach($this->expenseTravelerOptions as $traveler)
+                                            <option value="{{ $traveler->id }}">{{ $traveler->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    @if(!Auth::user()->isManagement())
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">You can submit expenses for yourself.</p>
+                                    @endif
+                                    @error('expenseTravelerId') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                                </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category *</label>
                                     <select wire:model="expenseCategory" 
@@ -2174,8 +2219,12 @@ $45.67 + $5.00 tip = $50.67"
                                         @endforeach
                                     </select>
                                 </div>
+                            </div>
+
+                            {{-- Amount & Date --}}
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount *</label>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount (USD) *</label>
                                     <div class="flex">
                                         <span class="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-400 text-sm">$</span>
                                         <input type="number" step="0.01" wire:model="expenseAmount" 
@@ -2192,38 +2241,29 @@ $45.67 + $5.00 tip = $50.67"
                                 </div>
                             </div>
 
+                            {{-- Vendor --}}
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vendor/Merchant</label>
+                                <input type="text" wire:model="expenseVendor" 
+                                    placeholder="Restaurant name, store, etc."
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            </div>
+
                             {{-- Description --}}
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description *</label>
-                                <input type="text" wire:model="expenseDescription" 
-                                    placeholder="e.g., Uber from airport to hotel"
-                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                <textarea wire:model="expenseDescription" rows="3"
+                                    placeholder="What was this expense for?"
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
                                 @error('expenseDescription') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                             </div>
 
-                            {{-- Vendor & Receipt Number --}}
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vendor/Merchant</label>
-                                    <input type="text" wire:model="expenseVendor" 
-                                        placeholder="e.g., Uber, Delta, Marriott"
-                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Receipt/Confirmation #</label>
-                                    <input type="text" wire:model="expenseReceiptNumber" 
-                                        placeholder="Optional"
-                                        class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                                </div>
-                            </div>
-
-                            {{-- Receipt Upload --}}
+                            {{-- Receipt Number --}}
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Receipt Upload</label>
-                                <input type="file" wire:model="expenseReceiptFile" 
-                                    accept=".pdf,.jpg,.jpeg,.png,.gif"
-                                    class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
-                                <p class="text-xs text-gray-500 mt-1">Upload a photo or PDF of your receipt</p>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Receipt/Confirmation #</label>
+                                <input type="text" wire:model="expenseReceiptNumber" 
+                                    placeholder="Optional"
+                                    class="w-full border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                             </div>
 
                             {{-- Notes --}}
@@ -2246,21 +2286,18 @@ $45.67 + $5.00 tip = $50.67"
                                     </select>
                                 </div>
                             @endif
-                        </div>
-                    @endif
+                    </div>
                 </div>
 
                 {{-- Footer --}}
                 <div class="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end gap-3">
                     <button wire:click="closeAddExpense" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800">Cancel</button>
-                    @if($expenseMode === 'manual' || $extractedExpense || $editingExpenseId)
-                        <button wire:click="saveExpense" 
-                            class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
-                            wire:loading.attr="disabled">
-                            <span wire:loading wire:target="saveExpense" class="animate-spin">⏳</span>
-                            {{ $editingExpenseId ? 'Update Expense' : 'Save Expense' }}
-                        </button>
-                    @endif
+                    <button wire:click="saveExpense" 
+                        class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                        wire:loading.attr="disabled">
+                        <span wire:loading wire:target="saveExpense" class="animate-spin">⏳</span>
+                        {{ $editingExpenseId ? 'Update Expense' : 'Submit Expense' }}
+                    </button>
                 </div>
             </div>
         </div>
