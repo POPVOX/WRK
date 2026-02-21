@@ -5,6 +5,7 @@ use App\Models\TripAgentAction;
 use App\Models\TripAgentConversation;
 use App\Models\TripAgentMessage;
 use App\Models\TripLodging;
+use App\Models\TripSegment;
 use App\Models\User;
 use App\Services\TripAgentService;
 use Illuminate\Support\Facades\Http;
@@ -90,6 +91,87 @@ test('trip agent applies action immediately from ai response', function () {
     ]);
 });
 
+test('trip agent imports itinerary segments from long message text', function () {
+    config()->set('services.anthropic.api_key', 'test-anthropic-key');
+    config()->set('ai.enabled', true);
+
+    Http::fake([
+        'https://api.anthropic.com/v1/messages' => Http::sequence()
+            ->push([
+                'content' => [
+                    [
+                        'text' => json_encode([
+                            'assistant_response' => 'Processing itinerary details.',
+                            'summary' => 'No actionable update detected',
+                            'changes' => [],
+                        ], JSON_THROW_ON_ERROR),
+                    ],
+                ],
+            ], 200)
+            ->push([
+                'content' => [
+                    [
+                        'text' => json_encode([
+                            'segments' => [
+                                [
+                                    'type' => 'flight',
+                                    'carrier' => 'American Airlines',
+                                    'carrier_code' => 'AA',
+                                    'segment_number' => '1679',
+                                    'departure_location' => 'DCA',
+                                    'arrival_location' => 'MIA',
+                                    'departure_datetime' => '2026-02-22T07:00',
+                                    'arrival_datetime' => '2026-02-22T10:03',
+                                    'seat_assignment' => '27A',
+                                    'cabin_class' => 'economy',
+                                    'confidence' => 0.93,
+                                ],
+                                [
+                                    'type' => 'flight',
+                                    'carrier' => 'American Airlines',
+                                    'carrier_code' => 'AA',
+                                    'segment_number' => '2742',
+                                    'departure_location' => 'UVF',
+                                    'arrival_location' => 'MIA',
+                                    'departure_datetime' => '2026-02-27T15:48',
+                                    'arrival_datetime' => '2026-02-27T18:55',
+                                    'seat_assignment' => '22F',
+                                    'cabin_class' => 'economy',
+                                    'confidence' => 0.91,
+                                ],
+                            ],
+                            'parsing_notes' => 'Parsed two flight segments',
+                        ], JSON_THROW_ON_ERROR),
+                    ],
+                ],
+            ], 200),
+    ]);
+
+    $user = User::factory()->admin()->create();
+    $trip = createTripForAgentTest($user);
+    $trip->travelers()->attach($user->id, ['role' => 'lead']);
+
+    $service = app(TripAgentService::class);
+    $result = $service->proposeChanges(
+        $trip,
+        $user,
+        "Here are new travel details. FLIGHTS:\nAA1679 DCA to MIA Feb 22 7:00am arrive 10:03am seat 27A.\nAA2742 UVF to MIA Feb 27 3:48pm arrive 6:55pm seat 22F.\nPlease update accordingly."
+    );
+
+    $action = $result['action'];
+    $trip->refresh();
+
+    expect($action)->not->toBeNull();
+    expect($action->status)->toBe('applied');
+    expect(TripSegment::where('trip_id', $trip->id)->count())->toBe(2);
+    expect(TripSegment::where('trip_id', $trip->id)->where('user_id', $user->id)->count())->toBe(2);
+
+    $executionLog = $action->execution_log ?? [];
+    $segmentImportLog = collect($executionLog)->firstWhere('type', 'import_itinerary_segments');
+    expect($segmentImportLog)->not->toBeNull();
+    expect((int) ($segmentImportLog['created_count'] ?? 0))->toBe(2);
+});
+
 test('trip agent applies approved action to trip dates and lodging', function () {
     $user = User::factory()->admin()->create();
     $trip = createTripForAgentTest($user);
@@ -156,4 +238,66 @@ test('trip agent applies approved action to trip dates and lodging', function ()
     expect($lodging->check_out_date?->format('Y-m-d'))->toBe('2026-03-14');
     expect($action->status)->toBe('applied');
     expect($action->executed_by)->toBe($user->id);
+});
+
+test('trip agent does not overwrite multiple lodging updates in one action', function () {
+    $user = User::factory()->admin()->create();
+    $trip = createTripForAgentTest($user);
+
+    TripLodging::create([
+        'trip_id' => $trip->id,
+        'property_name' => 'Existing Hotel',
+        'city' => 'Brussels',
+        'country' => 'BE',
+        'check_in_date' => '2026-03-01',
+        'check_out_date' => '2026-03-03',
+    ]);
+
+    $conversation = TripAgentConversation::create([
+        'trip_id' => $trip->id,
+        'user_id' => $user->id,
+        'title' => 'Trip Agent Thread',
+    ]);
+
+    $assistantMessage = TripAgentMessage::create([
+        'conversation_id' => $conversation->id,
+        'role' => 'assistant',
+        'content' => 'Apply lodging updates',
+    ]);
+
+    $action = TripAgentAction::create([
+        'conversation_id' => $conversation->id,
+        'proposed_by_message_id' => $assistantMessage->id,
+        'requested_by' => $user->id,
+        'status' => 'pending',
+        'summary' => 'Two lodging updates',
+        'payload' => [
+            'changes' => [
+                [
+                    'type' => 'upsert_lodging',
+                    'target' => 'latest',
+                    'property_name' => 'Ocean Edge Lodge',
+                    'city' => 'Roseau',
+                    'country' => 'DM',
+                    'check_in_date' => '2026-02-22',
+                    'check_out_date' => '2026-02-25',
+                ],
+                [
+                    'type' => 'upsert_lodging',
+                    'target' => 'latest',
+                    'property_name' => 'Bay Gardens Inn',
+                    'city' => 'Gros Islet',
+                    'country' => 'LC',
+                    'check_in_date' => '2026-02-25',
+                    'check_out_date' => '2026-02-27',
+                ],
+            ],
+        ],
+    ]);
+
+    $service = app(TripAgentService::class);
+    $service->applyAction($action, $user);
+
+    expect(TripLodging::where('trip_id', $trip->id)->where('property_name', 'Ocean Edge Lodge')->exists())->toBeTrue();
+    expect(TripLodging::where('trip_id', $trip->id)->where('property_name', 'Bay Gardens Inn')->exists())->toBeTrue();
 });

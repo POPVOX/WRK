@@ -168,7 +168,7 @@
             ] as $key => $label)
                 <button
                     wire:click="setTab('{{ $key }}')"
-                    class="px-3 py-1.5 rounded-full text-xs font-medium transition {{ $activeTab === $key
+                    class="px-3 py-1.5 rounded-full text-sm font-medium transition {{ $activeTab === $key
                         ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
                         : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' }}">
                     {{ $label }}
@@ -369,19 +369,19 @@
                         @if($canUseTripAgent)
                             <div class="space-y-4">
                                 <div class="flex flex-wrap gap-2">
-                                    <button wire:click="useAgentPrompt('dates')" class="px-3 py-1.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
+                                    <button wire:click="useAgentPrompt('dates')" class="px-3 py-1.5 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
                                         Change dates
                                     </button>
-                                    <button wire:click="useAgentPrompt('hotel')" class="px-3 py-1.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
+                                    <button wire:click="useAgentPrompt('hotel')" class="px-3 py-1.5 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
                                         Update hotel
                                     </button>
-                                    <button wire:click="useAgentPrompt('flight')" class="px-3 py-1.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
+                                    <button wire:click="useAgentPrompt('flight')" class="px-3 py-1.5 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
                                         Add flight
                                     </button>
-                                    <button wire:click="useAgentPrompt('expense')" class="px-3 py-1.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
+                                    <button wire:click="useAgentPrompt('expense')" class="px-3 py-1.5 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
                                         Log expense
                                     </button>
-                                    <button wire:click="useAgentPrompt('summary')" class="px-3 py-1.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
+                                    <button wire:click="useAgentPrompt('summary')" class="px-3 py-1.5 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
                                         Summarize trip
                                     </button>
                                 </div>
@@ -429,7 +429,7 @@
                                             <div class="text-xs mb-1 {{ $isUser ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-400' }}">
                                                 {{ $isUser ? ($message->user?->name ?? 'You') : 'WRK Trip Agent' }} • {{ $message->created_at->format('M j, g:i A') }}
                                             </div>
-                                            <div class="whitespace-pre-wrap text-sm">{{ $message->content }}</div>
+                                            <div class="whitespace-pre-wrap text-sm max-h-80 overflow-y-auto pr-1">{{ $message->content }}</div>
 
                                             @if(!empty($meta['proposal_summary']))
                                                 <div class="mt-2 text-xs {{ $isUser ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-300' }}">
@@ -528,15 +528,6 @@
                         @endif
                     </div>
 
-                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                        <h4 class="font-semibold text-gray-900 dark:text-white mb-4">Open Data Sections</h4>
-                        <div class="grid grid-cols-2 gap-2">
-                            <button wire:click="setTab('itinerary')" class="px-3 py-2 text-xs rounded border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">Itinerary</button>
-                            <button wire:click="setTab('expenses')" class="px-3 py-2 text-xs rounded border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">Expenses</button>
-                            <button wire:click="setTab('documents')" class="px-3 py-2 text-xs rounded border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">Documents</button>
-                            <button wire:click="setTab('events')" class="px-3 py-2 text-xs rounded border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">Events</button>
-                        </div>
-                    </div>
                 </div>
             </div>
 

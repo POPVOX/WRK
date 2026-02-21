@@ -7,6 +7,7 @@ use App\Models\TripAgentAction;
 use App\Models\TripAgentConversation;
 use App\Models\TripAgentMessage;
 use App\Models\TripLodging;
+use App\Models\TripSegment;
 use App\Models\User;
 use App\Support\AI\AnthropicClient;
 use Carbon\Carbon;
@@ -51,8 +52,17 @@ class TripAgentService
 
         $proposal = $this->buildProposal($trip, $cleanMessage);
         $changes = is_array($proposal['changes'] ?? null) ? $proposal['changes'] : [];
+        $changes = $this->enrichChangesFromRawMessage($trip, $user, $cleanMessage, $changes);
         $assistantResponse = trim((string) ($proposal['assistant_response'] ?? ''));
         $summary = trim((string) ($proposal['summary'] ?? ''));
+
+        if (! empty($changes) && ($summary === '' || Str::contains(Str::lower($summary), ['no actionable', 'not detect']))) {
+            $summary = $this->buildChangeSummary($changes);
+        }
+
+        if (! empty($changes)) {
+            $assistantResponse = sprintf('I identified %d update(s) and I am applying them now.', count($changes));
+        }
 
         if ($assistantResponse === '') {
             $assistantResponse = empty($changes)
@@ -158,6 +168,7 @@ class TripAgentService
         $changes = is_array($action->payload['changes'] ?? null)
             ? $action->payload['changes']
             : [];
+        $changes = $this->normalizeLodgingTargets($changes);
 
         if (empty($changes)) {
             throw new \RuntimeException('Action has no changes to apply.');
@@ -195,6 +206,14 @@ class TripAgentService
                     continue;
                 }
 
+                if ($type === 'import_itinerary_segments') {
+                    $log = $this->applyItinerarySegmentsChange($trip, $change, $user);
+                    if ($log !== null) {
+                        $executionLog[] = $log;
+                    }
+                    continue;
+                }
+
                 $executionLog[] = [
                     'type' => $type !== '' ? $type : 'unknown',
                     'status' => 'ignored',
@@ -211,9 +230,12 @@ class TripAgentService
             ]);
 
             $summary = trim((string) $action->summary);
+            $executionSummary = $this->buildExecutionSummary($executionLog);
             $conversation->messages()->create([
                 'role' => 'assistant',
-                'content' => $summary !== '' ? "Applied: {$summary}" : 'Applied your update to the trip records.',
+                'content' => $executionSummary !== ''
+                    ? $executionSummary
+                    : ($summary !== '' ? "Applied: {$summary}" : 'Applied your update to the trip records.'),
                 'meta' => [
                     'action_id' => $action->id,
                     'status' => 'applied',
@@ -247,6 +269,7 @@ Rules:
 - Supported change types for this phase:
   1) "update_trip_dates"
   2) "upsert_lodging"
+- Do NOT claim flight or itinerary changes unless they appear explicitly in "changes".
 - If info is ambiguous, set missing fields to null and explain in assistant_response.
 - Keep assistant_response concise and action-oriented.
 
@@ -467,6 +490,98 @@ PROMPT;
     }
 
     /**
+     * @param  array<int,array<string,mixed>>  $changes
+     * @return array<int,array<string,mixed>>
+     */
+    protected function enrichChangesFromRawMessage(Trip $trip, User $user, string $message, array $changes): array
+    {
+        $changes = $this->normalizeLodgingTargets($changes);
+
+        if (! $this->shouldAttemptItineraryParse($message)) {
+            return $changes;
+        }
+
+        $itineraryChange = $this->buildItinerarySegmentsChange($trip, $user, $message);
+        if ($itineraryChange !== null) {
+            $changes[] = $itineraryChange;
+        }
+
+        return $changes;
+    }
+
+    /**
+     * @param  array<int,array<string,mixed>>  $changes
+     * @return array<int,array<string,mixed>>
+     */
+    protected function normalizeLodgingTargets(array $changes): array
+    {
+        $lodgingCount = 0;
+
+        foreach ($changes as $index => $change) {
+            if (! is_array($change) || strtolower((string) ($change['type'] ?? '')) !== 'upsert_lodging') {
+                continue;
+            }
+
+            $target = strtolower((string) ($change['target'] ?? 'latest'));
+            if (! in_array($target, ['latest', 'first', 'new'], true)) {
+                $target = 'latest';
+            }
+
+            if ($target === 'latest' && $lodgingCount > 0) {
+                $target = 'new';
+            }
+
+            $changes[$index]['target'] = $target;
+            $lodgingCount++;
+        }
+
+        return $changes;
+    }
+
+    protected function shouldAttemptItineraryParse(string $message): bool
+    {
+        $trimmed = trim($message);
+        if (strlen($trimmed) < 120) {
+            return false;
+        }
+
+        $lower = Str::lower($trimmed);
+        if (Str::contains($lower, ['flight', 'flights', 'itinerary', 'departure', 'arrival', 'segment', 'carrier'])) {
+            return true;
+        }
+
+        preg_match_all('/\b[A-Z]{3}\b/', $trimmed, $matches);
+        $airportCodeCount = count(array_unique($matches[0] ?? []));
+
+        return $airportCodeCount >= 2;
+    }
+
+    /**
+     * @return array<string,mixed>|null
+     */
+    protected function buildItinerarySegmentsChange(Trip $trip, User $user, string $message): ?array
+    {
+        $parser = new ItineraryParserService();
+        $result = $parser->parseText($message);
+        $segments = is_array($result['segments'] ?? null) ? $result['segments'] : [];
+
+        if ($segments === []) {
+            return null;
+        }
+
+        $assignment = $this->resolveSegmentAssignment($trip, $user);
+
+        return [
+            'type' => 'import_itinerary_segments',
+            'user_id' => $assignment['user_id'],
+            'trip_guest_id' => $assignment['trip_guest_id'],
+            'segments' => array_values($segments),
+            'source' => 'message_parser',
+            'parsing_notes' => $this->nullableTrimmedString($result['parsing_notes'] ?? null),
+        ];
+    }
+
+    /**
      * @param  array<string,mixed>  $change
      * @return array<string,mixed>|null
      */
@@ -615,6 +730,281 @@ PROMPT;
             'check_in_date' => $lodging->check_in_date?->format('Y-m-d'),
             'check_out_date' => $lodging->check_out_date?->format('Y-m-d'),
         ];
+    }
+
+    /**
+     * @param  array<string,mixed>  $change
+     * @return array<string,mixed>|null
+     */
+    protected function applyItinerarySegmentsChange(Trip $trip, array $change, User $user): ?array
+    {
+        $segments = is_array($change['segments'] ?? null) ? $change['segments'] : [];
+        if ($segments === []) {
+            return null;
+        }
+
+        $assignment = $this->resolveSegmentAssignment(
+            $trip,
+            $user,
+            isset($change['user_id']) && is_numeric($change['user_id']) ? (int) $change['user_id'] : null,
+            isset($change['trip_guest_id']) && is_numeric($change['trip_guest_id']) ? (int) $change['trip_guest_id'] : null
+        );
+
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+
+        foreach ($segments as $rawSegment) {
+            if (! is_array($rawSegment)) {
+                $skipped++;
+                continue;
+            }
+
+            $segment = $this->normalizeSegmentForImport($rawSegment);
+            if ($segment === null) {
+                $skipped++;
+                continue;
+            }
+
+            $existing = $trip->segments()
+                ->where('user_id', $assignment['user_id'])
+                ->where('trip_guest_id', $assignment['trip_guest_id'])
+                ->where('type', $segment['type'])
+                ->where('departure_location', $segment['departure_location'])
+                ->where('arrival_location', $segment['arrival_location'])
+                ->where('departure_datetime', $segment['departure_datetime'])
+                ->first();
+
+            if ($existing) {
+                $existing->update(array_merge($segment, [
+                    'user_id' => $assignment['user_id'],
+                    'trip_guest_id' => $assignment['trip_guest_id'],
+                    'ai_extracted' => true,
+                ]));
+                $updated++;
+                continue;
+            }
+
+            $trip->segments()->create(array_merge($segment, [
+                'user_id' => $assignment['user_id'],
+                'trip_guest_id' => $assignment['trip_guest_id'],
+                'ai_extracted' => true,
+            ]));
+            $created++;
+        }
+
+        return [
+            'type' => 'import_itinerary_segments',
+            'status' => ($created + $updated) > 0 ? 'applied' : 'no_change',
+            'created_count' => $created,
+            'updated_count' => $updated,
+            'skipped_count' => $skipped,
+            'assigned_user_id' => $assignment['user_id'],
+            'assigned_trip_guest_id' => $assignment['trip_guest_id'],
+        ];
+    }
+
+    /**
+     * @param  array<string,mixed>  $segment
+     * @return array<string,mixed>|null
+     */
+    protected function normalizeSegmentForImport(array $segment): ?array
+    {
+        $departureLocation = strtoupper(trim((string) ($segment['departure_location'] ?? '')));
+        $arrivalLocation = strtoupper(trim((string) ($segment['arrival_location'] ?? '')));
+
+        if ($departureLocation === '' || $arrivalLocation === '') {
+            return null;
+        }
+
+        try {
+            $departureDatetime = Carbon::parse((string) ($segment['departure_datetime'] ?? ''))->format('Y-m-d H:i:s');
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $arrivalDatetime = null;
+        if (! empty($segment['arrival_datetime'])) {
+            try {
+                $arrivalDatetime = Carbon::parse((string) $segment['arrival_datetime'])->format('Y-m-d H:i:s');
+            } catch (\Throwable) {
+                $arrivalDatetime = null;
+            }
+        }
+
+        $type = strtolower(trim((string) ($segment['type'] ?? 'other_transport')));
+        if (! in_array($type, array_keys(TripSegment::getTypeOptions()), true)) {
+            $type = 'other_transport';
+        }
+
+        $cabinClass = $this->nullableTrimmedString($segment['cabin_class'] ?? null);
+        if ($cabinClass !== null && ! in_array($cabinClass, array_keys(TripSegment::getCabinClassOptions()), true)) {
+            $cabinClass = null;
+        }
+
+        $cost = null;
+        if (isset($segment['cost']) && is_numeric($segment['cost'])) {
+            $cost = (float) $segment['cost'];
+        }
+
+        $currency = strtoupper((string) ($segment['currency'] ?? 'USD'));
+        if (strlen($currency) !== 3) {
+            $currency = 'USD';
+        }
+
+        return [
+            'type' => $type,
+            'carrier' => $this->nullableTrimmedString($segment['carrier'] ?? null),
+            'carrier_code' => $this->nullableTrimmedString($segment['carrier_code'] ?? null),
+            'segment_number' => $this->nullableTrimmedString($segment['segment_number'] ?? null),
+            'confirmation_number' => $this->nullableTrimmedString($segment['confirmation_number'] ?? null),
+            'departure_location' => $departureLocation,
+            'departure_city' => $this->nullableTrimmedString($segment['departure_city'] ?? null),
+            'departure_datetime' => $departureDatetime,
+            'departure_terminal' => $this->nullableTrimmedString($segment['departure_terminal'] ?? null),
+            'arrival_location' => $arrivalLocation,
+            'arrival_city' => $this->nullableTrimmedString($segment['arrival_city'] ?? null),
+            'arrival_datetime' => $arrivalDatetime,
+            'arrival_terminal' => $this->nullableTrimmedString($segment['arrival_terminal'] ?? null),
+            'seat_assignment' => $this->nullableTrimmedString($segment['seat_assignment'] ?? null),
+            'cabin_class' => $cabinClass,
+            'cost' => $cost,
+            'currency' => $currency,
+            'notes' => $this->nullableTrimmedString($segment['notes'] ?? null),
+            'ai_confidence' => isset($segment['confidence']) && is_numeric($segment['confidence'])
+                ? round((float) $segment['confidence'], 2)
+                : null,
+        ];
+    }
+
+    /**
+     * @return array{user_id:int|null,trip_guest_id:int|null}
+     */
+    protected function resolveSegmentAssignment(Trip $trip, User $user, ?int $requestedUserId = null, ?int $requestedGuestId = null): array
+    {
+        $trip->loadMissing(['travelers', 'guests']);
+
+        if ($requestedUserId !== null && $trip->travelers->contains('id', $requestedUserId)) {
+            return ['user_id' => $requestedUserId, 'trip_guest_id' => null];
+        }
+
+        if ($requestedGuestId !== null && $trip->guests->contains('id', $requestedGuestId)) {
+            return ['user_id' => null, 'trip_guest_id' => $requestedGuestId];
+        }
+
+        if ($trip->travelers->contains('id', $user->id)) {
+            return ['user_id' => $user->id, 'trip_guest_id' => null];
+        }
+
+        $leadTraveler = $trip->travelers()->wherePivot('role', 'lead')->first();
+        if ($leadTraveler) {
+            return ['user_id' => $leadTraveler->id, 'trip_guest_id' => null];
+        }
+
+        $firstTraveler = $trip->travelers->first();
+        if ($firstTraveler) {
+            return ['user_id' => $firstTraveler->id, 'trip_guest_id' => null];
+        }
+
+        $firstGuest = $trip->guests->first();
+        if ($firstGuest) {
+            return ['user_id' => null, 'trip_guest_id' => $firstGuest->id];
+        }
+
+        return ['user_id' => null, 'trip_guest_id' => null];
+    }
+
+    /**
+     * @param  array<int,array<string,mixed>>  $executionLog
+     */
+    protected function buildExecutionSummary(array $executionLog): string
+    {
+        $parts = [];
+        $ignored = 0;
+
+        foreach ($executionLog as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+
+            $type = (string) ($entry['type'] ?? '');
+            $status = (string) ($entry['status'] ?? '');
+
+            if ($status === 'ignored') {
+                $ignored++;
+                continue;
+            }
+
+            if ($type === 'update_trip_dates') {
+                if ($status === 'applied') {
+                    $to = is_array($entry['to'] ?? null) ? $entry['to'] : [];
+                    $start = $to['start_date'] ?? null;
+                    $end = $to['end_date'] ?? null;
+                    $parts[] = $start && $end
+                        ? "Trip dates set to {$start} through {$end}"
+                        : 'Trip dates updated';
+                }
+                continue;
+            }
+
+            if ($type === 'upsert_lodging') {
+                $mode = (string) ($entry['mode'] ?? 'updated');
+                $property = (string) ($entry['property_name'] ?? 'lodging');
+                $parts[] = ucfirst($mode)." lodging: {$property}";
+                continue;
+            }
+
+            if ($type === 'import_itinerary_segments') {
+                $created = (int) ($entry['created_count'] ?? 0);
+                $updated = (int) ($entry['updated_count'] ?? 0);
+                $skipped = (int) ($entry['skipped_count'] ?? 0);
+                $parts[] = "Imported itinerary segments: {$created} created, {$updated} updated, {$skipped} skipped";
+            }
+        }
+
+        if ($parts === [] && $ignored > 0) {
+            return "I processed your request, but only unsupported updates were found ({$ignored} skipped).";
+        }
+
+        if ($parts === []) {
+            return 'I processed your request, but no records were changed.';
+        }
+
+        $message = 'Applied updates: '.implode('; ', $parts).'.';
+        if ($ignored > 0) {
+            $message .= " {$ignored} unsupported update(s) were skipped.";
+        }
+
+        return $message;
+    }
+
+    /**
+     * @param  array<int,array<string,mixed>>  $changes
+     */
+    protected function buildChangeSummary(array $changes): string
+    {
+        $parts = [];
+
+        $dateUpdates = collect($changes)->where('type', 'update_trip_dates')->count();
+        if ($dateUpdates > 0) {
+            $parts[] = $dateUpdates === 1 ? 'trip dates' : "{$dateUpdates} date updates";
+        }
+
+        $lodgingUpdates = collect($changes)->where('type', 'upsert_lodging')->count();
+        if ($lodgingUpdates > 0) {
+            $parts[] = $lodgingUpdates === 1 ? 'lodging' : "{$lodgingUpdates} lodging updates";
+        }
+
+        $segmentImports = collect($changes)->where('type', 'import_itinerary_segments')->count();
+        if ($segmentImports > 0) {
+            $parts[] = 'itinerary segment import';
+        }
+
+        if ($parts === []) {
+            return 'Trip updates parsed from message';
+        }
+
+        return 'Apply '.implode(', ', $parts);
     }
 
     /**
