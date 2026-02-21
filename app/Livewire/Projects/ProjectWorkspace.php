@@ -14,6 +14,7 @@ use App\Models\ProjectEvent;
 use App\Models\ProjectMilestone;
 use App\Models\ProjectPublication;
 use App\Services\DocumentSafety;
+use App\Support\AI\PromptProfile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
@@ -223,8 +224,11 @@ class ProjectWorkspace extends Component
     protected function getSystemPrompt(): string
     {
         $projectContext = $this->buildProjectContext();
+        $baseProfile = PromptProfile::forProjectAssistant();
 
         return <<<PROMPT
+{$baseProfile}
+
 You are an AI collaborator helping with the project "{$this->project->name}".
 
 ## Your Role
@@ -234,12 +238,11 @@ You are a knowledgeable assistant helping plan, organize, and execute this proje
 {$projectContext}
 
 ## Guidelines
-- Be helpful, concise, and actionable
-- Reference specific documents or sections when relevant
-- Suggest next steps when appropriate
-- Help with planning, content drafting, research, and analysis
-- When suggesting changes, be specific about what to modify
-- If you don't know something, say so clearly
+- Be concise, practical, and action-oriented.
+- Reference specific documents, decisions, or sections when relevant.
+- For writing support, align with POPVOX style and review discipline.
+- Suggest concrete next steps with owners and dates when possible.
+- If you do not know something, say so clearly and request the missing detail.
 PROMPT;
     }
 

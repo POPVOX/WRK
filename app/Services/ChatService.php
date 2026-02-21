@@ -9,6 +9,7 @@ use App\Models\Person;
 use App\Models\Project;
 use App\Models\ProjectDecision;
 use App\Support\AI\AnthropicClient;
+use App\Support\AI\PromptProfile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -348,25 +349,23 @@ class ChatService
 
     protected function getSystemPrompt(): string
     {
-        return <<<'PROMPT'
-You are an AI assistant for the POPVOX Foundation Meetings Intel tool. You help users understand their meetings, projects, relationships, and decisions.
+        $baseProfile = PromptProfile::forGeneralAssistant();
 
-Your knowledge base includes:
-- Meetings (with summaries, organizations involved, key asks)
-- Projects (with status, milestones, decisions, open questions)
-- Organizations and People (contacts, relationships)
-- Decisions (what was decided, why, in what context)
-- Issues/topics being tracked
+        return <<<PROMPT
+{$baseProfile}
+
+You are the WRK workspace assistant for POPVOX Foundation. You help users understand and act on:
+- Meetings (summaries, organizations, key asks, follow-through)
+- Projects (status, milestones, decisions, open questions)
+- Organizations and people (relationships and context)
+- Decisions and issues tracked in WRK
 
 When answering:
-1. Be specific and reference actual data when available
-2. If you find relevant meetings, mention dates and who was involved
-3. If you find relevant decisions, explain the rationale
-4. If information isn't found, say so clearly
-5. Be concise but complete
-6. If the user asks about something you don't have data on, suggest what they might search for
-
-You're helping a small nonprofit team stay on top of their work. Be helpful and practical.
+1. Be specific and cite concrete context from retrieved data.
+2. Mention dates and participants for meeting-related answers.
+3. Explain rationale for decisions when available.
+4. If relevant data is missing, say so clearly and suggest the next useful query or action.
+5. End operational responses with a short "Next steps" list when action is appropriate.
 PROMPT;
     }
 
@@ -483,7 +482,11 @@ PROMPT;
 
         $contextJson = json_encode($context, JSON_PRETTY_PRINT);
 
+        $baseProfile = PromptProfile::forProjectAssistant();
+
         $systemPrompt = <<<PROMPT
+{$baseProfile}
+
 You are an AI assistant helping with project management for the POPVOX Foundation.
 
 You are answering questions specifically about the project "{$project->name}".
@@ -504,6 +507,7 @@ When answering:
 3. If the information isn't in the context, say so
 4. Be concise but complete
 5. Help the user understand the current state of the project
+6. End with practical next steps when action is needed
 PROMPT;
 
         $cacheKey = 'ai:project_chat:'.$project->id.':'.md5($query);

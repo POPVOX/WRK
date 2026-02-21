@@ -10,6 +10,7 @@ use App\Models\TripLodging;
 use App\Models\TripSegment;
 use App\Models\User;
 use App\Support\AI\AnthropicClient;
+use App\Support\AI\PromptProfile;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -258,8 +259,11 @@ class TripAgentService
         }
 
         $tripContext = $this->buildTripContext($trip);
+        $travelProfile = PromptProfile::forTravelAssistant();
 
-        $systemPrompt = <<<'PROMPT'
+        $systemPrompt = <<<PROMPT
+{$travelProfile}
+
 You are WRK Travel Agent for a specific trip.
 
 Rules:
