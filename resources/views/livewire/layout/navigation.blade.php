@@ -47,6 +47,9 @@ new class extends Component {
                     <x-nav-link :href="route('intelligence.index')" :active="request()->routeIs('intelligence.*')" wire:navigate>
                         {{ __('Intelligence') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('communications.inbox')" :active="request()->routeIs('communications.*')" wire:navigate>
+                        {{ __('Inbox') }}
+                    </x-nav-link>
                 </div>
             </div>
 
@@ -144,6 +147,9 @@ new class extends Component {
             </x-responsive-nav-link>
 
             <div class="px-4 pt-3 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">Communications</div>
+            <x-responsive-nav-link :href="route('communications.inbox')" :active="request()->routeIs('communications.*')" wire:navigate>
+                {{ __('Inbox') }}
+            </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('media.index')" :active="request()->routeIs('media.*')" wire:navigate>
                 {{ __('Media & Press') }}
             </x-responsive-nav-link>

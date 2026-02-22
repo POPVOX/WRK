@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\GoogleAuthController;
 use App\Http\Controllers\Webhooks\BoxWebhookController;
+use App\Livewire\Communications\InboxIndex;
 use App\Livewire\Dashboard;
 use App\Livewire\Intelligence\IntelligenceIndex;
 use App\Livewire\Meetings\MeetingCapture;
@@ -78,6 +79,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Media & Press
     Route::get('/media', \App\Livewire\Media\MediaIndex::class)->name('media.index');
+    Route::get('/communications/inbox', InboxIndex::class)->name('communications.inbox');
 
     // Accomplishments & Wins
     Route::get('/accomplishments', \App\Livewire\Accomplishments\AccomplishmentsIndex::class)->name('accomplishments.index');
