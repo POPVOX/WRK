@@ -491,7 +491,7 @@
                                                 <span class="font-medium text-gray-900 dark:text-white">{{ $meeting->title }}</span>
                                             </div>
                                             <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                                {{ $meeting->date?->format('M j, Y') }}
+                                                {{ $meeting->meeting_date?->format('M j, Y') }}
                                             </div>
                                         </a>
                                     @endforeach

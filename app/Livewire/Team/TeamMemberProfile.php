@@ -133,14 +133,14 @@ class TeamMemberProfile extends Component
 
     public function getProjectsProperty()
     {
-        return $this->member->projects ?? collect();
+        return $this->member->projects()->get();
     }
 
     public function getRecentMeetingsProperty()
     {
         // Get meetings where this user is the creator or logged the meeting
         return \App\Models\Meeting::where('user_id', $this->member->id)
-            ->orderBy('date', 'desc')
+            ->orderBy('meeting_date', 'desc')
             ->take(10)
             ->get();
     }

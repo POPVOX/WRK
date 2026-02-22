@@ -178,6 +178,16 @@ class User extends Authenticatable
     }
 
     /**
+     * Get projects this user is staffed on.
+     */
+    public function projects(): BelongsToMany
+    {
+        return $this->belongsToMany(Project::class, 'project_staff')
+            ->withPivot(['role', 'added_at'])
+            ->orderByPivot('added_at', 'desc');
+    }
+
+    /**
      * Get Gmail messages synced for this user.
      */
     public function gmailMessages(): HasMany
