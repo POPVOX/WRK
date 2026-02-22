@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Communications;
 
+use App\Jobs\SyncGmailMessages;
 use App\Models\Action;
 use App\Models\GmailMessage;
 use App\Models\InboxActionLog;
@@ -80,7 +81,7 @@ class InboxIndex extends Component
         $this->replyDraft = '';
     }
 
-    public function syncGmail(GoogleGmailService $gmailService): void
+    public function syncGmail(): void
     {
         $user = Auth::user();
         if (! $user) {
@@ -94,9 +95,9 @@ class InboxIndex extends Component
         $this->isSyncingGmail = true;
 
         try {
-            $result = $gmailService->syncRecentMessages($user, 90, 300);
+            $gmailService = app(GoogleGmailService::class);
 
-            if (! ($result['connected'] ?? false)) {
+            if (! $gmailService->isConnected($user)) {
                 $this->dispatch('notify', type: 'warning', message: 'Google is not connected. Connect Google first.');
                 $this->recordInboxAction(
                     suggestionKey: 'sync_gmail',
@@ -106,20 +107,19 @@ class InboxIndex extends Component
                     details: ['reason' => 'google_not_connected']
                 );
             } else {
-                $count = (int) ($result['processed'] ?? 0);
-                $imported = (int) ($result['imported'] ?? 0);
-                $updated = (int) ($result['updated'] ?? 0);
-                $this->dispatch('notify', type: 'success', message: "Gmail synced ({$count} processed, {$imported} new, {$updated} updated).");
+                $queueName = (string) (config('queue.gmail_queue') ?: env('GMAIL_SYNC_QUEUE', 'default'));
+                SyncGmailMessages::dispatch($user, 90, 300)->onQueue($queueName);
+
+                $this->dispatch('notify', type: 'success', message: 'Gmail sync started. It will finish in the background.');
                 $this->recordInboxAction(
                     suggestionKey: 'sync_gmail',
                     actionLabel: 'Sync Gmail',
-                    actionStatus: 'applied',
+                    actionStatus: 'queued',
                     snapshot: null,
                     details: [
-                        'processed' => $count,
-                        'imported' => $imported,
-                        'updated' => $updated,
-                        'errors' => (int) ($result['errors'] ?? 0),
+                        'queue' => $queueName,
+                        'days_back' => 90,
+                        'max_messages' => 300,
                     ]
                 );
             }
