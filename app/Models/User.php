@@ -202,4 +202,44 @@ class User extends Authenticatable
     {
         return $this->hasMany(InboxActionLog::class);
     }
+
+    /**
+     * Newsletters managed by this user.
+     */
+    public function outreachNewsletters(): HasMany
+    {
+        return $this->hasMany(OutreachNewsletter::class);
+    }
+
+    /**
+     * Outreach campaigns created by this user.
+     */
+    public function outreachCampaigns(): HasMany
+    {
+        return $this->hasMany(OutreachCampaign::class);
+    }
+
+    /**
+     * Outreach automations owned by this user.
+     */
+    public function outreachAutomations(): HasMany
+    {
+        return $this->hasMany(OutreachAutomation::class);
+    }
+
+    /**
+     * Substack integration settings for this user.
+     */
+    public function outreachSubstackConnection(): HasOne
+    {
+        return $this->hasOne(OutreachSubstackConnection::class);
+    }
+
+    /**
+     * Outreach activity logs authored by this user.
+     */
+    public function outreachActivityLogs(): HasMany
+    {
+        return $this->hasMany(OutreachActivityLog::class);
+    }
 }

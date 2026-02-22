@@ -37,3 +37,11 @@ Schedule::command('gmail:sync --sync --days=90 --max=500')
     ->withoutOverlapping(120)
     ->onOneServer()
     ->description('Daily inline Gmail backstop sync');
+
+// Outreach scheduler: send due campaigns and run automation recipes.
+Schedule::command('outreach:run-scheduled')
+    ->everyFiveMinutes()
+    ->withoutOverlapping(4)
+    ->onOneServer()
+    ->runInBackground()
+    ->description('Run scheduled outreach campaigns and automation');

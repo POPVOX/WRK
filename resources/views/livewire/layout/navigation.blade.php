@@ -47,8 +47,11 @@ new class extends Component {
                     <x-nav-link :href="route('intelligence.index')" :active="request()->routeIs('intelligence.*')" wire:navigate>
                         {{ __('Intelligence') }}
                     </x-nav-link>
-                    <x-nav-link :href="route('communications.inbox')" :active="request()->routeIs('communications.*')" wire:navigate>
+                    <x-nav-link :href="route('communications.inbox')" :active="request()->routeIs('communications.inbox')" wire:navigate>
                         {{ __('Inbox') }}
+                    </x-nav-link>
+                    <x-nav-link :href="route('communications.outreach')" :active="request()->routeIs('communications.outreach')" wire:navigate>
+                        {{ __('Outreach') }}
                     </x-nav-link>
                 </div>
             </div>
@@ -147,14 +150,16 @@ new class extends Component {
             </x-responsive-nav-link>
 
             <div class="px-4 pt-3 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">Communications</div>
-            <x-responsive-nav-link :href="route('communications.inbox')" :active="request()->routeIs('communications.*')" wire:navigate>
+            <x-responsive-nav-link :href="route('communications.inbox')" :active="request()->routeIs('communications.inbox')" wire:navigate>
                 {{ __('Inbox') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('communications.outreach')" :active="request()->routeIs('communications.outreach')" wire:navigate>
+                {{ __('Outreach') }}
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('media.index')" :active="request()->routeIs('media.*')" wire:navigate>
                 {{ __('Media & Press') }}
             </x-responsive-nav-link>
             <div class="px-4 py-2 text-sm text-gray-400">Social Media (Later)</div>
-            <div class="px-4 py-2 text-sm text-gray-400">Outreach (Later)</div>
 
             <div class="px-4 pt-3 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">Operations</div>
             <x-responsive-nav-link :href="route('team.hub')" :active="request()->routeIs('team.*') && request()->query('activeTab') !== 'resources'" wire:navigate>

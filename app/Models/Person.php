@@ -159,6 +159,11 @@ class Person extends Model
         return $this->hasMany(Inquiry::class, 'journalist_id');
     }
 
+    public function outreachCampaignRecipients(): HasMany
+    {
+        return $this->hasMany(OutreachCampaignRecipient::class, 'person_id');
+    }
+
     // ===== Scopes =====
 
     /**

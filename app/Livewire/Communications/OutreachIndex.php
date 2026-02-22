@@ -1,0 +1,568 @@
+<?php
+
+namespace App\Livewire\Communications;
+
+use App\Models\OutreachActivityLog;
+use App\Models\OutreachAutomation;
+use App\Models\OutreachCampaign;
+use App\Models\OutreachNewsletter;
+use App\Models\OutreachSubstackConnection;
+use App\Models\Project;
+use App\Services\Outreach\OutreachAudienceService;
+use App\Services\Outreach\OutreachAutomationService;
+use App\Services\Outreach\OutreachCampaignService;
+use App\Services\Outreach\SubstackFeedService;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
+use Livewire\Component;
+
+#[Layout('layouts.app')]
+#[Title('Outreach')]
+class OutreachIndex extends Component
+{
+    #[Url(as: 'tab')]
+    public string $tab = 'newsletters';
+
+    public array $newsletterForm = [
+        'name' => '',
+        'project_id' => '',
+        'channel' => 'hybrid',
+        'cadence' => 'weekly',
+        'next_issue_date' => '',
+        'planning_notes' => '',
+        'audience_statuses' => ['active', 'partner', 'prospect'],
+    ];
+
+    public array $campaignForm = [
+        'name' => '',
+        'newsletter_id' => '',
+        'project_id' => '',
+        'campaign_type' => 'bulk',
+        'channel' => 'gmail',
+        'subject' => '',
+        'preheader' => '',
+        'body_text' => '',
+        'send_mode' => 'draft',
+        'scheduled_for' => '',
+        'audience_mode' => 'contacts',
+        'contact_statuses' => ['active', 'partner', 'prospect'],
+        'manual_recipients' => '',
+    ];
+
+    public array $automationForm = [
+        'name' => '',
+        'newsletter_id' => '',
+        'project_id' => '',
+        'action_type' => 'draft_campaign',
+        'prompt' => '',
+        'subject' => '',
+        'body_text' => '',
+        'audience_mode' => 'contacts',
+        'contact_statuses' => ['active', 'partner', 'prospect'],
+        'manual_recipients' => '',
+        'interval_hours' => 24,
+    ];
+
+    public array $substackForm = [
+        'publication_name' => '',
+        'publication_url' => '',
+        'rss_feed_url' => '',
+        'email_from' => '',
+        'api_key' => '',
+    ];
+
+    public array $substackPosts = [];
+
+    public array $projectOptions = [];
+
+    public array $newsletterOptions = [];
+
+    public array $contactStatusOptions = [
+        'lead' => 'Lead',
+        'prospect' => 'Prospect',
+        'active' => 'Active',
+        'partner' => 'Partner',
+        'inactive' => 'Inactive',
+    ];
+
+    public function mount(): void
+    {
+        $this->normalizeTab();
+        $this->loadOptions();
+        $this->hydrateSubstackForm();
+    }
+
+    public function updatedTab(): void
+    {
+        $this->normalizeTab();
+    }
+
+    public function createNewsletter(OutreachCampaignService $campaignService): void
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'newsletterForm.name' => ['required', 'string', 'max:160'],
+            'newsletterForm.project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')],
+            'newsletterForm.channel' => ['required', Rule::in(['gmail', 'substack', 'hybrid'])],
+            'newsletterForm.cadence' => ['nullable', Rule::in(['weekly', 'biweekly', 'monthly', 'ad_hoc'])],
+            'newsletterForm.next_issue_date' => ['nullable', 'date'],
+            'newsletterForm.planning_notes' => ['nullable', 'string', 'max:4000'],
+            'newsletterForm.audience_statuses' => ['array'],
+            'newsletterForm.audience_statuses.*' => ['string', Rule::in(array_keys($this->contactStatusOptions))],
+        ]);
+
+        $name = trim((string) $validated['newsletterForm']['name']);
+        $slug = Str::slug($name);
+        if ($slug === '') {
+            $slug = 'newsletter-'.Str::lower(Str::random(8));
+        }
+        if (OutreachNewsletter::query()->where('slug', $slug)->exists()) {
+            $slug .= '-'.Str::lower(Str::random(4));
+        }
+
+        $newsletter = OutreachNewsletter::query()->create([
+            'user_id' => $user->id,
+            'project_id' => $validated['newsletterForm']['project_id'] ?: null,
+            'name' => $name,
+            'slug' => $slug,
+            'channel' => $validated['newsletterForm']['channel'],
+            'status' => 'planning',
+            'cadence' => $validated['newsletterForm']['cadence'] ?: null,
+            'audience_filters' => [
+                'contact_statuses' => array_values(array_unique($validated['newsletterForm']['audience_statuses'] ?? [])),
+            ],
+            'planning_notes' => trim((string) ($validated['newsletterForm']['planning_notes'] ?? '')) ?: null,
+            'next_issue_date' => $validated['newsletterForm']['next_issue_date'] ?: null,
+        ]);
+
+        $campaignService->log(
+            campaignId: null,
+            userId: $user->id,
+            action: 'newsletter_created',
+            summary: 'Created outreach newsletter plan.',
+            details: ['newsletter_id' => $newsletter->id, 'name' => $newsletter->name],
+            newsletterId: $newsletter->id
+        );
+
+        $this->newsletterForm['name'] = '';
+        $this->newsletterForm['planning_notes'] = '';
+        $this->newsletterForm['next_issue_date'] = '';
+        $this->newsletterForm['project_id'] = '';
+
+        $this->loadOptions();
+        $this->dispatch('notify', type: 'success', message: 'Newsletter plan created.');
+    }
+
+    public function createCampaign(OutreachAudienceService $audienceService, OutreachCampaignService $campaignService): void
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'campaignForm.name' => ['required', 'string', 'max:180'],
+            'campaignForm.newsletter_id' => ['nullable', 'integer', Rule::exists('outreach_newsletters', 'id')],
+            'campaignForm.project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')],
+            'campaignForm.campaign_type' => ['required', Rule::in(['newsletter', 'bulk', 'automated'])],
+            'campaignForm.channel' => ['required', Rule::in(['gmail', 'substack', 'hybrid'])],
+            'campaignForm.subject' => ['required', 'string', 'max:255'],
+            'campaignForm.preheader' => ['nullable', 'string', 'max:255'],
+            'campaignForm.body_text' => ['required', 'string', 'max:20000'],
+            'campaignForm.send_mode' => ['required', Rule::in(['draft', 'immediate', 'scheduled'])],
+            'campaignForm.scheduled_for' => ['nullable', 'date', 'after:now'],
+            'campaignForm.audience_mode' => ['required', Rule::in(['contacts', 'manual'])],
+            'campaignForm.contact_statuses' => ['array'],
+            'campaignForm.contact_statuses.*' => ['string', Rule::in(array_keys($this->contactStatusOptions))],
+            'campaignForm.manual_recipients' => ['nullable', 'string'],
+        ]);
+
+        $status = match ($validated['campaignForm']['send_mode']) {
+            'scheduled' => 'scheduled',
+            default => 'draft',
+        };
+
+        $campaign = OutreachCampaign::query()->create([
+            'newsletter_id' => $validated['campaignForm']['newsletter_id'] ?: null,
+            'user_id' => $user->id,
+            'project_id' => $validated['campaignForm']['project_id'] ?: null,
+            'name' => trim((string) $validated['campaignForm']['name']),
+            'campaign_type' => $validated['campaignForm']['campaign_type'],
+            'channel' => $validated['campaignForm']['channel'],
+            'status' => $status,
+            'subject' => trim((string) $validated['campaignForm']['subject']),
+            'preheader' => trim((string) ($validated['campaignForm']['preheader'] ?? '')) ?: null,
+            'body_text' => trim((string) $validated['campaignForm']['body_text']),
+            'send_mode' => $validated['campaignForm']['send_mode'],
+            'scheduled_for' => $validated['campaignForm']['send_mode'] === 'scheduled'
+                ? $validated['campaignForm']['scheduled_for']
+                : null,
+            'metadata' => [
+                'audience_mode' => $validated['campaignForm']['audience_mode'],
+                'contact_statuses' => array_values(array_unique($validated['campaignForm']['contact_statuses'] ?? [])),
+            ],
+        ]);
+
+        $recipients = $validated['campaignForm']['audience_mode'] === 'manual'
+            ? $audienceService->parseManualRecipients((string) ($validated['campaignForm']['manual_recipients'] ?? ''))
+            : $audienceService->fromContactStatuses($validated['campaignForm']['contact_statuses'] ?? []);
+
+        $recipientCount = $campaignService->seedRecipients($campaign, $recipients);
+        if ($recipientCount === 0) {
+            $campaign->update(['status' => 'failed']);
+            $this->dispatch('notify', type: 'error', message: 'Campaign created but no valid recipients were found.');
+
+            return;
+        }
+
+        $campaignService->log(
+            campaignId: $campaign->id,
+            userId: $user->id,
+            action: 'campaign_created',
+            summary: 'Created outreach campaign.',
+            details: ['recipient_count' => $recipientCount, 'status' => $campaign->status],
+            newsletterId: $campaign->newsletter_id
+        );
+
+        if ($validated['campaignForm']['send_mode'] === 'immediate') {
+            try {
+                $queued = $campaignService->queueCampaign($campaign);
+                $this->dispatch('notify', type: 'success', message: "Campaign queued ({$queued} recipients).");
+            } catch (\Throwable $exception) {
+                $this->dispatch('notify', type: 'error', message: $exception->getMessage());
+            }
+        } elseif ($validated['campaignForm']['send_mode'] === 'scheduled') {
+            $this->dispatch('notify', type: 'success', message: "Campaign scheduled for {$validated['campaignForm']['scheduled_for']}.");
+        } else {
+            $this->dispatch('notify', type: 'success', message: 'Campaign saved as draft.');
+        }
+
+        $this->resetCampaignForm();
+    }
+
+    public function queueCampaignNow(int $campaignId, OutreachCampaignService $campaignService): void
+    {
+        $campaign = OutreachCampaign::query()
+            ->where('id', $campaignId)
+            ->where('user_id', Auth::id())
+            ->first();
+
+        if (! $campaign) {
+            $this->dispatch('notify', type: 'error', message: 'Campaign not found.');
+
+            return;
+        }
+
+        try {
+            $queued = $campaignService->queueCampaign($campaign);
+            $this->dispatch('notify', type: 'success', message: "Campaign queued ({$queued} recipients).");
+        } catch (\Throwable $exception) {
+            $this->dispatch('notify', type: 'error', message: $exception->getMessage());
+        }
+    }
+
+    public function cancelCampaign(int $campaignId, OutreachCampaignService $campaignService): void
+    {
+        $campaign = OutreachCampaign::query()
+            ->where('id', $campaignId)
+            ->where('user_id', Auth::id())
+            ->first();
+
+        if (! $campaign) {
+            return;
+        }
+
+        $campaign->update([
+            'status' => 'cancelled',
+            'completed_at' => now(),
+        ]);
+
+        $campaignService->log(
+            campaignId: $campaign->id,
+            userId: $campaign->user_id,
+            action: 'campaign_cancelled',
+            summary: 'Cancelled outreach campaign.',
+            details: [],
+            newsletterId: $campaign->newsletter_id
+        );
+
+        $this->dispatch('notify', type: 'success', message: 'Campaign cancelled.');
+    }
+
+    public function createAutomation(OutreachCampaignService $campaignService): void
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'automationForm.name' => ['required', 'string', 'max:180'],
+            'automationForm.newsletter_id' => ['nullable', 'integer', Rule::exists('outreach_newsletters', 'id')],
+            'automationForm.project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')],
+            'automationForm.action_type' => ['required', Rule::in(['draft_campaign', 'send_campaign', 'create_task'])],
+            'automationForm.prompt' => ['nullable', 'string', 'max:4000'],
+            'automationForm.subject' => ['nullable', 'string', 'max:255'],
+            'automationForm.body_text' => ['nullable', 'string', 'max:20000'],
+            'automationForm.audience_mode' => ['required', Rule::in(['contacts', 'manual'])],
+            'automationForm.contact_statuses' => ['array'],
+            'automationForm.contact_statuses.*' => ['string', Rule::in(array_keys($this->contactStatusOptions))],
+            'automationForm.manual_recipients' => ['nullable', 'string'],
+            'automationForm.interval_hours' => ['required', 'integer', 'min:1', 'max:720'],
+        ]);
+
+        $automation = OutreachAutomation::query()->create([
+            'user_id' => $user->id,
+            'newsletter_id' => $validated['automationForm']['newsletter_id'] ?: null,
+            'project_id' => $validated['automationForm']['project_id'] ?: null,
+            'name' => trim((string) $validated['automationForm']['name']),
+            'status' => 'active',
+            'trigger_type' => 'schedule',
+            'rrule' => null,
+            'timezone' => (string) ($user->timezone ?: config('app.timezone', 'UTC')),
+            'action_type' => $validated['automationForm']['action_type'],
+            'prompt' => trim((string) ($validated['automationForm']['prompt'] ?? '')) ?: null,
+            'config' => [
+                'subject' => trim((string) ($validated['automationForm']['subject'] ?? '')),
+                'body_text' => trim((string) ($validated['automationForm']['body_text'] ?? '')),
+                'audience_mode' => $validated['automationForm']['audience_mode'],
+                'contact_statuses' => array_values(array_unique($validated['automationForm']['contact_statuses'] ?? [])),
+                'manual_recipients' => (string) ($validated['automationForm']['manual_recipients'] ?? ''),
+                'interval_hours' => (int) $validated['automationForm']['interval_hours'],
+            ],
+            'next_run_at' => now()->addHours((int) $validated['automationForm']['interval_hours']),
+        ]);
+
+        $campaignService->log(
+            campaignId: null,
+            userId: $user->id,
+            action: 'automation_created',
+            summary: 'Created outreach automation.',
+            details: ['automation_id' => $automation->id, 'action_type' => $automation->action_type],
+            newsletterId: $automation->newsletter_id,
+            automationId: $automation->id
+        );
+
+        $this->resetAutomationForm();
+        $this->dispatch('notify', type: 'success', message: 'Automation recipe created.');
+    }
+
+    public function runAutomationNow(int $automationId, OutreachAutomationService $automationService): void
+    {
+        $automation = OutreachAutomation::query()
+            ->where('id', $automationId)
+            ->where('user_id', Auth::id())
+            ->first();
+
+        if (! $automation) {
+            return;
+        }
+
+        $automationService->execute($automation);
+        $this->dispatch('notify', type: 'success', message: 'Automation executed.');
+    }
+
+    public function toggleAutomation(int $automationId): void
+    {
+        $automation = OutreachAutomation::query()
+            ->where('id', $automationId)
+            ->where('user_id', Auth::id())
+            ->first();
+
+        if (! $automation) {
+            return;
+        }
+
+        $automation->update([
+            'status' => $automation->status === 'active' ? 'paused' : 'active',
+        ]);
+
+        $this->dispatch('notify', type: 'success', message: 'Automation status updated.');
+    }
+
+    public function saveSubstackConnection(): void
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'substackForm.publication_name' => ['nullable', 'string', 'max:180'],
+            'substackForm.publication_url' => ['nullable', 'url', 'max:255'],
+            'substackForm.rss_feed_url' => ['nullable', 'url', 'max:255'],
+            'substackForm.email_from' => ['nullable', 'email', 'max:255'],
+            'substackForm.api_key' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $connection = OutreachSubstackConnection::query()->firstOrNew(['user_id' => $user->id]);
+        $connection->fill([
+            'publication_name' => trim((string) ($validated['substackForm']['publication_name'] ?? '')) ?: null,
+            'publication_url' => trim((string) ($validated['substackForm']['publication_url'] ?? '')) ?: null,
+            'rss_feed_url' => trim((string) ($validated['substackForm']['rss_feed_url'] ?? '')) ?: null,
+            'email_from' => trim((string) ($validated['substackForm']['email_from'] ?? '')) ?: null,
+            'api_key' => trim((string) ($validated['substackForm']['api_key'] ?? '')) ?: null,
+            'status' => $connection->exists ? $connection->status : 'disconnected',
+        ]);
+        $connection->save();
+
+        $this->dispatch('notify', type: 'success', message: 'Substack settings saved.');
+    }
+
+    public function syncSubstack(SubstackFeedService $substackFeedService, OutreachCampaignService $campaignService): void
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $connection = OutreachSubstackConnection::query()->firstOrCreate(
+            ['user_id' => $user->id],
+            ['status' => 'disconnected']
+        );
+
+        try {
+            $this->substackPosts = $substackFeedService->fetchRecentPosts($connection, 8);
+            $campaignService->log(
+                campaignId: null,
+                userId: $user->id,
+                action: 'substack_sync_success',
+                summary: 'Substack feed sync completed.',
+                details: ['posts' => count($this->substackPosts)]
+            );
+
+            $this->dispatch('notify', type: 'success', message: 'Substack feed synced.');
+        } catch (\Throwable $exception) {
+            $connection->update([
+                'status' => 'error',
+                'last_error' => Str::limit($exception->getMessage(), 2000),
+            ]);
+            $campaignService->log(
+                campaignId: null,
+                userId: $user->id,
+                action: 'substack_sync_failed',
+                summary: 'Substack feed sync failed.',
+                details: ['error' => $exception->getMessage()]
+            );
+
+            $this->dispatch('notify', type: 'error', message: 'Substack sync failed: '.$exception->getMessage());
+        }
+    }
+
+    protected function loadOptions(): void
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $this->projectOptions = Project::query()
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Project $project): array => [
+                'id' => (int) $project->id,
+                'name' => (string) $project->name,
+            ])
+            ->all();
+
+        $this->newsletterOptions = OutreachNewsletter::query()
+            ->where('user_id', $user->id)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (OutreachNewsletter $newsletter): array => [
+                'id' => (int) $newsletter->id,
+                'name' => (string) $newsletter->name,
+            ])
+            ->all();
+    }
+
+    protected function hydrateSubstackForm(): void
+    {
+        $connection = OutreachSubstackConnection::query()
+            ->where('user_id', Auth::id())
+            ->first();
+
+        if (! $connection) {
+            return;
+        }
+
+        $this->substackForm['publication_name'] = (string) ($connection->publication_name ?? '');
+        $this->substackForm['publication_url'] = (string) ($connection->publication_url ?? '');
+        $this->substackForm['rss_feed_url'] = (string) ($connection->rss_feed_url ?? '');
+        $this->substackForm['email_from'] = (string) ($connection->email_from ?? '');
+        $this->substackForm['api_key'] = (string) ($connection->api_key ?? '');
+    }
+
+    protected function resetCampaignForm(): void
+    {
+        $this->campaignForm['name'] = '';
+        $this->campaignForm['newsletter_id'] = '';
+        $this->campaignForm['project_id'] = '';
+        $this->campaignForm['subject'] = '';
+        $this->campaignForm['preheader'] = '';
+        $this->campaignForm['body_text'] = '';
+        $this->campaignForm['scheduled_for'] = '';
+        $this->campaignForm['manual_recipients'] = '';
+    }
+
+    protected function resetAutomationForm(): void
+    {
+        $this->automationForm['name'] = '';
+        $this->automationForm['newsletter_id'] = '';
+        $this->automationForm['project_id'] = '';
+        $this->automationForm['prompt'] = '';
+        $this->automationForm['subject'] = '';
+        $this->automationForm['body_text'] = '';
+        $this->automationForm['manual_recipients'] = '';
+    }
+
+    protected function normalizeTab(): void
+    {
+        if (! in_array($this->tab, ['newsletters', 'campaigns', 'automations', 'substack', 'activity'], true)) {
+            $this->tab = 'newsletters';
+        }
+    }
+
+    public function render()
+    {
+        $userId = (int) Auth::id();
+
+        return view('livewire.communications.outreach-index', [
+            'newsletters' => OutreachNewsletter::query()
+                ->where('user_id', $userId)
+                ->with('project:id,name')
+                ->latest('updated_at')
+                ->limit(25)
+                ->get(),
+            'campaigns' => OutreachCampaign::query()
+                ->where('user_id', $userId)
+                ->with(['newsletter:id,name', 'project:id,name'])
+                ->latest('created_at')
+                ->limit(50)
+                ->get(),
+            'automations' => OutreachAutomation::query()
+                ->where('user_id', $userId)
+                ->with(['newsletter:id,name', 'project:id,name'])
+                ->latest('updated_at')
+                ->limit(50)
+                ->get(),
+            'substackConnection' => OutreachSubstackConnection::query()
+                ->where('user_id', $userId)
+                ->first(),
+            'activityLogs' => OutreachActivityLog::query()
+                ->where('user_id', $userId)
+                ->with(['campaign:id,name', 'newsletter:id,name', 'automation:id,name'])
+                ->latest('created_at')
+                ->limit(100)
+                ->get(),
+        ]);
+    }
+}

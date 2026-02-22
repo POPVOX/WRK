@@ -109,6 +109,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Named Queue Channels
+    |--------------------------------------------------------------------------
+    |
+    | Some workflows dispatch onto named queues so they can be isolated with
+    | dedicated workers if needed.
+    |
+    */
+
+    'gmail_queue' => env('GMAIL_SYNC_QUEUE', 'default'),
+
+    'outreach_queue' => env('OUTREACH_QUEUE', 'default'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Failed Queue Jobs
     |--------------------------------------------------------------------------
     |

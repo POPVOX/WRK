@@ -164,6 +164,21 @@ class Project extends Model
         return $this->hasMany(ProjectEvent::class)->orderBy('event_date');
     }
 
+    public function outreachNewsletters(): HasMany
+    {
+        return $this->hasMany(OutreachNewsletter::class)->latest('updated_at');
+    }
+
+    public function outreachCampaigns(): HasMany
+    {
+        return $this->hasMany(OutreachCampaign::class)->latest('updated_at');
+    }
+
+    public function outreachAutomations(): HasMany
+    {
+        return $this->hasMany(OutreachAutomation::class)->latest('updated_at');
+    }
+
     public function chatMessages(): HasMany
     {
         return $this->hasMany(ProjectChatMessage::class)->orderBy('created_at');
