@@ -626,6 +626,7 @@ class Dashboard extends Component
             ]);
 
             $this->addConversationMessage('assistant', 'I could not apply that suggestion: '.$exception->getMessage());
+            $this->dispatch('notify', type: 'error', message: 'Could not apply suggestion. Please try again.');
         }
     }
 

@@ -206,6 +206,14 @@
                                 'create_subproject' => 'Create subproject',
                                 default => 'Apply',
                             };
+                            $loadingLabel = match ($type) {
+                                'task' => 'Creating...',
+                                'reminder' => 'Creating...',
+                                'draft_email' => 'Drafting...',
+                                'create_project' => 'Creating...',
+                                'create_subproject' => 'Creating...',
+                                default => 'Working...',
+                            };
                             $typeLabel = match ($type) {
                                 'draft_email' => 'Email',
                                 'create_project' => 'Project',
@@ -262,16 +270,26 @@
                                     <button
                                         type="button"
                                         wire:click="applyCompanionSuggestionAt({{ $loop->index }})"
-                                        class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+                                        wire:loading.attr="disabled"
+                                        wire:target="applyCompanionSuggestionAt({{ $loop->index }})"
+                                        class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
-                                        {{ $actionLabel }}
+                                        <span wire:loading.remove wire:target="applyCompanionSuggestionAt({{ $loop->index }})">
+                                            {{ $actionLabel }}
+                                        </span>
+                                        <span wire:loading wire:target="applyCompanionSuggestionAt({{ $loop->index }})">
+                                            {{ $loadingLabel }}
+                                        </span>
                                     </button>
                                     <button
                                         type="button"
                                         wire:click="dismissCompanionSuggestionAt({{ $loop->index }})"
-                                        class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                        wire:loading.attr="disabled"
+                                        wire:target="applyCompanionSuggestionAt({{ $loop->index }}),dismissCompanionSuggestionAt({{ $loop->index }})"
+                                        class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
-                                        Dismiss
+                                        <span wire:loading.remove wire:target="dismissCompanionSuggestionAt({{ $loop->index }})">Dismiss</span>
+                                        <span wire:loading wire:target="dismissCompanionSuggestionAt({{ $loop->index }})">Dismissing...</span>
                                     </button>
                                 </div>
                             </div>
