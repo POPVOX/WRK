@@ -8,17 +8,17 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Morning calendar sync at 6 AM (catches overnight changes before workday)
+// Primary meeting sync: run all day and dispatch to the default queue.
 Schedule::command('calendars:sync')
-    ->dailyAt('06:00')
-    ->withoutOverlapping()
+    ->everyTenMinutes()
+    ->withoutOverlapping(9)
+    ->onOneServer()
     ->runInBackground()
-    ->description('Morning calendar sync');
+    ->description('Continuous calendar sync');
 
-// Regular sync every 30 minutes during business hours
-Schedule::command('calendars:sync')
-    ->everyThirtyMinutes()
-    ->between('07:00', '20:00')
-    ->withoutOverlapping()
-    ->runInBackground()
-    ->description('Regular calendar sync');
+// Backstop sync: runs inline daily so meetings still refresh if queue workers hiccup.
+Schedule::command('calendars:sync --sync')
+    ->dailyAt('05:30')
+    ->withoutOverlapping(120)
+    ->onOneServer()
+    ->description('Daily inline calendar backstop sync');

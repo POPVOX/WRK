@@ -8,13 +8,18 @@ use Illuminate\Console\Command;
 
 class SyncAllCalendars extends Command
 {
-    protected $signature = 'calendars:sync {--user= : Sync a specific user ID}';
+    protected $signature = 'calendars:sync
+        {--user= : Sync a specific user ID}
+        {--sync : Run sync inline (no queue)}
+        {--queue=default : Queue name for dispatched jobs}';
 
     protected $description = 'Sync Google Calendar events for all connected users';
 
     public function handle(): int
     {
         $userId = $this->option('user');
+        $syncInline = (bool) $this->option('sync');
+        $queueName = (string) ($this->option('queue') ?: 'default');
 
         if ($userId) {
             $user = User::find($userId);
@@ -30,8 +35,7 @@ class SyncAllCalendars extends Command
                 return 0;
             }
 
-            $this->info("Dispatching calendar sync for user {$userId}...");
-            SyncCalendarEvents::dispatch($user);
+            $this->syncUser($user, $syncInline, $queueName);
             $this->info('Done!');
 
             return 0;
@@ -43,12 +47,28 @@ class SyncAllCalendars extends Command
         $this->info("Found {$users->count()} users with connected calendars");
 
         foreach ($users as $user) {
-            $this->info("Dispatching sync for: {$user->email}");
-            SyncCalendarEvents::dispatch($user);
+            $this->syncUser($user, $syncInline, $queueName);
         }
 
-        $this->info('All calendar sync jobs dispatched!');
+        if ($syncInline) {
+            $this->info('All calendar sync jobs completed inline.');
+        } else {
+            $this->info("All calendar sync jobs dispatched on [{$queueName}] queue.");
+        }
 
         return 0;
+    }
+
+    protected function syncUser(User $user, bool $syncInline, string $queueName): void
+    {
+        if ($syncInline) {
+            $this->info("Running inline sync for: {$user->email}");
+            SyncCalendarEvents::dispatchSync($user);
+
+            return;
+        }
+
+        $this->info("Dispatching sync for: {$user->email} on [{$queueName}] queue");
+        SyncCalendarEvents::dispatch($user)->onQueue($queueName);
     }
 }

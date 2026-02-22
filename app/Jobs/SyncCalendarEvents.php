@@ -24,9 +24,9 @@ class SyncCalendarEvents implements ShouldQueue
         public ?Carbon $startDate = null,
         public ?Carbon $endDate = null
     ) {
-        // Defaults: past month to end of Q1 2026 (March 31)
+        // Rolling window keeps sync current without hard-coded date boundaries.
         $this->startDate = $startDate ?? now()->subMonth();
-        $this->endDate = $endDate ?? Carbon::create(2026, 3, 31);
+        $this->endDate = $endDate ?? now()->addMonths(12);
     }
 
     public function handle(GoogleCalendarService $calendarService): void

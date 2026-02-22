@@ -6,6 +6,8 @@ use App\Jobs\SyncCalendarEvents;
 use App\Models\Accomplishment;
 use App\Models\Action;
 use App\Models\Meeting;
+use App\Models\Organization;
+use App\Models\Person;
 use App\Models\PressClip;
 use App\Models\Project;
 use App\Models\Trip;
@@ -558,12 +560,9 @@ class Dashboard extends Component
         }
     }
 
-    public function applyCompanionSuggestion(string $suggestionId): void
+    public function applyCompanionSuggestionAt(int $index): void
     {
-        $index = collect($this->companionSuggestions)
-            ->search(fn (array $item) => (string) ($item['id'] ?? '') === $suggestionId);
-
-        if ($index === false) {
+        if (! isset($this->companionSuggestions[$index])) {
             return;
         }
 
@@ -588,7 +587,7 @@ class Dashboard extends Component
         } catch (\Throwable $exception) {
             \Log::warning('Failed to apply companion suggestion', [
                 'user_id' => $this->user?->id,
-                'suggestion_id' => $suggestionId,
+                'suggestion_id' => $suggestion['id'] ?? null,
                 'error' => $exception->getMessage(),
             ]);
 
@@ -596,12 +595,40 @@ class Dashboard extends Component
         }
     }
 
+    public function applyCompanionSuggestion(string $suggestionId): void
+    {
+        $index = collect($this->companionSuggestions)
+            ->search(fn (array $item) => (string) ($item['id'] ?? '') === $suggestionId);
+
+        if ($index === false) {
+            return;
+        }
+
+        $this->applyCompanionSuggestionAt((int) $index);
+    }
+
+    public function dismissCompanionSuggestionAt(int $index): void
+    {
+        if (! isset($this->companionSuggestions[$index])) {
+            return;
+        }
+
+        unset($this->companionSuggestions[$index]);
+        $this->companionSuggestions = array_values($this->companionSuggestions);
+        $this->persistCompanionSuggestions();
+    }
+
     public function dismissCompanionSuggestion(string $suggestionId): void
     {
-        $this->companionSuggestions = array_values(array_filter(
-            $this->companionSuggestions,
-            fn (array $item) => (string) ($item['id'] ?? '') !== $suggestionId
-        ));
+        $index = collect($this->companionSuggestions)
+            ->search(fn (array $item) => (string) ($item['id'] ?? '') === $suggestionId);
+
+        if ($index === false) {
+            return;
+        }
+
+        unset($this->companionSuggestions[$index]);
+        $this->companionSuggestions = array_values($this->companionSuggestions);
         $this->persistCompanionSuggestions();
     }
 
@@ -678,6 +705,7 @@ Rules:
   3) draft_email
   4) create_project
   5) create_subproject
+- For tasks/reminders/emails, include project_name when the note clearly maps to an existing or intended project.
 - For due dates:
   - Convert to YYYY-MM-DD.
   - If user says "Monday" (or other weekday), use the next upcoming weekday from the provided current date.
@@ -705,9 +733,35 @@ PROMPT;
 
         $today = now()->format('Y-m-d');
         $todayLabel = now()->format('l, F j, Y');
+        $tripNames = Trip::query()
+            ->whereHas('travelers', fn (Builder $q) => $q->where('users.id', $this->user->id))
+            ->orderByDesc('start_date')
+            ->limit(25)
+            ->pluck('name')
+            ->implode(', ');
+        $orgNames = Organization::query()
+            ->orderBy('name')
+            ->limit(40)
+            ->pluck('name')
+            ->implode(', ');
+        $peopleNames = Person::query()
+            ->orderBy('name')
+            ->limit(40)
+            ->pluck('name')
+            ->implode(', ');
+        $meetingTitles = $this->meetingsForUserQuery()
+            ->whereNotNull('title')
+            ->latest('meeting_date')
+            ->limit(30)
+            ->pluck('title')
+            ->implode(', ');
         $userPrompt = <<<PROMPT
 Current date: {$today} ({$todayLabel})
 Known project names: {$projectNames}
+Known trip names: {$tripNames}
+Known organization names: {$orgNames}
+Known people names: {$peopleNames}
+Recent meeting titles: {$meetingTitles}
 
 User note:
 {$command}
@@ -885,7 +939,7 @@ PROMPT;
             $dueDate = $this->parseDueDateFromFreeText((string) ($suggestion['due_text'] ?? ''));
         }
 
-        return [
+        $normalized = [
             'id' => (string) Str::uuid(),
             'type' => $type,
             'title' => Str::limit($title, 140, ''),
@@ -900,6 +954,18 @@ PROMPT;
                 ? (string) $suggestion['confidence']
                 : 'medium',
         ];
+
+        $normalized = $this->enrichCompanionSuggestionLinks($normalized);
+
+        if (
+            $normalized['type'] === 'create_project'
+            && ! empty($normalized['linked_project_id'])
+        ) {
+            // Skip create-project suggestions when the project already exists.
+            return null;
+        }
+
+        return $normalized;
     }
 
     protected function appendCompanionSuggestions(array $suggestions): int
@@ -927,6 +993,29 @@ PROMPT;
             $this->companionSuggestions[] = $normalized;
             $existingKeys[] = $dedupeKey;
             $added++;
+
+            if (
+                in_array($normalized['type'], ['task', 'reminder', 'draft_email'], true)
+                && empty($normalized['linked_project_id'])
+                && ! empty($normalized['unresolved_project_name'])
+            ) {
+                $createProjectSuggestion = $this->normalizeCompanionSuggestion([
+                    'type' => 'create_project',
+                    'title' => (string) $normalized['unresolved_project_name'],
+                    'description' => 'Suggested from action: '.$normalized['title'],
+                    'reason' => 'No existing project match found. Create a new project?',
+                    'confidence' => $normalized['confidence'] === 'high' ? 'medium' : $normalized['confidence'],
+                ]);
+
+                if ($createProjectSuggestion) {
+                    $createKey = Str::lower($createProjectSuggestion['type'].'|'.$createProjectSuggestion['title']);
+                    if (! in_array($createKey, $existingKeys, true)) {
+                        $this->companionSuggestions[] = $createProjectSuggestion;
+                        $existingKeys[] = $createKey;
+                        $added++;
+                    }
+                }
+            }
         }
 
         if ($added > 0) {
@@ -934,6 +1023,214 @@ PROMPT;
         }
 
         return $added;
+    }
+
+    protected function enrichCompanionSuggestionLinks(array $suggestion): array
+    {
+        $text = trim(((string) ($suggestion['title'] ?? '')).' '.((string) ($suggestion['description'] ?? '')));
+        $projectName = trim((string) ($suggestion['project_name'] ?? ''));
+        if ($projectName === '') {
+            $projectName = (string) ($this->extractProjectNameFromText($text) ?? '');
+        }
+
+        $links = [];
+
+        $project = null;
+        if ($projectName !== '') {
+            $project = $this->findProjectByName($projectName);
+            if ($project) {
+                $suggestion['linked_project_id'] = $project->id;
+                $suggestion['linked_project_name'] = $project->name;
+                $links[] = ['type' => 'project', 'name' => $project->name];
+            } else {
+                $suggestion['unresolved_project_name'] = Str::limit($projectName, 120, '');
+            }
+        }
+
+        $meeting = $this->findMeetingByText($text);
+        if ($meeting) {
+            $suggestion['linked_meeting_id'] = $meeting->id;
+            $suggestion['linked_meeting_title'] = $meeting->title ?: 'Meeting #'.$meeting->id;
+            $links[] = ['type' => 'meeting', 'name' => $suggestion['linked_meeting_title']];
+        }
+
+        $trip = $this->findTripByText($text);
+        if ($trip) {
+            $suggestion['linked_trip_id'] = $trip->id;
+            $suggestion['linked_trip_name'] = $trip->name ?: 'Trip #'.$trip->id;
+            $links[] = ['type' => 'trip', 'name' => $suggestion['linked_trip_name']];
+
+            if (! $project && empty($suggestion['linked_project_id']) && ! empty($trip->project_id)) {
+                $tripProject = $this->projectsForUserQuery()
+                    ->where('projects.id', $trip->project_id)
+                    ->first();
+                if ($tripProject) {
+                    $suggestion['linked_project_id'] = $tripProject->id;
+                    $suggestion['linked_project_name'] = $tripProject->name;
+                    $links[] = ['type' => 'project', 'name' => $tripProject->name];
+                }
+            }
+        }
+
+        $organization = $this->findOrganizationByText($text);
+        if ($organization) {
+            $suggestion['linked_organization_id'] = $organization->id;
+            $suggestion['linked_organization_name'] = $organization->name;
+            $links[] = ['type' => 'organization', 'name' => $organization->name];
+        }
+
+        $person = $this->findPersonByText($text);
+        if ($person) {
+            $suggestion['linked_person_id'] = $person->id;
+            $suggestion['linked_person_name'] = $person->name;
+            $links[] = ['type' => 'person', 'name' => $person->name];
+        }
+
+        $dedupedLinks = collect($links)
+            ->filter(fn ($item) => is_array($item) && ! empty($item['type']) && ! empty($item['name']))
+            ->unique(fn ($item) => Str::lower($item['type'].'|'.$item['name']))
+            ->values()
+            ->all();
+
+        $suggestion['links'] = $dedupedLinks;
+
+        return $suggestion;
+    }
+
+    protected function extractProjectNameFromText(string $text): ?string
+    {
+        $trimmed = trim($text);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $patterns = [
+            '/\bnew project[:\s-]*([A-Za-z0-9][A-Za-z0-9\s&\/\-\_]+)$/i',
+            '/\bfor\s+([A-Za-z0-9][A-Za-z0-9\s&\/\-\_]+?)\s+project\b/i',
+            '/\bproject[:\s-]*([A-Za-z0-9][A-Za-z0-9\s&\/\-\_]+)$/i',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $trimmed, $matches)) {
+                $candidate = trim((string) ($matches[1] ?? ''));
+                $candidate = trim($candidate, " \t\n\r\0\x0B.,;:-");
+                if ($candidate !== '' && Str::length($candidate) >= 3) {
+                    return Str::limit($candidate, 120, '');
+                }
+            }
+        }
+
+        return null;
+    }
+
+    protected function findProjectByName(string $projectName): ?Project
+    {
+        $name = trim($projectName);
+        if ($name === '') {
+            return null;
+        }
+
+        $exact = $this->projectsForUserQuery()
+            ->whereRaw('LOWER(name) = ?', [Str::lower($name)])
+            ->first();
+        if ($exact) {
+            return $exact;
+        }
+
+        return $this->projectsForUserQuery()
+            ->where('name', 'like', '%'.$name.'%')
+            ->orderByRaw('LENGTH(name)')
+            ->first();
+    }
+
+    protected function findMeetingByText(string $text): ?Meeting
+    {
+        $token = $this->extractLikelyEntityToken($text);
+        if ($token === '') {
+            return null;
+        }
+
+        return $this->meetingsForUserQuery()
+            ->whereNotNull('title')
+            ->where('title', 'like', '%'.$token.'%')
+            ->latest('meeting_date')
+            ->first();
+    }
+
+    protected function findTripByText(string $text): ?Trip
+    {
+        $token = $this->extractLikelyEntityToken($text);
+        if ($token === '') {
+            return null;
+        }
+
+        return Trip::query()
+            ->whereHas('travelers', fn (Builder $q) => $q->where('users.id', $this->user->id))
+            ->where(function (Builder $query) use ($token) {
+                $query->where('name', 'like', '%'.$token.'%')
+                    ->orWhere('description', 'like', '%'.$token.'%');
+            })
+            ->latest('start_date')
+            ->first();
+    }
+
+    protected function findOrganizationByText(string $text): ?Organization
+    {
+        $token = $this->extractLikelyEntityToken($text);
+        if ($token === '') {
+            return null;
+        }
+
+        $exact = Organization::query()
+            ->whereRaw('LOWER(name) = ?', [Str::lower($token)])
+            ->first();
+        if ($exact) {
+            return $exact;
+        }
+
+        return Organization::query()
+            ->where('name', 'like', '%'.$token.'%')
+            ->orderByRaw('LENGTH(name)')
+            ->first();
+    }
+
+    protected function findPersonByText(string $text): ?Person
+    {
+        $token = $this->extractLikelyEntityToken($text);
+        if ($token === '') {
+            return null;
+        }
+
+        $exact = Person::query()
+            ->whereRaw('LOWER(name) = ?', [Str::lower($token)])
+            ->first();
+        if ($exact) {
+            return $exact;
+        }
+
+        return Person::query()
+            ->where('name', 'like', '%'.$token.'%')
+            ->orderByRaw('LENGTH(name)')
+            ->first();
+    }
+
+    protected function extractLikelyEntityToken(string $text): string
+    {
+        $value = Str::of($text)
+            ->replaceMatches('/\b(i need to|need to|todo|to do|follow up|send|draft|review|prepare|schedule|finish|submit|share|update|reach out|please|remind me(?: to)?|for|about|regarding|on)\b/i', ' ')
+            ->replaceMatches('/\s+/', ' ')
+            ->trim()
+            ->value();
+
+        if ($value === '') {
+            return '';
+        }
+
+        if (Str::length($value) > 60) {
+            $value = Str::of($value)->limit(60, '')->value();
+        }
+
+        return trim($value);
     }
 
     protected function composeCompanionAssistantMessage(array $suggestions): string
@@ -956,7 +1253,13 @@ PROMPT;
             $title = (string) ($suggestion['title'] ?? 'Untitled');
 
             if ($type === 'task') {
-                $lines[] = "• Should I make \"{$title}\" a new task?";
+                if (! empty($suggestion['unresolved_project_name'])) {
+                    $lines[] = "• Should I make \"{$title}\" a task and create project \"{$suggestion['unresolved_project_name']}\"?";
+                } elseif (! empty($suggestion['linked_project_name'])) {
+                    $lines[] = "• Should I make \"{$title}\" a new task under {$suggestion['linked_project_name']}?";
+                } else {
+                    $lines[] = "• Should I make \"{$title}\" a new task?";
+                }
                 continue;
             }
 
@@ -1087,8 +1390,17 @@ PROMPT;
     protected function applyTaskOrReminderSuggestion(array $suggestion): string
     {
         $isReminder = ($suggestion['type'] ?? 'task') === 'reminder';
-        $projectName = (string) ($suggestion['project_name'] ?? '');
-        $projectId = $projectName !== '' ? $this->resolveUserProjectIdByName($projectName) : null;
+        $projectId = (int) ($suggestion['linked_project_id'] ?? 0);
+        if ($projectId <= 0) {
+            $projectName = (string) ($suggestion['project_name'] ?? '');
+            $projectId = $projectName !== '' ? (int) ($this->resolveUserProjectIdByName($projectName) ?? 0) : 0;
+        }
+
+        $meetingId = (int) ($suggestion['linked_meeting_id'] ?? 0);
+        $links = collect($suggestion['links'] ?? [])->filter(fn ($item) => is_array($item))->values();
+        $linkNote = $links->isNotEmpty()
+            ? 'Linked context: '.$links->map(fn ($link) => ucfirst((string) ($link['type'] ?? 'entity')).'='.$link['name'])->implode('; ')
+            : null;
 
         $action = Action::create([
             'title' => (string) ($suggestion['title'] ?? ''),
@@ -1098,17 +1410,36 @@ PROMPT;
             'status' => 'pending',
             'source' => 'manual',
             'assigned_to' => $this->user->id,
-            'project_id' => $projectId,
+            'meeting_id' => $meetingId > 0 ? $meetingId : null,
+            'project_id' => $projectId > 0 ? $projectId : null,
+            'notes' => $linkNote,
         ]);
 
         $due = $action->due_date
             ? Carbon::parse($action->due_date)->format('F j, Y')
             : 'no due date';
 
+        $linkedSummary = [];
+        if ($action->project?->name) {
+            $linkedSummary[] = 'project '.$action->project->name;
+        }
+        if (! empty($suggestion['linked_meeting_title'])) {
+            $linkedSummary[] = 'meeting '.$suggestion['linked_meeting_title'];
+        }
+        if (! empty($suggestion['linked_trip_name'])) {
+            $linkedSummary[] = 'trip '.$suggestion['linked_trip_name'];
+        }
+        if (! empty($suggestion['linked_organization_name'])) {
+            $linkedSummary[] = 'organization '.$suggestion['linked_organization_name'];
+        }
+        if (! empty($suggestion['linked_person_name'])) {
+            $linkedSummary[] = 'person '.$suggestion['linked_person_name'];
+        }
+
         return 'Done. I created '.($isReminder ? 'a reminder' : 'a task').": "
             .$action->title
             .' (due '.$due.')'
-            .($action->project?->name ? ' under '.$action->project->name.'.' : '.');
+            .(! empty($linkedSummary) ? ' and linked it to '.implode(', ', $linkedSummary).'.' : '.');
     }
 
     protected function applyDraftEmailSuggestion(array $suggestion): string

@@ -3,6 +3,7 @@
 use App\Http\Controllers\GoogleAuthController;
 use App\Http\Controllers\Webhooks\BoxWebhookController;
 use App\Livewire\Dashboard;
+use App\Livewire\Intelligence\IntelligenceIndex;
 use App\Livewire\Meetings\MeetingCapture;
 use App\Livewire\Meetings\MeetingDetail;
 use App\Livewire\Meetings\MeetingList;
@@ -22,6 +23,9 @@ Route::post('/webhooks/box', [BoxWebhookController::class, 'handle'])
 Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard
     Route::get('/dashboard', Dashboard::class)->name('dashboard');
+
+    // Intelligence
+    Route::get('/intelligence', IntelligenceIndex::class)->name('intelligence.index');
 
     // Onboarding
     Route::get('/onboarding', \App\Livewire\Onboarding::class)->name('onboarding');
@@ -90,7 +94,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/feedback', \App\Livewire\Admin\FeedbackManagement::class)->name('admin.feedback');
     });
 
-    // Funders & Grants (Admin only - access check in component)
+    // Funding workspace (workflow-focused alias)
+    Route::get('/funding', \App\Livewire\Grants\GrantIndex::class)->name('funding.index');
+
+    // Funders & Grants (record-focused view)
     Route::get('/funders', \App\Livewire\Grants\GrantIndex::class)->name('grants.index');
     Route::get('/funders/{grant}', \App\Livewire\Grants\GrantShow::class)->name('grants.show');
 

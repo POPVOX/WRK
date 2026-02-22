@@ -62,6 +62,9 @@
                 <h2 class="text-base font-semibold text-gray-900 dark:text-white">Workspace Conversation</h2>
                 <span class="text-xs text-gray-500 dark:text-gray-400">Your companion proposes, you approve</span>
             </div>
+            @php
+                $hasConversation = !empty($conversationMessages);
+            @endphp
 
             <div
                 x-data
@@ -69,7 +72,7 @@
                 x-on:workspace-thread-updated.window="$nextTick(() => { if ($refs.thread) { $refs.thread.scrollTop = $refs.thread.scrollHeight; } })"
                 class="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden"
             >
-                <div x-ref="thread" class="h-[360px] overflow-y-auto p-4 space-y-3 bg-gray-50 dark:bg-gray-900/40">
+                <div x-ref="thread" class="{{ $hasConversation ? 'h-[360px]' : 'h-[150px]' }} overflow-y-auto p-4 space-y-3 bg-gray-50 dark:bg-gray-900/40">
                     @forelse($conversationMessages as $message)
                         @php
                             $isUser = ($message['role'] ?? 'assistant') === 'user';
@@ -83,8 +86,26 @@
                             </div>
                         </div>
                     @empty
-                        <div class="h-full flex items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                            Start with a brain dump, question, or reminder request.
+                        <div class="h-full flex flex-col items-center justify-center text-center">
+                            <p class="text-sm text-gray-600 dark:text-gray-300">
+                                Start with a quick brain dump and I will propose tasks you can approve.
+                            </p>
+                            <div class="mt-3 flex flex-wrap justify-center gap-2">
+                                <button
+                                    type="button"
+                                    wire:click="useSmartAction('brain_dump')"
+                                    class="px-3 py-1.5 text-xs font-medium rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                                >
+                                    Start morning brain dump
+                                </button>
+                                <button
+                                    type="button"
+                                    wire:click="useSmartAction('remind')"
+                                    class="px-3 py-1.5 text-xs font-medium rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                                >
+                                    Add Monday reminder
+                                </button>
+                            </div>
                         </div>
                     @endforelse
                 </div>
@@ -100,9 +121,9 @@
 
                         <textarea
                             wire:model="omniInput"
-                            rows="3"
+                            rows="{{ $hasConversation ? 3 : 2 }}"
                             placeholder="Dump your notes, ask a question, or capture a reminder..."
-                            class="flex-1 text-base sm:text-lg rounded-xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-indigo-500 focus:border-indigo-500 resize-y min-h-[92px]"
+                            class="flex-1 text-base sm:text-lg rounded-xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-indigo-500 focus:border-indigo-500 resize-y min-h-[76px]"
                         ></textarea>
 
                         <button
@@ -180,7 +201,7 @@
                                 default => 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
                             };
                         @endphp
-                        <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                        <div wire:key="suggestion-{{ $loop->index }}-{{ $suggestion['id'] ?? $loop->index }}" class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div class="min-w-0">
                                     <div class="flex flex-wrap items-center gap-2">
@@ -202,19 +223,35 @@
                                     @if(!empty($suggestion['reason']))
                                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ $suggestion['reason'] }}</p>
                                     @endif
+                                    @if(!empty($suggestion['links']) && is_array($suggestion['links']))
+                                        <div class="mt-2 flex flex-wrap gap-1.5">
+                                            @foreach($suggestion['links'] as $link)
+                                                @if(is_array($link) && !empty($link['type']) && !empty($link['name']))
+                                                    <span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                                                        Linked {{ ucfirst($link['type']) }}: {{ $link['name'] }}
+                                                    </span>
+                                                @endif
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                    @if(!empty($suggestion['unresolved_project_name']))
+                                        <p class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                                            No existing project match for "{{ $suggestion['unresolved_project_name'] }}". A "Create project" suggestion was added.
+                                        </p>
+                                    @endif
                                 </div>
 
                                 <div class="flex items-center gap-2">
                                     <button
                                         type="button"
-                                        wire:click="applyCompanionSuggestion('{{ $suggestion['id'] }}')"
+                                        wire:click="applyCompanionSuggestionAt({{ $loop->index }})"
                                         class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
                                     >
                                         {{ $actionLabel }}
                                     </button>
                                     <button
                                         type="button"
-                                        wire:click="dismissCompanionSuggestion('{{ $suggestion['id'] }}')"
+                                        wire:click="dismissCompanionSuggestionAt({{ $loop->index }})"
                                         class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                                     >
                                         Dismiss
@@ -347,34 +384,6 @@
             </div>
 
             <div class="lg:col-span-4 space-y-6">
-                <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 uppercase tracking-wide">Workspace Snapshot</h2>
-                    <dl class="space-y-3 text-sm">
-                        <div class="flex items-center justify-between">
-                            <dt class="text-gray-500 dark:text-gray-400">Meetings today</dt>
-                            <dd class="font-semibold text-gray-900 dark:text-white">{{ $workspaceStats['meetings_today'] }}</dd>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <dt class="text-gray-500 dark:text-gray-400">Tasks due today</dt>
-                            <dd class="font-semibold text-gray-900 dark:text-white">{{ $workspaceStats['tasks_due_today'] }}</dd>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <dt class="text-gray-500 dark:text-gray-400">Overdue tasks</dt>
-                            <dd class="font-semibold {{ $workspaceStats['tasks_overdue'] > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' }}">
-                                {{ $workspaceStats['tasks_overdue'] }}
-                            </dd>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <dt class="text-gray-500 dark:text-gray-400">Active projects</dt>
-                            <dd class="font-semibold text-gray-900 dark:text-white">{{ $workspaceStats['active_projects'] }}</dd>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <dt class="text-gray-500 dark:text-gray-400">Upcoming trips</dt>
-                            <dd class="font-semibold text-gray-900 dark:text-white">{{ $workspaceStats['upcoming_trips'] }}</dd>
-                        </div>
-                    </dl>
-                </div>
-
                 <a href="{{ $dailyPulse['url'] }}" wire:navigate
                     class="block bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-5 text-white hover:from-gray-800 hover:to-gray-700 transition-colors">
                     <p class="text-xs font-semibold uppercase tracking-wide text-indigo-300 mb-2">{{ $dailyPulse['title'] }}</p>
