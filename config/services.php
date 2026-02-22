@@ -52,6 +52,12 @@ return [
     'box' => [
         'base_uri' => env('BOX_API_BASE_URI', 'https://api.box.com/2.0'),
         'access_token' => env('BOX_ACCESS_TOKEN'),
+        'token_url' => env('BOX_AUTH_TOKEN_URL', 'https://api.box.com/oauth2/token'),
+        'client_id' => env('BOX_CLIENT_ID'),
+        'client_secret' => env('BOX_CLIENT_SECRET'),
+        'subject_type' => env('BOX_SUBJECT_TYPE', 'enterprise'),
+        'enterprise_id' => env('BOX_ENTERPRISE_ID'),
+        'user_id' => env('BOX_USER_ID'),
         'root_folder_id' => env('BOX_ROOT_FOLDER_ID', '0'),
         'projects_folder_id' => env('BOX_PROJECTS_FOLDER_ID', env('BOX_ROOT_FOLDER_ID', '0')),
         'auto_provision_project_folders' => filter_var(env('BOX_AUTO_PROVISION_PROJECT_FOLDERS', true), FILTER_VALIDATE_BOOL),

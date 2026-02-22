@@ -5,93 +5,100 @@ namespace App\Services\Box;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 class BoxClient
 {
+    public function isConfigured(): bool
+    {
+        $staticToken = trim((string) config('services.box.access_token', ''));
+        if ($staticToken !== '') {
+            return true;
+        }
+
+        $clientId = trim((string) config('services.box.client_id', ''));
+        $clientSecret = trim((string) config('services.box.client_secret', ''));
+        if ($clientId === '' || $clientSecret === '') {
+            return false;
+        }
+
+        [, $subjectId] = $this->resolveSubjectReference();
+
+        return $subjectId !== '';
+    }
+
     public function createFolder(string $name, string $parentFolderId): array
     {
-        return $this->request()
-            ->post('folders', [
-                'name' => $name,
-                'parent' => [
-                    'id' => $parentFolderId,
-                ],
-            ])
-            ->throw()
-            ->json();
+        return $this->postJson('folders', [
+            'name' => $name,
+            'parent' => [
+                'id' => $parentFolderId,
+            ],
+        ]);
     }
 
     public function listFolderItems(string $folderId, int $offset = 0, ?int $limit = null): array
     {
         $limit = $limit ?? (int) config('services.box.sync_page_size', 100);
 
-        return $this->request()
-            ->get("folders/{$folderId}/items", [
-                'offset' => $offset,
-                'limit' => max(1, min($limit, 1000)),
-                'fields' => implode(',', [
-                    'id',
-                    'type',
-                    'name',
-                    'etag',
-                    'sha1',
-                    'size',
-                    'modified_at',
-                    'trashed_at',
-                    'permissions',
-                    'owned_by',
-                    'parent',
-                    'path_collection',
-                ]),
-            ])
-            ->throw()
-            ->json();
+        return $this->getJson("folders/{$folderId}/items", [
+            'offset' => $offset,
+            'limit' => max(1, min($limit, 1000)),
+            'fields' => implode(',', [
+                'id',
+                'type',
+                'name',
+                'etag',
+                'sha1',
+                'size',
+                'modified_at',
+                'trashed_at',
+                'permissions',
+                'owned_by',
+                'parent',
+                'path_collection',
+            ]),
+        ]);
     }
 
     public function getFile(string $fileId): array
     {
-        return $this->request()
-            ->get("files/{$fileId}", [
-                'fields' => implode(',', [
-                    'id',
-                    'type',
-                    'name',
-                    'etag',
-                    'sha1',
-                    'size',
-                    'modified_at',
-                    'trashed_at',
-                    'permissions',
-                    'owned_by',
-                    'parent',
-                    'path_collection',
-                ]),
-            ])
-            ->throw()
-            ->json();
+        return $this->getJson("files/{$fileId}", [
+            'fields' => implode(',', [
+                'id',
+                'type',
+                'name',
+                'etag',
+                'sha1',
+                'size',
+                'modified_at',
+                'trashed_at',
+                'permissions',
+                'owned_by',
+                'parent',
+                'path_collection',
+            ]),
+        ]);
     }
 
     public function getFolder(string $folderId): array
     {
-        return $this->request()
-            ->get("folders/{$folderId}", [
-                'fields' => implode(',', [
-                    'id',
-                    'type',
-                    'name',
-                    'etag',
-                    'modified_at',
-                    'trashed_at',
-                    'permissions',
-                    'owned_by',
-                    'parent',
-                    'path_collection',
-                ]),
-            ])
-            ->throw()
-            ->json();
+        return $this->getJson("folders/{$folderId}", [
+            'fields' => implode(',', [
+                'id',
+                'type',
+                'name',
+                'etag',
+                'modified_at',
+                'trashed_at',
+                'permissions',
+                'owned_by',
+                'parent',
+                'path_collection',
+            ]),
+        ]);
     }
 
     public function itemNotFound(RequestException $exception): bool
@@ -148,17 +155,164 @@ class BoxClient
             || hash_equals($expectedHex, strtolower($providedSignature));
     }
 
-    private function request(): PendingRequest
+    private function request(bool $forceRefreshToken = false): PendingRequest
     {
-        $accessToken = trim((string) config('services.box.access_token', ''));
-        if ($accessToken === '') {
-            throw new RuntimeException('Box access token is not configured.');
-        }
+        $accessToken = $this->resolveAccessToken($forceRefreshToken);
 
         return Http::acceptJson()
             ->asJson()
             ->withToken($accessToken)
             ->baseUrl((string) config('services.box.base_uri', 'https://api.box.com/2.0'))
             ->timeout(20);
+    }
+
+    /**
+     * @param  array<string,mixed>  $query
+     * @return array<string,mixed>
+     */
+    private function getJson(string $uri, array $query = []): array
+    {
+        $response = $this->sendWithRefreshRetry(fn (bool $refresh) => $this->request($refresh)->get($uri, $query));
+        $data = $response->json();
+
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     * @return array<string,mixed>
+     */
+    private function postJson(string $uri, array $payload = []): array
+    {
+        $response = $this->sendWithRefreshRetry(fn (bool $refresh) => $this->request($refresh)->post($uri, $payload));
+        $data = $response->json();
+
+        return is_array($data) ? $data : [];
+    }
+
+    private function sendWithRefreshRetry(\Closure $call): Response
+    {
+        try {
+            /** @var Response $response */
+            $response = $call(false);
+
+            return $response->throw();
+        } catch (RequestException $exception) {
+            if (! $this->shouldRetryWithFreshToken($exception)) {
+                throw $exception;
+            }
+
+            /** @var Response $response */
+            $response = $call(true);
+
+            return $response->throw();
+        }
+    }
+
+    private function shouldRetryWithFreshToken(RequestException $exception): bool
+    {
+        if (trim((string) config('services.box.access_token', '')) !== '') {
+            return false;
+        }
+
+        return $exception->response instanceof Response && $exception->response->status() === 401;
+    }
+
+    private function resolveAccessToken(bool $forceRefresh = false): string
+    {
+        $staticToken = trim((string) config('services.box.access_token', ''));
+        if ($staticToken !== '') {
+            return $staticToken;
+        }
+
+        $clientId = trim((string) config('services.box.client_id', ''));
+        $clientSecret = trim((string) config('services.box.client_secret', ''));
+        if ($clientId === '' || $clientSecret === '') {
+            throw new RuntimeException('Box auth is not configured. Set BOX_ACCESS_TOKEN or BOX_CLIENT_ID/BOX_CLIENT_SECRET + subject id.');
+        }
+
+        [$subjectType, $subjectId] = $this->resolveSubjectReference();
+        if ($subjectId === '') {
+            throw new RuntimeException('Box CCG subject is not configured. Set BOX_SUBJECT_TYPE and corresponding BOX_ENTERPRISE_ID or BOX_USER_ID.');
+        }
+
+        $cacheKey = $this->tokenCacheKey($subjectType, $subjectId);
+        if ($forceRefresh) {
+            Cache::forget($cacheKey);
+        }
+
+        if (! $forceRefresh) {
+            $cached = Cache::get($cacheKey);
+            if (is_string($cached) && trim($cached) !== '') {
+                return trim($cached);
+            }
+        }
+
+        $response = Http::acceptJson()
+            ->asForm()
+            ->timeout(20)
+            ->post((string) config('services.box.token_url', 'https://api.box.com/oauth2/token'), [
+                'grant_type' => 'client_credentials',
+                'client_id' => $clientId,
+                'client_secret' => $clientSecret,
+                'box_subject_type' => $subjectType,
+                'box_subject_id' => $subjectId,
+            ])
+            ->throw();
+
+        $payload = $response->json();
+        if (! is_array($payload)) {
+            throw new RuntimeException('Box token endpoint returned an unexpected response.');
+        }
+
+        $token = trim((string) ($payload['access_token'] ?? ''));
+        if ($token === '') {
+            throw new RuntimeException('Box token endpoint response did not include access_token.');
+        }
+
+        $expiresIn = max(120, (int) ($payload['expires_in'] ?? 3600));
+        $ttl = max(60, $expiresIn - 120);
+        Cache::put($cacheKey, $token, now()->addSeconds($ttl));
+
+        return $token;
+    }
+
+    /**
+     * @return array{0:string,1:string}
+     */
+    private function resolveSubjectReference(): array
+    {
+        $subjectType = strtolower(trim((string) config('services.box.subject_type', 'enterprise')));
+        if (! in_array($subjectType, ['enterprise', 'user'], true)) {
+            throw new RuntimeException('BOX_SUBJECT_TYPE must be either "enterprise" or "user".');
+        }
+
+        $subjectId = $subjectType === 'user'
+            ? trim((string) config('services.box.user_id', ''))
+            : trim((string) config('services.box.enterprise_id', ''));
+
+        if ($subjectId === '') {
+            if ($subjectType === 'enterprise') {
+                $fallback = trim((string) config('services.box.user_id', ''));
+                if ($fallback !== '') {
+                    return ['user', $fallback];
+                }
+            } else {
+                $fallback = trim((string) config('services.box.enterprise_id', ''));
+                if ($fallback !== '') {
+                    return ['enterprise', $fallback];
+                }
+            }
+        }
+
+        return [$subjectType, $subjectId];
+    }
+
+    private function tokenCacheKey(string $subjectType, string $subjectId): string
+    {
+        $clientId = trim((string) config('services.box.client_id', ''));
+        $suffix = md5($clientId.'|'.$subjectType.'|'.$subjectId);
+
+        return 'box:ccg-token:'.$suffix;
     }
 }

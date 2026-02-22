@@ -19,7 +19,9 @@ class ProvisionBoxProjectFolders extends Command
     public function handle(BoxProjectFolderService $service): int
     {
         if (! $service->isConfigured()) {
-            $this->error('Box project folder provisioning is not configured. Check BOX_ACCESS_TOKEN and BOX_PROJECTS_FOLDER_ID.');
+            $this->error(
+                'Box project folder provisioning is not configured. Check BOX_PROJECTS_FOLDER_ID and Box auth (BOX_ACCESS_TOKEN or BOX_CLIENT_ID/BOX_CLIENT_SECRET with BOX_SUBJECT_TYPE + BOX_ENTERPRISE_ID/BOX_USER_ID).'
+            );
 
             return self::FAILURE;
         }

@@ -15,11 +15,10 @@ class BoxProjectFolderService
 
     public function isConfigured(): bool
     {
-        $accessToken = trim((string) config('services.box.access_token', ''));
         $projectsFolderId = trim((string) config('services.box.projects_folder_id', config('services.box.root_folder_id', '')));
         $autoProvisionEnabled = (bool) config('services.box.auto_provision_project_folders', true);
 
-        return $autoProvisionEnabled && $accessToken !== '' && $projectsFolderId !== '';
+        return $autoProvisionEnabled && $this->client->isConfigured() && $projectsFolderId !== '';
     }
 
     public function ensureFolderForProjectById(int $projectId): ?Project
