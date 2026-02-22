@@ -203,7 +203,7 @@ class MeetingDetail extends Component
             'newActionPriority' => 'required|in:high,medium,low',
         ]);
 
-        Action::create([
+        Action::createResilient([
             'meeting_id' => $this->meeting->id,
             'description' => $this->newActionDescription,
             'due_date' => $this->newActionDueDate,

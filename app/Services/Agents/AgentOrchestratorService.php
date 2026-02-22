@@ -332,7 +332,7 @@ class AgentOrchestratorService
             return 'Created task "'.$task->title.'" on project #'.$projectId.'.';
         }
 
-        $action = Action::create([
+        $action = Action::createResilient([
             'title' => $suggestion->title,
             'meeting_id' => null,
             'project_id' => null,
@@ -354,7 +354,7 @@ class AgentOrchestratorService
         $subject = Arr::get($payload, 'subject', $suggestion->title);
         $recipient = Arr::get($payload, 'recipient', 'Unspecified recipient');
 
-        $action = Action::create([
+        $action = Action::createResilient([
             'title' => 'Draft email: '.$subject,
             'meeting_id' => null,
             'project_id' => $projectId,

@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 
 class Action extends Model
 {
@@ -140,6 +142,54 @@ class Action extends Model
             'status' => self::STATUS_COMPLETE,
             'completed_at' => now(),
         ]);
+    }
+
+    public static function createResilient(array $attributes): self
+    {
+        try {
+            /** @var self $action */
+            $action = static::query()->create($attributes);
+
+            return $action;
+        } catch (QueryException $exception) {
+            if (! static::isPostgresActionIdSequenceCollision($exception)) {
+                throw $exception;
+            }
+
+            static::repairPostgresIdSequence();
+
+            /** @var self $action */
+            $action = static::query()->create($attributes);
+
+            return $action;
+        }
+    }
+
+    protected static function isPostgresActionIdSequenceCollision(QueryException $exception): bool
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return false;
+        }
+
+        if ((string) $exception->getCode() !== '23505') {
+            return false;
+        }
+
+        $message = strtolower((string) $exception->getMessage());
+
+        return str_contains($message, 'actions_pkey')
+            && str_contains($message, '(id)=');
+    }
+
+    public static function repairPostgresIdSequence(): void
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return;
+        }
+
+        DB::statement(
+            "SELECT setval(pg_get_serial_sequence('actions', 'id'), COALESCE((SELECT MAX(id) FROM actions), 0) + 1, false)"
+        );
     }
 
     /**

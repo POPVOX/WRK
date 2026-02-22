@@ -1437,7 +1437,7 @@ PROMPT;
             ? 'Linked context: '.$links->map(fn ($link) => ucfirst((string) ($link['type'] ?? 'entity')).'='.$link['name'])->implode('; ')
             : null;
 
-        $action = Action::create([
+        $action = Action::createResilient([
             'title' => (string) ($suggestion['title'] ?? ''),
             'description' => (string) ($suggestion['description'] ?? $suggestion['title'] ?? ''),
             'due_date' => $suggestion['due_date'] ?? null,
@@ -1670,7 +1670,7 @@ PROMPT;
                 : 'Task not created. Try: /task Draft donor update | due:today | priority:high';
         }
 
-        $action = Action::create([
+        $action = Action::createResilient([
             'title' => $title,
             'description' => (string) Arr::get($parsed, 'description', $title),
             'due_date' => Arr::get($parsed, 'due_date'),

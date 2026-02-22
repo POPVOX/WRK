@@ -447,7 +447,7 @@ class InboxIndex extends Component
             }
         }
 
-        $task = Action::query()->create([
+        $task = Action::createResilient([
             'title' => Str::limit('Follow up with '.$counterpart.' re: '.$subject, 240),
             'description' => implode("\n", $descriptionParts),
             'due_date' => $dueDate->toDateString(),
