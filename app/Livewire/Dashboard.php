@@ -248,9 +248,9 @@ class Dashboard extends Component
         $sentences = [];
 
         if ($isWeekend) {
-            $sentences[] = 'Weekend mode: use this for light planning if helpful, or take real recharge time.';
+            $sentences[] = 'Weekend mode: keep it light.';
         } elseif ($isLateNight) {
-            $sentences[] = 'Late-night inspiration is welcome. Capture what matters, then protect your rest.';
+            $sentences[] = 'Late-night mode: capture ideas, protect rest.';
         }
 
         if ($nextMeeting && $nextMeeting['starts_at'] instanceof Carbon && $nextMeeting['starts_at']->isFuture()) {
@@ -259,7 +259,7 @@ class Dashboard extends Component
 
             if ($isWeekend) {
                 if ($hours >= 24) {
-                    $sentences[] = "{$nextMeeting['title']} is on ".$nextMeeting['starts_at']->format('l').'. A short prep pass now can make Monday easier.';
+                    $sentences[] = "{$nextMeeting['title']} is on ".$nextMeeting['starts_at']->format('l').'.';
                 } elseif ($hours >= 2) {
                     $sentences[] = "{$nextMeeting['title']} is coming up ".$nextMeeting['starts_at']->diffForHumans().'.';
                 } else {
@@ -267,7 +267,7 @@ class Dashboard extends Component
                 }
             } elseif ($isLateNight) {
                 if ($hours >= 6) {
-                    $sentences[] = "{$nextMeeting['title']} is next. No need to finish everything tonight; we can queue the essentials.";
+                    $sentences[] = "{$nextMeeting['title']} is next.";
                 } else {
                     $sentences[] = "{$nextMeeting['title']} is coming up in {$minutes} minutes.";
                 }
@@ -288,13 +288,13 @@ class Dashboard extends Component
 
         if ($stats['tasks_overdue'] > 0) {
             if ($isWeekend || $isLateNight) {
-                $sentences[] = "You have {$stats['tasks_overdue']} overdue task".($stats['tasks_overdue'] === 1 ? '' : 's').'. We can set a gentle Monday catch-up plan or clear one small step now.';
+                $sentences[] = "{$stats['tasks_overdue']} overdue task".($stats['tasks_overdue'] === 1 ? '' : 's').". Want a gentle Monday catch-up plan?";
             } else {
                 $sentences[] = "{$stats['tasks_overdue']} overdue task".($stats['tasks_overdue'] === 1 ? ' needs' : 's need')." attention.";
             }
         } elseif ($stats['tasks_due_today'] > 0) {
             if ($isWeekend || $isLateNight) {
-                $sentences[] = "{$stats['tasks_due_today']} task".($stats['tasks_due_today'] === 1 ? ' is' : 's are')." due today. Want me to turn that into a short, low-stress plan?";
+                $sentences[] = "{$stats['tasks_due_today']} task".($stats['tasks_due_today'] === 1 ? ' is' : 's are')." due today. Want a low-stress plan?";
             } else {
                 $sentences[] = "{$stats['tasks_due_today']} task".($stats['tasks_due_today'] === 1 ? ' is' : 's are')." due today.";
             }
@@ -313,7 +313,15 @@ class Dashboard extends Component
             $sentences[] = $nudge;
         }
 
-        return implode(' ', $sentences);
+        $sentences = collect($sentences)
+            ->map(fn (string $sentence) => trim($sentence))
+            ->filter(fn (string $sentence) => $sentence !== '')
+            ->values()
+            ->all();
+
+        $maxSentences = ($isWeekend || $isLateNight) ? 3 : 4;
+
+        return implode(' ', array_slice($sentences, 0, $maxSentences));
     }
 
     protected function wellbeingNudge(bool $isWeekend, bool $isLateNight): string
@@ -323,15 +331,15 @@ class Dashboard extends Component
         }
 
         $weekendNudges = [
-            'If you are working now, quick wellness check: hydrate, get a little fresh air, and take it one step at a time.',
-            'If it helps, do a short planning pass and then unplug for recovery time.',
-            'Low-pressure reminder: water, a quick stretch, and maybe a hug for a furry friend if one is nearby.',
+            'Quick wellness check: hydrate and get a little fresh air.',
+            'Small planning pass, then unplug if you can.',
+            'Low-pressure reminder: water, stretch, and one step at a time.',
         ];
 
         $lateNightNudges = [
-            'Quick night check: hydrate, stretch, and leave some runway for sleep.',
-            'Late-night mode works best when you capture ideas now and defer heavy execution to tomorrow.',
-            'Gentle reminder: a few focused notes now can replace a lot of late-night pressure.',
+            'Night check: hydrate, stretch, and leave runway for sleep.',
+            'Capture ideas now, push heavy execution to tomorrow.',
+            'A few focused notes now is enough.',
         ];
 
         $seed = now()->dayOfYear + now()->hour;
