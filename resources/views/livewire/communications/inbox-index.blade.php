@@ -315,6 +315,55 @@
                     @endif
                 </aside>
             </div>
+
+            <div class="border-t border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-900/30">
+                <div class="flex items-center justify-between gap-2 mb-3">
+                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Inbox Action Log</h2>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">Latest {{ count($inboxActionLogs) }} actions</span>
+                </div>
+
+                @if($inboxActionLogs->isNotEmpty())
+                    <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                        @foreach($inboxActionLogs as $log)
+                            @php
+                                $statusClass = match($log->action_status) {
+                                    'failed' => 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+                                    default => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+                                };
+                            @endphp
+                            <article class="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800" wire:key="inbox-log-{{ $log->id }}">
+                                <div class="flex items-center justify-between gap-2">
+                                    <p class="text-sm font-medium text-gray-900 dark:text-white">{{ $log->action_label }}</p>
+                                    <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold {{ $statusClass }}">
+                                        {{ strtoupper($log->action_status) }}
+                                    </span>
+                                </div>
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                    {{ $log->created_at?->format('M j, g:i A') }} · {{ str_replace('_', ' ', $log->suggestion_key) }}
+                                </p>
+                                @if($log->subject)
+                                    <p class="mt-1 text-xs text-gray-700 dark:text-gray-300 line-clamp-2">Thread: {{ $log->subject }}</p>
+                                @endif
+                                @if($log->counterpart_name)
+                                    <p class="mt-1 text-xs text-gray-700 dark:text-gray-300">
+                                        Contact: {{ $log->counterpart_name }}
+                                        @if($log->counterpart_email)
+                                            ({{ $log->counterpart_email }})
+                                        @endif
+                                    </p>
+                                @endif
+                                @if($log->project)
+                                    <p class="mt-1 text-xs text-gray-700 dark:text-gray-300">Project: {{ $log->project->name }}</p>
+                                @endif
+                            </article>
+                        @endforeach
+                    </div>
+                @else
+                    <div class="rounded-lg border border-dashed border-gray-300 p-3 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                        No inbox actions logged yet. Approve an agent suggestion to begin the audit trail.
+                    </div>
+                @endif
+            </div>
         </div>
     </div>
 </div>

@@ -4,6 +4,7 @@ namespace App\Livewire\Communications;
 
 use App\Models\Action;
 use App\Models\GmailMessage;
+use App\Models\InboxActionLog;
 use App\Models\Person;
 use App\Models\PersonInteraction;
 use App\Models\Project;
@@ -11,6 +12,7 @@ use App\Services\GoogleGmailService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -96,14 +98,40 @@ class InboxIndex extends Component
 
             if (! ($result['connected'] ?? false)) {
                 $this->dispatch('notify', type: 'warning', message: 'Google is not connected. Connect Google first.');
+                $this->recordInboxAction(
+                    suggestionKey: 'sync_gmail',
+                    actionLabel: 'Sync Gmail',
+                    actionStatus: 'failed',
+                    snapshot: null,
+                    details: ['reason' => 'google_not_connected']
+                );
             } else {
                 $count = (int) ($result['processed'] ?? 0);
                 $imported = (int) ($result['imported'] ?? 0);
                 $updated = (int) ($result['updated'] ?? 0);
                 $this->dispatch('notify', type: 'success', message: "Gmail synced ({$count} processed, {$imported} new, {$updated} updated).");
+                $this->recordInboxAction(
+                    suggestionKey: 'sync_gmail',
+                    actionLabel: 'Sync Gmail',
+                    actionStatus: 'applied',
+                    snapshot: null,
+                    details: [
+                        'processed' => $count,
+                        'imported' => $imported,
+                        'updated' => $updated,
+                        'errors' => (int) ($result['errors'] ?? 0),
+                    ]
+                );
             }
         } catch (\Throwable $exception) {
             $this->dispatch('notify', type: 'error', message: 'Gmail sync failed: '.$exception->getMessage());
+            $this->recordInboxAction(
+                suggestionKey: 'sync_gmail',
+                actionLabel: 'Sync Gmail',
+                actionStatus: 'failed',
+                snapshot: null,
+                details: ['error' => $exception->getMessage()]
+            );
         } finally {
             $user->refresh();
             $this->lastGmailSyncAt = $user->gmail_import_date?->diffForHumans();
@@ -156,7 +184,7 @@ class InboxIndex extends Component
             }
         }
 
-        Action::query()->create([
+        $task = Action::query()->create([
             'title' => Str::limit('Follow up with '.$counterpart.' re: '.$subject, 240),
             'description' => implode("\n", $descriptionParts),
             'due_date' => $dueDate->toDateString(),
@@ -179,6 +207,19 @@ class InboxIndex extends Component
                 'next_action_note' => 'Reply to '.$counterpart,
             ]);
         }
+
+        $this->recordInboxAction(
+            suggestionKey: 'create_follow_up_task',
+            actionLabel: 'Create follow-up task',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: [
+                'created_action_id' => $task->id,
+                'due_date' => $dueDate->toDateString(),
+                'priority' => $task->priority,
+                'project_id' => $projectId > 0 ? $projectId : null,
+            ]
+        );
 
         $this->dispatch('notify', type: 'success', message: 'Follow-up task created.');
     }
@@ -219,6 +260,17 @@ class InboxIndex extends Component
                 'notes' => 'Linked from Inbox thread: '.Str::limit((string) ($snapshot['subject'] ?? ''), 180),
             ],
         ]);
+
+        $this->recordInboxAction(
+            suggestionKey: 'link_person_project',
+            actionLabel: 'Link contact to project',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: [
+                'person_id' => $person->id,
+                'project_id' => $project->id,
+            ]
+        );
 
         $this->dispatch('notify', type: 'success', message: 'Contact linked to project.');
     }
@@ -263,6 +315,18 @@ class InboxIndex extends Component
 
         $this->selectedProjectId = (string) $project->id;
 
+        $this->recordInboxAction(
+            suggestionKey: 'create_project',
+            actionLabel: 'Create project from thread',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: [
+                'created_project_id' => $project->id,
+                'project_name' => $project->name,
+                'person_id' => $person?->id,
+            ]
+        );
+
         $this->dispatch('notify', type: 'success', message: 'Project created and linked.');
     }
 
@@ -294,6 +358,17 @@ class InboxIndex extends Component
             .$opening."\n\n"
             .'I reviewed your email regarding "'.$subject.'" and will follow up with concrete next steps shortly.'
             ."\n\nBest,\n{$user->name}";
+
+        $this->recordInboxAction(
+            suggestionKey: 'generate_reply_draft',
+            actionLabel: 'Generate reply draft',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: [
+                'draft_length' => Str::length($this->replyDraft),
+                'sentiment' => $sentiment,
+            ]
+        );
     }
 
     public function clearReplyDraft(): void
@@ -351,6 +426,66 @@ class InboxIndex extends Component
     public function getSelectedThreadProperty(): ?array
     {
         return $this->selectedThreadSnapshot();
+    }
+
+    public function getInboxActionLogsProperty(): Collection
+    {
+        $user = Auth::user();
+        if (! $user || ! Schema::hasTable('inbox_action_logs')) {
+            return collect();
+        }
+
+        return InboxActionLog::query()
+            ->where('user_id', $user->id)
+            ->with(['project'])
+            ->latest()
+            ->limit(24)
+            ->get();
+    }
+
+    protected function recordInboxAction(
+        string $suggestionKey,
+        string $actionLabel,
+        string $actionStatus,
+        ?array $snapshot = null,
+        array $details = []
+    ): void {
+        $user = Auth::user();
+        if (! $user || ! Schema::hasTable('inbox_action_logs')) {
+            return;
+        }
+
+        $threadKey = null;
+        $subject = null;
+        $counterpartName = null;
+        $counterpartEmail = null;
+        $gmailMessageId = null;
+        $projectId = null;
+
+        if (is_array($snapshot)) {
+            $threadKey = (string) ($snapshot['thread_key'] ?? '');
+            $subject = (string) ($snapshot['subject'] ?? '');
+            $counterpartName = (string) ($snapshot['counterpart_name'] ?? '');
+            $counterpartEmail = (string) ($snapshot['counterpart_email'] ?? '');
+            $projectId = (int) ($this->selectedProjectId !== '' ? $this->selectedProjectId : 0);
+
+            $latestMessage = collect($snapshot['messages'] ?? [])->last();
+            $gmailMessageId = (int) ($latestMessage['id'] ?? 0);
+        }
+
+        InboxActionLog::query()->create([
+            'user_id' => $user->id,
+            'gmail_message_id' => $gmailMessageId > 0 ? $gmailMessageId : null,
+            'project_id' => $projectId > 0 ? $projectId : null,
+            'thread_key' => $threadKey !== '' ? $threadKey : null,
+            'suggestion_key' => $suggestionKey,
+            'action_label' => $actionLabel,
+            'action_status' => $actionStatus,
+            'subject' => $subject !== '' ? Str::limit($subject, 255, '') : null,
+            'counterpart_name' => $counterpartName !== '' ? Str::limit($counterpartName, 255, '') : null,
+            'counterpart_email' => $counterpartEmail !== '' ? Str::limit($counterpartEmail, 255, '') : null,
+            'details' => $details,
+        ]);
     }
 
     protected function selectedThreadSnapshot(): ?array
@@ -844,6 +979,7 @@ class InboxIndex extends Component
             'selectedThread' => $selected,
             'folderCounts' => $this->folderCounts,
             'hasMessages' => ! empty($threadSummaries),
+            'inboxActionLogs' => $this->inboxActionLogs,
         ]);
     }
 }

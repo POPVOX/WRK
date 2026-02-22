@@ -184,4 +184,12 @@ class User extends Authenticatable
     {
         return $this->hasMany(GmailMessage::class);
     }
+
+    /**
+     * Get inbox action audit logs for this user.
+     */
+    public function inboxActionLogs(): HasMany
+    {
+        return $this->hasMany(InboxActionLog::class);
+    }
 }

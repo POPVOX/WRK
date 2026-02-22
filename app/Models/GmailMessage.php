@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class GmailMessage extends Model
 {
@@ -42,5 +43,10 @@ class GmailMessage extends Model
     public function person(): BelongsTo
     {
         return $this->belongsTo(Person::class);
+    }
+
+    public function inboxActionLogs(): HasMany
+    {
+        return $this->hasMany(InboxActionLog::class);
     }
 }
