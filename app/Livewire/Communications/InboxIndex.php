@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
+use Google\Service\Gmail as GoogleGmail;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -37,11 +38,23 @@ class InboxIndex extends Component
 
     public string $replyDraft = '';
 
+    public bool $showComposer = false;
+
+    public string $composeTo = '';
+
+    public string $composeCc = '';
+
+    public string $composeBcc = '';
+
+    public string $composeSubject = '';
+
+    public string $composeBody = '';
+
     public bool $isSyncingGmail = false;
 
     public ?string $lastGmailSyncAt = null;
 
-    public bool $readOnlyMode = true;
+    public bool $readOnlyMode = false;
 
     public array $folders = [
         'inbox' => 'Inbox',
@@ -57,6 +70,7 @@ class InboxIndex extends Component
 
         $user = Auth::user();
         $this->lastGmailSyncAt = $user?->gmail_import_date?->diffForHumans();
+        $this->readOnlyMode = ! $this->gmailWriteScopesConfigured();
     }
 
     public function updatedFolder(): void
@@ -79,6 +93,55 @@ class InboxIndex extends Component
         $this->selectedThreadKey = $threadKey;
         $this->selectedProjectId = '';
         $this->replyDraft = '';
+    }
+
+    public function openComposer(): void
+    {
+        $this->showComposer = true;
+        $this->composeTo = '';
+        $this->composeCc = '';
+        $this->composeBcc = '';
+        $this->composeSubject = '';
+        $this->composeBody = '';
+    }
+
+    public function openComposerForReply(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $to = trim((string) ($snapshot['counterpart_email'] ?? ''));
+        if ($to === '') {
+            $this->dispatch('notify', type: 'error', message: 'No recipient email found on this thread.');
+
+            return;
+        }
+
+        $subject = (string) ($snapshot['subject'] ?? 'Reply');
+        if (! str_starts_with(Str::lower($subject), 're:')) {
+            $subject = 'Re: '.$subject;
+        }
+
+        $this->showComposer = true;
+        $this->composeTo = $to;
+        $this->composeCc = '';
+        $this->composeBcc = '';
+        $this->composeSubject = $subject;
+        $this->composeBody = $this->replyDraft !== '' ? $this->replyDraft : '';
+    }
+
+    public function closeComposer(): void
+    {
+        $this->showComposer = false;
+        $this->composeBody = '';
+        $this->composeSubject = '';
+        $this->composeTo = '';
+        $this->composeCc = '';
+        $this->composeBcc = '';
     }
 
     public function syncGmail(): void
@@ -136,6 +199,206 @@ class InboxIndex extends Component
             $user->refresh();
             $this->lastGmailSyncAt = $user->gmail_import_date?->diffForHumans();
             $this->isSyncingGmail = false;
+        }
+    }
+
+    public function sendCompose(): void
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $to = trim($this->composeTo);
+        $subject = trim($this->composeSubject);
+        $body = trim($this->composeBody);
+
+        if ($to === '' || $subject === '' || $body === '') {
+            $this->dispatch('notify', type: 'error', message: 'To, subject, and message are required.');
+
+            return;
+        }
+
+        try {
+            $result = app(GoogleGmailService::class)->sendMessage(
+                $user,
+                $to,
+                $subject,
+                $body,
+                [
+                    'cc' => $this->composeCc,
+                    'bcc' => $this->composeBcc,
+                ]
+            );
+
+            $this->recordInboxAction(
+                suggestionKey: 'compose_send',
+                actionLabel: 'Send composed email',
+                actionStatus: 'applied',
+                snapshot: null,
+                details: [
+                    'to' => $to,
+                    'subject' => $subject,
+                    'message_id' => (string) ($result['message_id'] ?? ''),
+                    'thread_id' => (string) ($result['thread_id'] ?? ''),
+                ]
+            );
+
+            $this->dispatch('notify', type: 'success', message: 'Email sent.');
+            $this->showComposer = false;
+            $this->composeBody = '';
+            $this->composeSubject = '';
+            $this->composeTo = '';
+            $this->composeCc = '';
+            $this->composeBcc = '';
+            $this->syncGmail();
+        } catch (\Throwable $exception) {
+            $this->recordInboxAction(
+                suggestionKey: 'compose_send',
+                actionLabel: 'Send composed email',
+                actionStatus: 'failed',
+                snapshot: null,
+                details: [
+                    'to' => $to,
+                    'subject' => $subject,
+                    'error' => $exception->getMessage(),
+                ]
+            );
+
+            $this->dispatch('notify', type: 'error', message: 'Send failed: '.$exception->getMessage());
+        }
+    }
+
+    public function saveComposeDraft(): void
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $to = trim($this->composeTo);
+        $subject = trim($this->composeSubject);
+        $body = trim($this->composeBody);
+
+        if ($to === '' || $subject === '' || $body === '') {
+            $this->dispatch('notify', type: 'error', message: 'To, subject, and message are required to save a Gmail draft.');
+
+            return;
+        }
+
+        try {
+            $result = app(GoogleGmailService::class)->createDraft(
+                $user,
+                $to,
+                $subject,
+                $body,
+                [
+                    'cc' => $this->composeCc,
+                    'bcc' => $this->composeBcc,
+                ]
+            );
+
+            $this->recordInboxAction(
+                suggestionKey: 'compose_save_draft',
+                actionLabel: 'Save Gmail draft',
+                actionStatus: 'applied',
+                snapshot: null,
+                details: [
+                    'to' => $to,
+                    'subject' => $subject,
+                    'draft_id' => (string) ($result['draft_id'] ?? ''),
+                    'message_id' => (string) ($result['message_id'] ?? ''),
+                    'thread_id' => (string) ($result['thread_id'] ?? ''),
+                ]
+            );
+
+            $this->dispatch('notify', type: 'success', message: 'Draft saved to Gmail.');
+            $this->syncGmail();
+        } catch (\Throwable $exception) {
+            $this->recordInboxAction(
+                suggestionKey: 'compose_save_draft',
+                actionLabel: 'Save Gmail draft',
+                actionStatus: 'failed',
+                snapshot: null,
+                details: [
+                    'to' => $to,
+                    'subject' => $subject,
+                    'error' => $exception->getMessage(),
+                ]
+            );
+
+            $this->dispatch('notify', type: 'error', message: 'Draft save failed: '.$exception->getMessage());
+        }
+    }
+
+    public function sendReplyDraft(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $to = trim((string) ($snapshot['counterpart_email'] ?? ''));
+        $body = trim($this->replyDraft);
+        if ($to === '' || $body === '') {
+            $this->dispatch('notify', type: 'error', message: 'Reply draft is missing recipient or message.');
+
+            return;
+        }
+
+        $subject = (string) ($snapshot['subject'] ?? 'Reply');
+        if (! str_starts_with(Str::lower($subject), 're:')) {
+            $subject = 'Re: '.$subject;
+        }
+
+        $threadId = trim((string) ($snapshot['gmail_thread_id'] ?? ''));
+
+        try {
+            $result = app(GoogleGmailService::class)->sendMessage(
+                $user,
+                $to,
+                $subject,
+                $body,
+                ['thread_id' => $threadId]
+            );
+
+            $this->recordInboxAction(
+                suggestionKey: 'send_reply',
+                actionLabel: 'Send reply from thread',
+                actionStatus: 'applied',
+                snapshot: $snapshot,
+                details: [
+                    'to' => $to,
+                    'subject' => $subject,
+                    'message_id' => (string) ($result['message_id'] ?? ''),
+                    'thread_id' => (string) ($result['thread_id'] ?? $threadId),
+                ]
+            );
+
+            $this->dispatch('notify', type: 'success', message: 'Reply sent.');
+            $this->replyDraft = '';
+            $this->syncGmail();
+        } catch (\Throwable $exception) {
+            $this->recordInboxAction(
+                suggestionKey: 'send_reply',
+                actionLabel: 'Send reply from thread',
+                actionStatus: 'failed',
+                snapshot: $snapshot,
+                details: [
+                    'to' => $to,
+                    'subject' => $subject,
+                    'error' => $exception->getMessage(),
+                ]
+            );
+
+            $this->dispatch('notify', type: 'error', message: 'Reply send failed: '.$exception->getMessage());
         }
     }
 
@@ -568,6 +831,7 @@ class InboxIndex extends Component
             'organization' => $organization,
             'counterpart_name' => $counterpart['name'],
             'counterpart_email' => $counterpart['email'],
+            'gmail_thread_id' => (string) ($latest->gmail_thread_id ?? ''),
             'latest_snippet' => $latest->snippet,
             'sentiment' => $this->threadSentiment($messages),
             'project_candidates' => $projectCandidates->all(),
@@ -597,7 +861,7 @@ class InboxIndex extends Component
             [
                 'key' => 'generate_reply_draft',
                 'title' => 'Draft reply',
-                'body' => 'Generate a first-pass response you can edit before sending outside WRK.',
+                'body' => 'Generate a first-pass response, edit it, then send from this inbox.',
                 'action' => 'generateReplyDraft',
                 'button' => 'Generate draft',
             ],
@@ -967,6 +1231,18 @@ class InboxIndex extends Component
         if (! array_key_exists($this->folder, $this->folders)) {
             $this->folder = 'inbox';
         }
+    }
+
+    protected function gmailWriteScopesConfigured(): bool
+    {
+        $scopes = collect((array) config('services.google.workspace_scopes', []))
+            ->map(fn ($scope) => trim((string) $scope))
+            ->filter()
+            ->values();
+
+        return $scopes->contains(GoogleGmail::MAIL_GOOGLE_COM)
+            || $scopes->contains(GoogleGmail::GMAIL_COMPOSE)
+            || $scopes->contains(GoogleGmail::GMAIL_SEND);
     }
 
     public function render()

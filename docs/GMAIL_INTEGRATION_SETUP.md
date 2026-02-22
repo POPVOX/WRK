@@ -1,6 +1,6 @@
 # Gmail Integration Setup (WRK)
 
-This guide covers the first-pass Gmail hookup in WRK: OAuth, metadata sync, and scheduler wiring.
+This guide covers Gmail hookup in WRK: OAuth, metadata sync, and compose/send setup.
 
 ## 1. Google Cloud OAuth Configuration
 
@@ -10,6 +10,8 @@ Required scopes:
 
 - `https://www.googleapis.com/auth/calendar.readonly`
 - `https://www.googleapis.com/auth/gmail.readonly`
+- `https://www.googleapis.com/auth/gmail.send`
+- `https://www.googleapis.com/auth/gmail.compose`
 
 Authorized redirect URI:
 
@@ -22,9 +24,9 @@ Set on the WRK site:
 - `GOOGLE_CLIENT_ID=...`
 - `GOOGLE_CLIENT_SECRET=...`
 - `GOOGLE_REDIRECT_URI=https://wrk-popvox.on-forge.com/google/callback`
-- `GOOGLE_WORKSPACE_SCOPES=https://www.googleapis.com/auth/calendar.readonly,https://www.googleapis.com/auth/gmail.readonly`
+- `GOOGLE_WORKSPACE_SCOPES=https://www.googleapis.com/auth/calendar.readonly,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/gmail.compose`
 
-If users connected Google before Gmail scope was added, they need to disconnect/reconnect to grant Gmail access.
+If users connected Google before send/compose scopes were added, they need to disconnect/reconnect to grant updated Gmail permissions.
 
 ## 3. Run Database Migration
 
@@ -32,7 +34,7 @@ If users connected Google before Gmail scope was added, they need to disconnect/
 php artisan migrate --force
 ```
 
-This adds:
+This adds/uses:
 
 - `users.gmail_import_date`
 - `users.gmail_history_id`
@@ -69,3 +71,14 @@ In Workspace:
 - type `/sync gmail` in the conversation bar.
 
 The sync stores Gmail metadata only (subject, participants, snippet, sent time, labels), not full message bodies.
+
+## 7. Compose and Send
+
+Inbox now supports:
+
+- Compose new email (To/Cc/Bcc/Subject/Body)
+- Save Gmail draft
+- Send Gmail message
+- Send thread reply directly from WRK
+
+If send/draft actions fail with an "insufficient scope" error, disconnect and reconnect Google so the user grants the new Gmail scopes.

@@ -9,9 +9,15 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
-                <span class="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-                    Gmail read-only mode: send/compose disabled
-                </span>
+                @if($readOnlyMode)
+                    <span class="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                        Gmail connected in read-only scope. Reconnect Google to enable send/compose.
+                    </span>
+                @else
+                    <span class="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200">
+                        Gmail compose + send enabled
+                    </span>
+                @endif
                 <button
                     type="button"
                     wire:click="syncGmail"
@@ -35,11 +41,12 @@
                 <aside class="border-r border-gray-200 bg-gray-50/70 dark:border-gray-700 dark:bg-gray-900/30 p-3 overflow-y-auto">
                     <button
                         type="button"
-                        class="w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm cursor-not-allowed opacity-70"
-                        title="Compose will be enabled once Gmail send scope is added"
-                        disabled
+                        wire:click="openComposer"
+                        class="w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        @disabled($readOnlyMode)
+                        title="{{ $readOnlyMode ? 'Reconnect Google with Gmail compose/send scope first.' : 'Compose a new email' }}"
                     >
-                        Compose (Soon)
+                        Compose
                     </button>
 
                     <nav class="mt-4 space-y-1">
@@ -62,7 +69,7 @@
                         <ul class="mt-2 space-y-2 text-xs text-gray-600 dark:text-gray-300">
                             <li>Create follow-up tasks from threads</li>
                             <li>Suggest project linkage</li>
-                            <li>Draft response text (you edit/send externally)</li>
+                            <li>Draft response text and send from WRK</li>
                             <li>Link contacts to projects</li>
                         </ul>
                     </div>
@@ -144,9 +151,15 @@
                                     @endif
                                 </p>
                             </div>
-                            <span class="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                                Read-only
-                            </span>
+                            @if($readOnlyMode)
+                                <span class="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                    Reconnect Google for send
+                                </span>
+                            @else
+                                <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                    Send enabled
+                                </span>
+                            @endif
                         </header>
 
                         <div class="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50/60 dark:bg-gray-900/30">
@@ -226,11 +239,37 @@
                                         <button
                                             type="button"
                                             wire:click="generateReplyDraft"
+                                            wire:loading.attr="disabled"
+                                            wire:target="generateReplyDraft,sendReplyDraft,openComposerForReply"
                                             class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-white dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
                                         >
-                                            Generate Draft
+                                            <span wire:loading.remove wire:target="generateReplyDraft">Generate Draft</span>
+                                            <span wire:loading wire:target="generateReplyDraft">Generating...</span>
                                         </button>
                                         @if($replyDraft !== '')
+                                            <button
+                                                type="button"
+                                                wire:click="sendReplyDraft"
+                                                wire:loading.attr="disabled"
+                                                wire:target="sendReplyDraft"
+                                                @disabled($readOnlyMode)
+                                                class="inline-flex items-center rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                title="{{ $readOnlyMode ? 'Reconnect Google with Gmail send scope first.' : 'Send this reply now' }}"
+                                            >
+                                                <span wire:loading.remove wire:target="sendReplyDraft">Send Reply</span>
+                                                <span wire:loading wire:target="sendReplyDraft">Sending...</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                wire:click="openComposerForReply"
+                                                wire:loading.attr="disabled"
+                                                wire:target="openComposerForReply"
+                                                @disabled($readOnlyMode)
+                                                class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                                title="{{ $readOnlyMode ? 'Reconnect Google with Gmail compose scope first.' : 'Open reply in composer' }}"
+                                            >
+                                                Open in Composer
+                                            </button>
                                             <button
                                                 type="button"
                                                 wire:click="clearReplyDraft"
@@ -245,7 +284,7 @@
                                     wire:model="replyDraft"
                                     rows="4"
                                     class="w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                    placeholder="Generate a draft, edit it here, then send from Gmail while WRK is in read-only mode."
+                                    placeholder="Generate a draft, edit it here, and send it from WRK."
                                 ></textarea>
                             </div>
                         </footer>
@@ -315,6 +354,104 @@
                     @endif
                 </aside>
             </div>
+
+            @if($showComposer)
+                <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4" wire:keydown.escape="closeComposer">
+                    <section class="w-full max-w-4xl rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
+                        <header class="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+                            <div>
+                                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Compose Email</h2>
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Send or save to Gmail drafts directly from WRK.</p>
+                            </div>
+                            <button
+                                type="button"
+                                wire:click="closeComposer"
+                                class="rounded-lg border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                            >
+                                Close
+                            </button>
+                        </header>
+
+                        <div class="space-y-3 p-5">
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <label class="space-y-1">
+                                    <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">To</span>
+                                    <input
+                                        type="text"
+                                        wire:model="composeTo"
+                                        placeholder="name@example.org"
+                                        class="w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                    >
+                                </label>
+                                <label class="space-y-1">
+                                    <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Cc</span>
+                                    <input
+                                        type="text"
+                                        wire:model="composeCc"
+                                        placeholder="optional"
+                                        class="w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                    >
+                                </label>
+                            </div>
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <label class="space-y-1">
+                                    <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Bcc</span>
+                                    <input
+                                        type="text"
+                                        wire:model="composeBcc"
+                                        placeholder="optional"
+                                        class="w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                    >
+                                </label>
+                                <label class="space-y-1 sm:col-span-1">
+                                    <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Subject</span>
+                                    <input
+                                        type="text"
+                                        wire:model="composeSubject"
+                                        placeholder="Subject"
+                                        class="w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                    >
+                                </label>
+                            </div>
+
+                            <label class="space-y-1 block">
+                                <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Message</span>
+                                <textarea
+                                    wire:model="composeBody"
+                                    rows="10"
+                                    placeholder="Write your message..."
+                                    class="w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                ></textarea>
+                            </label>
+                        </div>
+
+                        <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 px-5 py-4 dark:border-gray-700">
+                            <button
+                                type="button"
+                                wire:click="saveComposeDraft"
+                                wire:loading.attr="disabled"
+                                wire:target="saveComposeDraft,sendCompose"
+                                @disabled($readOnlyMode)
+                                class="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                            >
+                                <span wire:loading.remove wire:target="saveComposeDraft">Save Draft</span>
+                                <span wire:loading wire:target="saveComposeDraft">Saving...</span>
+                            </button>
+                            <button
+                                type="button"
+                                wire:click="sendCompose"
+                                wire:loading.attr="disabled"
+                                wire:target="sendCompose,saveComposeDraft"
+                                @disabled($readOnlyMode)
+                                class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <span wire:loading.remove wire:target="sendCompose">Send Email</span>
+                                <span wire:loading wire:target="sendCompose">Sending...</span>
+                            </button>
+                        </footer>
+                    </section>
+                </div>
+            @endif
 
             <div class="border-t border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-900/30">
                 <div class="flex items-center justify-between gap-2 mb-3">

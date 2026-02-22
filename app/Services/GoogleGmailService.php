@@ -8,6 +8,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Google\Client as GoogleClient;
 use Google\Service\Gmail as GoogleGmail;
+use Google\Service\Gmail\Draft as GoogleDraft;
 use Google\Service\Gmail\Message as GoogleMessage;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
@@ -23,7 +24,10 @@ class GoogleGmailService
         $this->client->setClientId(config('services.google.client_id'));
         $this->client->setClientSecret(config('services.google.client_secret'));
         $this->client->setRedirectUri(config('services.google.redirect_uri'));
-        $this->client->addScope(GoogleGmail::GMAIL_READONLY);
+        $scopes = (array) config('services.google.workspace_scopes', [GoogleGmail::GMAIL_READONLY]);
+        foreach (array_values(array_unique(array_filter($scopes))) as $scope) {
+            $this->client->addScope($scope);
+        }
         $this->client->setAccessType('offline');
         $this->client->setPrompt('consent');
     }
@@ -180,6 +184,79 @@ class GoogleGmailService
         ];
     }
 
+    public function sendMessage(
+        User $user,
+        string|array $to,
+        string $subject,
+        string $body,
+        array $options = []
+    ): array {
+        $service = $this->getGmailService($user);
+        if (! $service) {
+            throw new RuntimeException('Google account is not connected.');
+        }
+
+        try {
+            $message = new GoogleMessage;
+            $message->setRaw($this->buildRawMessage($to, $subject, $body, $options));
+
+            $threadId = trim((string) ($options['thread_id'] ?? ''));
+            if ($threadId !== '') {
+                $message->setThreadId($threadId);
+            }
+
+            $sent = $service->users_messages->send('me', $message);
+
+            return [
+                'message_id' => (string) ($sent->getId() ?? ''),
+                'thread_id' => (string) ($sent->getThreadId() ?? ''),
+            ];
+        } catch (Throwable $exception) {
+            $this->throwIfInsufficientGmailScope($exception);
+
+            throw $exception;
+        }
+    }
+
+    public function createDraft(
+        User $user,
+        string|array $to,
+        string $subject,
+        string $body,
+        array $options = []
+    ): array {
+        $service = $this->getGmailService($user);
+        if (! $service) {
+            throw new RuntimeException('Google account is not connected.');
+        }
+
+        try {
+            $message = new GoogleMessage;
+            $message->setRaw($this->buildRawMessage($to, $subject, $body, $options));
+
+            $threadId = trim((string) ($options['thread_id'] ?? ''));
+            if ($threadId !== '') {
+                $message->setThreadId($threadId);
+            }
+
+            $draft = new GoogleDraft;
+            $draft->setMessage($message);
+
+            $created = $service->users_drafts->create('me', $draft);
+            $draftMessage = $created->getMessage();
+
+            return [
+                'draft_id' => (string) ($created->getId() ?? ''),
+                'message_id' => (string) ($draftMessage?->getId() ?? ''),
+                'thread_id' => (string) ($draftMessage?->getThreadId() ?? ''),
+            ];
+        } catch (Throwable $exception) {
+            $this->throwIfInsufficientGmailScope($exception);
+
+            throw $exception;
+        }
+    }
+
     protected function refreshToken(User $user): void
     {
         if (! $user->google_refresh_token) {
@@ -236,6 +313,103 @@ class GoogleGmailService
             'is_inbound' => $isInbound,
             'labels' => array_values(array_filter((array) ($message->getLabelIds() ?? []))),
         ];
+    }
+
+    protected function buildRawMessage(string|array $to, string $subject, string $body, array $options = []): string
+    {
+        $toList = $this->normalizeRecipients($to);
+        if ($toList === []) {
+            throw new RuntimeException('At least one valid To recipient is required.');
+        }
+
+        $subject = trim($subject);
+        if ($subject === '') {
+            throw new RuntimeException('Subject is required.');
+        }
+
+        $body = trim($body);
+        if ($body === '') {
+            throw new RuntimeException('Message body is required.');
+        }
+
+        $ccList = $this->normalizeRecipients($options['cc'] ?? []);
+        $bccList = $this->normalizeRecipients($options['bcc'] ?? []);
+
+        $headers = [
+            'MIME-Version: 1.0',
+            'Content-Type: text/plain; charset=UTF-8',
+            'Content-Transfer-Encoding: 8bit',
+            'To: '.implode(', ', $toList),
+            'Subject: '.$this->encodeMimeHeader($subject),
+        ];
+
+        if ($ccList !== []) {
+            $headers[] = 'Cc: '.implode(', ', $ccList);
+        }
+
+        if ($bccList !== []) {
+            $headers[] = 'Bcc: '.implode(', ', $bccList);
+        }
+
+        $normalizedBody = str_replace(["\r\n", "\r"], "\n", $body);
+        $normalizedBody = preg_replace("/\n{3,}/", "\n\n", $normalizedBody) ?? $normalizedBody;
+
+        $mime = implode("\r\n", $headers)."\r\n\r\n".$normalizedBody;
+
+        return rtrim(strtr(base64_encode($mime), '+/', '-_'), '=');
+    }
+
+    protected function normalizeRecipients(string|array|null $value): array
+    {
+        $parts = [];
+        if (is_array($value)) {
+            $parts = $value;
+        } elseif (is_string($value)) {
+            $split = preg_split('/[\n;,]+/', $value) ?: [];
+            $parts = $split;
+        }
+
+        $formatted = [];
+        foreach ($parts as $part) {
+            $parsed = $this->parseEmailAddress((string) $part);
+            $email = trim((string) ($parsed['email'] ?? ''));
+            if ($email === '') {
+                continue;
+            }
+
+            $name = trim((string) ($parsed['name'] ?? ''));
+            if ($name !== '') {
+                $safeName = str_replace(['"', "\r", "\n"], '', $name);
+                $formatted[] = sprintf('"%s" <%s>', $safeName, $email);
+            } else {
+                $formatted[] = $email;
+            }
+        }
+
+        return array_values(array_unique($formatted));
+    }
+
+    protected function encodeMimeHeader(string $value): string
+    {
+        if (function_exists('mb_encode_mimeheader')) {
+            $encoded = @mb_encode_mimeheader($value, 'UTF-8', 'B', "\r\n");
+            if (is_string($encoded) && $encoded !== '') {
+                return $encoded;
+            }
+        }
+
+        return $value;
+    }
+
+    protected function throwIfInsufficientGmailScope(Throwable $exception): void
+    {
+        $lower = strtolower($exception->getMessage());
+        if (str_contains($lower, 'insufficient') && str_contains($lower, 'scope')) {
+            throw new RuntimeException(
+                'Google account needs Gmail send/compose permission. Disconnect and reconnect Google to grant updated Gmail scopes.',
+                previous: $exception
+            );
+        }
     }
 
     protected function extractHeaderMap(GoogleMessage $message): array
