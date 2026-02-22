@@ -26,6 +26,8 @@ use Livewire\Component;
 #[Title('Intelligence')]
 class IntelligenceIndex extends Component
 {
+    public string $panel = 'home';
+
     public bool $migrationReady = false;
 
     public string $migrationMessage = '';
@@ -41,6 +43,8 @@ class IntelligenceIndex extends Component
     public array $agentMessages = [];
 
     public array $pendingSuggestions = [];
+
+    public array $homePendingSuggestions = [];
 
     public array $recentRuns = [];
 
@@ -72,6 +76,12 @@ class IntelligenceIndex extends Component
 
     public function mount(): void
     {
+        $this->panel = $this->resolvePanelFromRouteName();
+        $requestedAgentId = request()->integer('agent');
+        if ($requestedAgentId > 0) {
+            $this->selectedAgentId = $requestedAgentId;
+        }
+
         $this->migrationReady = $this->hasAgentSchema();
 
         if (! $this->migrationReady) {
@@ -95,8 +105,7 @@ class IntelligenceIndex extends Component
 
         if ($this->migrationReady) {
             $this->loadPermissionSnapshot();
-            $this->loadAgentDirectory();
-            $this->hydrateSelectedAgentWorkspace();
+            $this->refreshPanelData();
         }
 
         $this->generatedAt = now()->format('M j, Y g:i A');
@@ -112,6 +121,12 @@ class IntelligenceIndex extends Component
     public function selectAgent(int $agentId): void
     {
         $this->selectedAgentId = $agentId;
+        if ($this->panel === 'audit') {
+            $this->loadAuditRuns();
+
+            return;
+        }
+
         $this->hydrateSelectedAgentWorkspace();
     }
 
@@ -193,6 +208,10 @@ class IntelligenceIndex extends Component
 
         $this->refresh();
         $this->dispatch('notify', type: 'success', message: 'Agent created and ready for direction.');
+
+        if ($this->panel === 'create') {
+            $this->redirectRoute('intelligence.agents', ['agent' => $agent->id], navigate: true);
+        }
     }
 
     public function toggleAgentStatus(int $agentId): void
@@ -292,7 +311,7 @@ class IntelligenceIndex extends Component
             );
 
             unset($this->suggestionOverrides[$suggestionId]);
-            $this->hydrateSelectedAgentWorkspace();
+            $this->refreshPanelData();
             $this->dispatch('workspace-thread-updated');
             $this->dispatch('notify', type: 'success', message: $summary);
         } catch (\Throwable $exception) {
@@ -322,12 +341,185 @@ class IntelligenceIndex extends Component
         try {
             $orchestrator->dismissSuggestion($suggestion, $actor, 'Dismissed from Intelligence review queue.');
             unset($this->suggestionOverrides[$suggestionId]);
-            $this->hydrateSelectedAgentWorkspace();
+            $this->refreshPanelData();
             $this->dispatch('workspace-thread-updated');
             $this->dispatch('notify', type: 'success', message: 'Suggestion dismissed.');
         } catch (\Throwable $exception) {
             $this->dispatch('notify', type: 'error', message: $exception->getMessage());
         }
+    }
+
+    public function updatedSelectedAgentId($value): void
+    {
+        if (! $this->migrationReady) {
+            return;
+        }
+
+        if ($this->panel === 'agents') {
+            $this->hydrateSelectedAgentWorkspace();
+        } elseif ($this->panel === 'audit') {
+            $this->loadAuditRuns();
+        }
+    }
+
+    protected function resolvePanelFromRouteName(): string
+    {
+        $routeName = (string) (request()->route()?->getName() ?? '');
+
+        return match ($routeName) {
+            'intelligence.agents' => 'agents',
+            'intelligence.create' => 'create',
+            'intelligence.audit' => 'audit',
+            default => 'home',
+        };
+    }
+
+    protected function refreshPanelData(): void
+    {
+        if ($this->panel === 'agents') {
+            $this->loadAgentDirectory();
+            $this->hydrateSelectedAgentWorkspace();
+            $this->homePendingSuggestions = [];
+
+            return;
+        }
+
+        if ($this->panel === 'create') {
+            $this->loadFormOptions();
+            $this->pendingSuggestions = [];
+            $this->homePendingSuggestions = [];
+            $this->recentRuns = [];
+
+            return;
+        }
+
+        if ($this->panel === 'audit') {
+            $this->loadAgentDirectory();
+            $this->pendingSuggestions = [];
+            $this->homePendingSuggestions = [];
+            $this->loadAuditRuns();
+
+            return;
+        }
+
+        $this->pendingSuggestions = [];
+        $this->recentRuns = [];
+        $this->loadHomePendingSuggestions();
+    }
+
+    protected function loadHomePendingSuggestions(): void
+    {
+        $agentIds = $this->accessibleAgentIds();
+
+        if (empty($agentIds)) {
+            $this->homePendingSuggestions = [];
+
+            return;
+        }
+
+        $suggestions = AgentSuggestion::query()
+            ->with(['sources', 'run', 'agent:id,name,created_by,owner_user_id,governance_tiers'])
+            ->whereIn('agent_id', $agentIds)
+            ->where('approval_status', AgentSuggestion::STATUS_PENDING)
+            ->latest('created_at')
+            ->limit(120)
+            ->get();
+
+        $this->homePendingSuggestions = $suggestions
+            ->map(fn (AgentSuggestion $suggestion) => $this->mapSuggestionForView($suggestion))
+            ->values()
+            ->all();
+    }
+
+    protected function loadAuditRuns(): void
+    {
+        $agentIds = $this->accessibleAgentIds();
+        if (empty($agentIds)) {
+            $this->recentRuns = [];
+
+            return;
+        }
+
+        $query = AgentRun::query()
+            ->with(['agent:id,name', 'suggestions.sources'])
+            ->whereIn('agent_id', $agentIds)
+            ->latest('created_at')
+            ->limit(40);
+
+        if ($this->selectedAgentId && in_array((int) $this->selectedAgentId, $agentIds, true)) {
+            $query->where('agent_id', (int) $this->selectedAgentId);
+        }
+
+        $runs = $query->get();
+
+        $this->recentRuns = $runs->map(function (AgentRun $run): array {
+            return [
+                'id' => $run->id,
+                'agent_id' => $run->agent_id,
+                'agent_name' => $run->agent?->name ?? 'Agent #'.$run->agent_id,
+                'status' => $run->status,
+                'directive' => $run->directive,
+                'result_summary' => $run->result_summary,
+                'reasoning_chain' => is_array($run->reasoning_chain) ? $run->reasoning_chain : [],
+                'alternatives_considered' => is_array($run->alternatives_considered) ? $run->alternatives_considered : [],
+                'created_at' => $run->created_at?->format('M j, g:i A'),
+                'completed_at' => $run->completed_at?->format('M j, g:i A'),
+                'error_message' => $run->error_message,
+                'suggestions' => $run->suggestions->map(fn (AgentSuggestion $suggestion) => [
+                    'id' => $suggestion->id,
+                    'type' => $suggestion->suggestion_type,
+                    'title' => $suggestion->title,
+                    'status' => $suggestion->approval_status,
+                    'risk_level' => $suggestion->risk_level,
+                    'sources' => $suggestion->sources->map(fn ($source) => [
+                        'type' => $source->source_type,
+                        'title' => $source->source_title,
+                        'url' => $source->source_url,
+                        'confidence' => $source->confidence,
+                    ])->values()->all(),
+                ])->values()->all(),
+            ];
+        })->values()->all();
+    }
+
+    protected function accessibleAgentIds(): array
+    {
+        $agents = Agent::query()
+            ->get(['id', 'scope', 'project_id', 'created_by', 'owner_user_id']);
+
+        return $agents
+            ->filter(fn (Agent $agent) => $this->canDirectAgent($agent))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    protected function mapSuggestionForView(AgentSuggestion $suggestion): array
+    {
+        $mode = $this->governanceModeForSuggestion($suggestion);
+
+        return [
+            'id' => $suggestion->id,
+            'agent_id' => $suggestion->agent_id,
+            'agent_name' => $suggestion->agent?->name,
+            'run_id' => $suggestion->run_id,
+            'suggestion_type' => $suggestion->suggestion_type,
+            'title' => $suggestion->title,
+            'reasoning' => $suggestion->reasoning,
+            'risk_level' => $suggestion->risk_level,
+            'governance_mode' => $mode,
+            'payload' => is_array($suggestion->payload) ? $suggestion->payload : [],
+            'created_at' => $suggestion->created_at?->format('M j, g:i A'),
+            'can_review' => $this->canReviewSuggestion($suggestion),
+            'sources' => $suggestion->sources->map(fn ($source) => [
+                'source_type' => $source->source_type,
+                'source_id' => $source->source_id,
+                'source_title' => $source->source_title,
+                'confidence' => $source->confidence,
+                'source_url' => $source->source_url,
+            ])->values()->all(),
+        ];
     }
 
     protected function hasAgentSchema(): bool
@@ -617,7 +809,7 @@ class IntelligenceIndex extends Component
 
     protected function selectedAgent(): ?Agent
     {
-        if (! $this->selectedAgentId) {
+        if (! $this->migrationReady || ! $this->selectedAgentId) {
             return null;
         }
 

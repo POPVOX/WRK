@@ -37,9 +37,6 @@ class PersonShow extends Component
 
     public string $notes = '';
 
-    // CRM fields
-    public ?string $status = null;
-
     public ?int $owner_id = null;
 
     public ?string $source = null;
@@ -108,7 +105,6 @@ class PersonShow extends Component
         $this->notes = $this->person->notes ?? '';
 
         // CRM fields
-        $this->status = $this->person->status ?? null;
         $this->owner_id = $this->person->owner_id ?? null;
         $this->source = $this->person->source ?? null;
         $this->tagsInput = implode(', ', (array) ($this->person->tags ?? []));
@@ -322,7 +318,6 @@ class PersonShow extends Component
     {
         // Validate limited fields
         $this->validate([
-            'status' => 'nullable|string|in:'.implode(',', array_keys(Person::STATUSES)),
             'owner_id' => 'nullable|exists:users,id',
             'next_action_at' => 'nullable|date',
             'next_action_note' => 'nullable|string|max:500',
@@ -337,7 +332,6 @@ class PersonShow extends Component
             ->all();
 
         $this->person->update([
-            'status' => $this->status ?: null,
             'owner_id' => $this->owner_id ?: null,
             'source' => $this->source ?: null,
             'tags' => $tags,
@@ -437,7 +431,6 @@ class PersonShow extends Component
 
         $interactions = $this->person->interactions()->with('user')->limit(25)->get();
         $owners = User::orderBy('name')->get(['id', 'name']);
-        $statuses = Person::STATUSES;
 
         return view('livewire.people.person-show', [
             'meetings' => $meetings,
@@ -448,7 +441,6 @@ class PersonShow extends Component
             'projectResults' => $projectResults,
             'interactions' => $interactions,
             'owners' => $owners,
-            'statuses' => $statuses,
         ])->title($this->person->name.' - Contact');
     }
 

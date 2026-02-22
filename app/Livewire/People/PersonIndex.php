@@ -6,7 +6,9 @@ use App\Models\ContactView;
 use App\Models\Organization;
 use App\Models\Person;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -23,13 +25,17 @@ class PersonIndex extends Component
 
     public string $filterOrg = '';
 
-    public ?string $filterStatus = null;
-
     public ?int $filterOwner = null;
 
     public string $filterTag = '';
 
+    public string $filterEmailDomain = '';
+
     public string $viewMode = 'card'; // 'card' or 'table'
+
+    public string $sortBy = 'name';
+
+    public string $sortDirection = 'asc';
 
     public int $perPage = 20;
 
@@ -40,7 +46,7 @@ class PersonIndex extends Component
 
     public ?int $bulkOwnerId = null;
 
-    public ?string $bulkStatus = null;
+    public ?int $bulkOrgId = null;
 
     public string $bulkTag = '';
 
@@ -109,12 +115,22 @@ class PersonIndex extends Component
         $this->resetPage();
     }
 
-    public function updatingFilterStatus()
+    public function updatingFilterOwner()
     {
         $this->resetPage();
     }
 
-    public function updatingFilterOwner()
+    public function updatingFilterEmailDomain()
+    {
+        $this->resetPage();
+    }
+
+    public function updatingSortBy()
+    {
+        $this->resetPage();
+    }
+
+    public function updatingSortDirection()
     {
         $this->resetPage();
     }
@@ -124,18 +140,6 @@ class PersonIndex extends Component
         $person = Person::find($personId);
         if ($person) {
             $person->owner_id = $ownerId ?: null;
-            $person->save();
-        }
-    }
-
-    public function updateStatus(int $personId, string $status): void
-    {
-        if (!array_key_exists($status, Person::STATUSES)) {
-            return;
-        }
-        $person = Person::find($personId);
-        if ($person) {
-            $person->status = $status;
             $person->save();
         }
     }
@@ -203,13 +207,9 @@ class PersonIndex extends Component
         if (!$person)
             return;
 
-        $allowedFields = ['name', 'title', 'email', 'phone', 'organization_id', 'linkedin_url', 'status'];
+        $allowedFields = ['name', 'title', 'email', 'phone', 'organization_id', 'linkedin_url'];
         if (!in_array($field, $allowedFields))
             return;
-
-        if ($field === 'status' && !array_key_exists($value, Person::STATUSES)) {
-            return;
-        }
 
         $person->$field = $value ?: null;
         $person->save();
@@ -220,13 +220,29 @@ class PersonIndex extends Component
     public function toggleSelectAll(): void
     {
         if ($this->selectAll) {
-            $ids = Person::query()
-                ->when($this->filterOrg, fn($q) => $q->where('organization_id', $this->filterOrg))
-                ->pluck('id')->toArray();
-            $this->selected = $ids;
+            $this->selectFiltered();
         } else {
             $this->selected = [];
         }
+    }
+
+    public function selectFiltered(): void
+    {
+        $ids = $this->buildFilteredPeopleQuery()
+            ->reorder()
+            ->pluck('people.id')
+            ->toArray();
+
+        $this->selected = $ids;
+        $this->selectAll = count($ids) > 0;
+
+        if (count($ids) === 0) {
+            $this->dispatch('notify', type: 'error', message: 'No contacts match the current filters.');
+
+            return;
+        }
+
+        $this->dispatch('notify', type: 'success', message: 'Selected '.count($ids).' filtered contact(s).');
     }
 
     public function clearSelection(): void
@@ -234,7 +250,7 @@ class PersonIndex extends Component
         $this->selected = [];
         $this->selectAll = false;
         $this->bulkOwnerId = null;
-        $this->bulkStatus = null;
+        $this->bulkOrgId = null;
         $this->bulkTag = '';
     }
 
@@ -247,13 +263,19 @@ class PersonIndex extends Component
         $this->clearSelection();
     }
 
-    public function applyBulkStatus(): void
+    public function applyBulkOrganization(): void
     {
-        if (!$this->bulkStatus || !array_key_exists($this->bulkStatus, Person::STATUSES) || empty($this->selected)) {
+        if (!$this->bulkOrgId || empty($this->selected)) {
             return;
         }
-        Person::whereIn('id', $this->selected)->update(['status' => $this->bulkStatus]);
+
+        if (!Organization::whereKey($this->bulkOrgId)->exists()) {
+            return;
+        }
+
+        $count = Person::whereIn('id', $this->selected)->update(['organization_id' => $this->bulkOrgId]);
         $this->clearSelection();
+        $this->dispatch('notify', type: 'success', message: "Assigned organization to {$count} contact(s).");
     }
 
     public function applyBulkAddTag(): void
@@ -385,9 +407,11 @@ class PersonIndex extends Component
         $filters = [
             'search' => $this->search,
             'filterOrg' => $this->filterOrg,
-            'filterStatus' => $this->filterStatus,
             'filterOwner' => $this->filterOwner,
             'filterTag' => $this->filterTag,
+            'filterEmailDomain' => $this->filterEmailDomain,
+            'sortBy' => $this->sortBy,
+            'sortDirection' => $this->sortDirection,
             'viewMode' => $this->viewMode,
         ];
         ContactView::updateOrCreate(
@@ -407,9 +431,11 @@ class PersonIndex extends Component
         $f = (array) ($v->filters ?? []);
         $this->search = $f['search'] ?? '';
         $this->filterOrg = $f['filterOrg'] ?? '';
-        $this->filterStatus = $f['filterStatus'] ?? null;
         $this->filterOwner = $f['filterOwner'] ?? null;
         $this->filterTag = $f['filterTag'] ?? '';
+        $this->filterEmailDomain = $f['filterEmailDomain'] ?? '';
+        $this->sortBy = $f['sortBy'] ?? 'name';
+        $this->sortDirection = $f['sortDirection'] ?? 'asc';
         $this->viewMode = $f['viewMode'] ?? 'card';
         $this->resetPage();
     }
@@ -511,7 +537,6 @@ class PersonIndex extends Component
                 'email' => $email ?: null,
                 'phone' => $data['phone'] ?? null,
                 'source' => $data['source'] ?? null,
-                'status' => $data['status'] ?? null,
                 'owner_id' => $ownerId,
                 'tags' => $tags,
             ];
@@ -727,7 +752,7 @@ PROMPT;
         if (!$orgId && $this->newOrgName) {
             $org = Organization::firstOrCreate(
                 ['name' => trim($this->newOrgName)],
-                ['name' => trim($this->newOrgName), 'status' => 'active']
+                ['name' => trim($this->newOrgName)]
             );
             $orgId = $org->id;
         }
@@ -752,7 +777,25 @@ PROMPT;
 
     public function render()
     {
+        $query = $this->buildFilteredPeopleQuery();
+        $this->applySorting($query);
+
+        $this->trashedCount = Person::onlyTrashed()->count();
+
+        return view('livewire.people.person-index', [
+            'people' => $query->paginate($this->perPage),
+            'organizations' => Organization::orderBy('name')->get(),
+            'owners' => User::orderBy('name')->get(['id', 'name']),
+            'views' => $this->views,
+        ])->title('Contacts');
+    }
+
+    protected function buildFilteredPeopleQuery(): Builder
+    {
+        $emailDomainExpr = $this->emailDomainExpression();
         $query = Person::query()
+            ->select('people.*')
+            ->selectRaw("{$emailDomainExpr} as email_domain")
             ->with(['organization', 'owner'])
             ->withCount('meetings');
 
@@ -763,16 +806,13 @@ PROMPT;
 
         $query->when($this->search, function ($q) {
             $q->where(function ($q) {
-                $q->where('name', 'like', '%' . $this->search . '%')
-                    ->orWhere('title', 'like', '%' . $this->search . '%')
-                    ->orWhere('email', 'like', '%' . $this->search . '%');
+                $q->where('name', 'like', '%'.$this->search.'%')
+                    ->orWhere('title', 'like', '%'.$this->search.'%')
+                    ->orWhere('email', 'like', '%'.$this->search.'%');
             });
         })
             ->when($this->filterOrg, function ($q) {
                 $q->where('organization_id', $this->filterOrg);
-            })
-            ->when($this->filterStatus, function ($q) {
-                $q->where('status', $this->filterStatus);
             })
             ->when($this->filterOwner, function ($q) {
                 $q->where('owner_id', $this->filterOwner);
@@ -782,17 +822,87 @@ PROMPT;
                 if ($tag !== '') {
                     $q->whereJsonContains('tags', $tag);
                 }
-            })
-            ->orderBy('name');
+            });
 
-        $this->trashedCount = Person::onlyTrashed()->count();
+        $domain = $this->normalizeDomainFilter($this->filterEmailDomain);
+        if ($domain !== '') {
+            $query->whereRaw("{$emailDomainExpr} = ?", [$domain]);
+        }
 
-        return view('livewire.people.person-index', [
-            'people' => $query->paginate($this->perPage),
-            'organizations' => Organization::orderBy('name')->get(),
-            'owners' => User::orderBy('name')->get(['id', 'name']),
-            'statuses' => Person::STATUSES,
-            'views' => $this->views,
-        ])->title('Contacts');
+        return $query;
+    }
+
+    protected function applySorting(Builder $query): void
+    {
+        $direction = $this->normalizeSortDirection($this->sortDirection);
+        $sortBy = $this->normalizeSortBy($this->sortBy);
+        $domainExpr = $this->emailDomainExpression();
+
+        if ($sortBy === 'organization') {
+            $query->orderBy(
+                Organization::select('name')->whereColumn('organizations.id', 'people.organization_id'),
+                $direction
+            )->orderBy('people.name');
+
+            return;
+        }
+
+        if ($sortBy === 'email_domain') {
+            $query->orderByRaw("CASE WHEN {$domainExpr} = '' THEN 1 ELSE 0 END")
+                ->orderByRaw("{$domainExpr} {$direction}")
+                ->orderBy('people.name');
+
+            return;
+        }
+
+        $query->orderBy('people.name', $direction);
+    }
+
+    protected function normalizeSortBy(string $value): string
+    {
+        $value = trim(strtolower($value));
+        $allowed = ['name', 'organization', 'email_domain'];
+
+        return in_array($value, $allowed, true) ? $value : 'name';
+    }
+
+    protected function normalizeSortDirection(string $value): string
+    {
+        $value = trim(strtolower($value));
+
+        return $value === 'desc' ? 'desc' : 'asc';
+    }
+
+    protected function normalizeDomainFilter(string $raw): string
+    {
+        $value = trim(strtolower($raw));
+        if ($value === '') {
+            return '';
+        }
+
+        if (str_starts_with($value, '@')) {
+            $value = ltrim($value, '@');
+        }
+
+        $value = preg_replace('#^https?://#', '', $value) ?? $value;
+        $value = preg_replace('#^www\.#', '', $value) ?? $value;
+        $value = strtok($value, '/');
+
+        return trim((string) $value);
+    }
+
+    protected function emailDomainExpression(): string
+    {
+        $driver = DB::connection()->getDriverName();
+
+        if ($driver === 'pgsql') {
+            return "coalesce(split_part(lower(people.email), '@', 2), '')";
+        }
+
+        if ($driver === 'mysql') {
+            return "coalesce(case when people.email like '%@%' then substring_index(lower(people.email), '@', -1) else '' end, '')";
+        }
+
+        return "coalesce(case when instr(lower(people.email), '@') > 0 then substr(lower(people.email), instr(lower(people.email), '@') + 1) else '' end, '')";
     }
 }

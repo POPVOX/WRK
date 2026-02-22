@@ -3,8 +3,7 @@
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
         <div>
             <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Contacts</h1>
-            <p class="mt-1 text-gray-500 dark:text-gray-400">Manage relationships like a CRM: assign owners, track
-                status, and focus your outreach</p>
+            <p class="mt-1 text-gray-500 dark:text-gray-400">Manage relationships like a CRM: assign owners and focus your outreach</p>
         </div>
         <div class="mt-4 sm:mt-0">
             <button wire:click="toggleAddPersonForm"
@@ -19,7 +18,7 @@
 
     <!-- Search, Filters, and Add Button -->
     <div class="mb-6 grid grid-cols-1 lg:grid-cols-12 gap-3 items-center">
-        <div class="lg:col-span-4">
+        <div class="lg:col-span-5">
             <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search by name, title, or email..."
                 class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
         </div>
@@ -33,15 +32,6 @@
             </select>
         </div>
         <div class="lg:col-span-2">
-            <select wire:model.live="filterStatus"
-                class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                <option value="">Any Status</option>
-                @foreach($statuses as $k => $label)
-                    <option value="{{ $k }}">{{ $label }}</option>
-                @endforeach
-            </select>
-        </div>
-        <div class="lg:col-span-2">
             <select wire:model.live="filterOwner"
                 class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                 <option value="">Any Owner</option>
@@ -50,9 +40,26 @@
                 @endforeach
             </select>
         </div>
-        <div class="lg:col-span-2">
+        <div class="lg:col-span-3">
             <input type="text" wire:model.live.debounce.300ms="filterTag" placeholder="Tag filter"
                 class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+        </div>
+
+        <div class="lg:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input type="text" wire:model.live.debounce.300ms="filterEmailDomain"
+                placeholder="Filter by email domain (e.g. @example.org)"
+                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+            <select wire:model.live="sortBy"
+                class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                <option value="name">Sort: Name</option>
+                <option value="organization">Sort: Organization</option>
+                <option value="email_domain">Sort: Email Domain (@)</option>
+            </select>
+            <select wire:model.live="sortDirection"
+                class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+            </select>
         </div>
 
         <div class="lg:col-span-12 flex items-center gap-3 justify-between mt-2">
@@ -85,6 +92,18 @@
                         <span class="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none {{ $showTrashed ? 'bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-200' : 'bg-red-500 text-white' }} rounded-full">{{ $trashedCount }}</span>
                     @endif
                 </button>
+
+                <button wire:click="selectFiltered"
+                    class="px-3 py-1.5 text-sm font-medium rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-300 dark:hover:bg-indigo-900/60">
+                    Select Filtered
+                </button>
+
+                @if(count($selected) > 0)
+                    <button wire:click="clearSelection"
+                        class="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
+                        Clear Selection
+                    </button>
+                @endif
             </div>
 
             <div class="flex items-center gap-2">
@@ -356,7 +375,7 @@
                 @if($addModalTab === 'csv')
                     <div class="space-y-4">
                         <p class="text-sm text-gray-600 dark:text-gray-400">
-                            Upload a CSV with columns: name, email, organization, title, phone, source, status, tags (comma or
+                            Upload a CSV with columns: name, email, organization, title, phone, source, tags (comma or
                             |), owner_email
                         </p>
                         <form wire:submit.prevent="importContacts" class="space-y-4">
@@ -439,18 +458,18 @@
                                 </div>
                             </div>
 
-                            {{-- Change Status --}}
+                            {{-- Assign Organization --}}
                             <div class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
-                                <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Change Status</div>
+                                <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Assign Organization</div>
                                 <div class="flex items-center gap-1">
-                                    <select wire:model="bulkStatus"
+                                    <select wire:model="bulkOrgId"
                                         class="flex-1 text-sm rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white py-1">
                                         <option value="">Select…</option>
-                                        @foreach($statuses as $k => $label)
-                                            <option value="{{ $k }}">{{ $label }}</option>
+                                        @foreach($organizations as $org)
+                                            <option value="{{ $org->id }}">{{ $org->name }}</option>
                                         @endforeach
                                     </select>
-                                    <button wire:click="applyBulkStatus" @click="open = false"
+                                    <button wire:click="applyBulkOrganization" @click="open = false"
                                         class="px-2 py-1 text-xs bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200">Go</button>
                                 </div>
                             </div>
@@ -534,28 +553,15 @@
                                     <span class="truncate max-w-[120px]">{{ $person->email }}</span>
                                 </span>
                             @endif
-                        </div>
-
-                        {{-- Status & Owner Pills --}}
-                        <div class="flex items-center gap-2 flex-wrap">
-                            @php
-                                $statusColors = [
-                                    'active' => 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300',
-                                    'not_engaged' => 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
-                                    'retired' => 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
-                                ];
-                            @endphp
-                            @if($person->status)
-                                <span
-                                    class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ $statusColors[$person->status] ?? 'bg-gray-100 text-gray-600' }}">
-                                    {{ $statuses[$person->status] ?? ucfirst($person->status) }}
-                                </span>
-                            @else
-                                <span
-                                    class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">
-                                    No status
+                            @if(!empty($person->email_domain))
+                                <span class="inline-flex items-center px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 font-medium">
+                                    &#64;{{ $person->email_domain }}
                                 </span>
                             @endif
+                        </div>
+
+                        {{-- Owner Pill --}}
+                        <div class="flex items-center gap-2 flex-wrap">
                             @if($person->owner)
                                 <span
                                     class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
@@ -619,8 +625,8 @@
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Title</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Organization</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Email</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">&#64;Domain</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Phone</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-24">Actions</th>
                     </tr>
                 </thead>
@@ -656,12 +662,12 @@
                                     @error('editEmail') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                                 </td>
                                 <td class="px-4 py-2">
+                                    <span class="text-xs text-gray-500">—</span>
+                                </td>
+                                <td class="px-4 py-2">
                                     <input type="text" wire:model="editPhone"
                                         class="w-full text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-indigo-500 focus:border-indigo-500"
                                         placeholder="Phone">
-                                </td>
-                                <td class="px-4 py-2">
-                                    <span class="text-xs text-gray-500">—</span>
                                 </td>
                                 <td class="px-4 py-2">
                                     <div class="flex items-center gap-1">
@@ -724,6 +730,13 @@
                                     @endif
                                 </td>
                                 <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                                    @if(!empty($person->email_domain))
+                                        <span class="font-medium text-blue-700 dark:text-blue-300">&#64;{{ $person->email_domain }}</span>
+                                    @else
+                                        <span class="text-gray-400">—</span>
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                                     @if($person->phone)
                                         <a href="tel:{{ $person->phone }}" class="hover:text-indigo-600 dark:hover:text-indigo-400">
                                             {{ $person->phone }}
@@ -731,14 +744,6 @@
                                     @else
                                         <span class="text-gray-400">—</span>
                                     @endif
-                                </td>
-                                <td class="px-4 py-3">
-                                    <select wire:change="updateField({{ $person->id }}, 'status', $event.target.value)"
-                                        class="text-xs rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white py-1 px-2 focus:ring-indigo-500 focus:border-indigo-500">
-                                        @foreach($statuses as $k => $label)
-                                            <option value="{{ $k }}" {{ $person->status === $k ? 'selected' : '' }}>{{ $label }}</option>
-                                        @endforeach
-                                    </select>
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -837,7 +842,7 @@
             </div>
             <div class="p-6 space-y-4">
                 <p class="text-sm text-gray-600 dark:text-gray-400">Accepted columns (header names): name, email,
-                    organization, title, phone, source, status, tags (comma or |), owner_email</p>
+                    organization, title, phone, source, tags (comma or |), owner_email</p>
                 <form wire:submit.prevent="importContacts" class="space-y-3">
                     <input type="file" wire:model="importFile"
                         class="w-full text-sm text-gray-600 dark:text-gray-300 file:mr-4 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">

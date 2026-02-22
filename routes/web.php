@@ -26,6 +26,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Intelligence
     Route::get('/intelligence', IntelligenceIndex::class)->name('intelligence.index');
+    Route::get('/intelligence/agents', IntelligenceIndex::class)->name('intelligence.agents');
+    Route::get('/intelligence/agents/create', IntelligenceIndex::class)->name('intelligence.create');
+    Route::get('/intelligence/audit', IntelligenceIndex::class)->name('intelligence.audit');
 
     // Onboarding
     Route::get('/onboarding', \App\Livewire\Onboarding::class)->name('onboarding');
