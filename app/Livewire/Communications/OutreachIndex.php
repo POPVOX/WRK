@@ -13,6 +13,7 @@ use App\Services\Outreach\OutreachAutomationService;
 use App\Services\Outreach\OutreachCampaignService;
 use App\Services\Outreach\SubstackFeedService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
@@ -26,6 +27,10 @@ class OutreachIndex extends Component
 {
     #[Url(as: 'tab')]
     public string $tab = 'newsletters';
+
+    public bool $migrationReady = false;
+
+    public string $migrationMessage = '';
 
     public array $newsletterForm = [
         'name' => '',
@@ -92,6 +97,14 @@ class OutreachIndex extends Component
     public function mount(): void
     {
         $this->normalizeTab();
+        $this->migrationReady = $this->hasOutreachSchema();
+
+        if (! $this->migrationReady) {
+            $this->migrationMessage = 'Outreach tables are not available yet. Run migrations to enable newsletters, campaigns, automations, and Substack sync.';
+
+            return;
+        }
+
         $this->loadOptions();
         $this->hydrateSubstackForm();
     }
@@ -103,6 +116,12 @@ class OutreachIndex extends Component
 
     public function createNewsletter(OutreachCampaignService $campaignService): void
     {
+        if (! $this->migrationReady) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations before creating newsletters.');
+
+            return;
+        }
+
         $user = Auth::user();
         if (! $user) {
             return;
@@ -163,6 +182,12 @@ class OutreachIndex extends Component
 
     public function createCampaign(OutreachAudienceService $audienceService, OutreachCampaignService $campaignService): void
     {
+        if (! $this->migrationReady) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations before creating campaigns.');
+
+            return;
+        }
+
         $user = Auth::user();
         if (! $user) {
             return;
@@ -250,6 +275,12 @@ class OutreachIndex extends Component
 
     public function queueCampaignNow(int $campaignId, OutreachCampaignService $campaignService): void
     {
+        if (! $this->migrationReady) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations before queueing campaigns.');
+
+            return;
+        }
+
         $campaign = OutreachCampaign::query()
             ->where('id', $campaignId)
             ->where('user_id', Auth::id())
@@ -271,6 +302,12 @@ class OutreachIndex extends Component
 
     public function cancelCampaign(int $campaignId, OutreachCampaignService $campaignService): void
     {
+        if (! $this->migrationReady) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations before managing campaigns.');
+
+            return;
+        }
+
         $campaign = OutreachCampaign::query()
             ->where('id', $campaignId)
             ->where('user_id', Auth::id())
@@ -299,6 +336,12 @@ class OutreachIndex extends Component
 
     public function createAutomation(OutreachCampaignService $campaignService): void
     {
+        if (! $this->migrationReady) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations before creating automations.');
+
+            return;
+        }
+
         $user = Auth::user();
         if (! $user) {
             return;
@@ -357,6 +400,12 @@ class OutreachIndex extends Component
 
     public function runAutomationNow(int $automationId, OutreachAutomationService $automationService): void
     {
+        if (! $this->migrationReady) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations before running automations.');
+
+            return;
+        }
+
         $automation = OutreachAutomation::query()
             ->where('id', $automationId)
             ->where('user_id', Auth::id())
@@ -372,6 +421,12 @@ class OutreachIndex extends Component
 
     public function toggleAutomation(int $automationId): void
     {
+        if (! $this->migrationReady) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations before updating automations.');
+
+            return;
+        }
+
         $automation = OutreachAutomation::query()
             ->where('id', $automationId)
             ->where('user_id', Auth::id())
@@ -390,6 +445,12 @@ class OutreachIndex extends Component
 
     public function saveSubstackConnection(): void
     {
+        if (! $this->migrationReady) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations before saving Substack settings.');
+
+            return;
+        }
+
         $user = Auth::user();
         if (! $user) {
             return;
@@ -419,6 +480,12 @@ class OutreachIndex extends Component
 
     public function syncSubstack(SubstackFeedService $substackFeedService, OutreachCampaignService $campaignService): void
     {
+        if (! $this->migrationReady) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations before syncing Substack.');
+
+            return;
+        }
+
         $user = Auth::user();
         if (! $user) {
             return;
@@ -459,6 +526,13 @@ class OutreachIndex extends Component
 
     protected function loadOptions(): void
     {
+        if (! $this->migrationReady) {
+            $this->projectOptions = [];
+            $this->newsletterOptions = [];
+
+            return;
+        }
+
         $user = Auth::user();
         if (! $user) {
             return;
@@ -486,6 +560,10 @@ class OutreachIndex extends Component
 
     protected function hydrateSubstackForm(): void
     {
+        if (! $this->migrationReady) {
+            return;
+        }
+
         $connection = OutreachSubstackConnection::query()
             ->where('user_id', Auth::id())
             ->first();
@@ -536,33 +614,53 @@ class OutreachIndex extends Component
         $userId = (int) Auth::id();
 
         return view('livewire.communications.outreach-index', [
-            'newsletters' => OutreachNewsletter::query()
-                ->where('user_id', $userId)
-                ->with('project:id,name')
-                ->latest('updated_at')
-                ->limit(25)
-                ->get(),
-            'campaigns' => OutreachCampaign::query()
-                ->where('user_id', $userId)
-                ->with(['newsletter:id,name', 'project:id,name'])
-                ->latest('created_at')
-                ->limit(50)
-                ->get(),
-            'automations' => OutreachAutomation::query()
-                ->where('user_id', $userId)
-                ->with(['newsletter:id,name', 'project:id,name'])
-                ->latest('updated_at')
-                ->limit(50)
-                ->get(),
-            'substackConnection' => OutreachSubstackConnection::query()
-                ->where('user_id', $userId)
-                ->first(),
-            'activityLogs' => OutreachActivityLog::query()
-                ->where('user_id', $userId)
-                ->with(['campaign:id,name', 'newsletter:id,name', 'automation:id,name'])
-                ->latest('created_at')
-                ->limit(100)
-                ->get(),
+            'newsletters' => $this->migrationReady
+                ? OutreachNewsletter::query()
+                    ->where('user_id', $userId)
+                    ->with('project:id,name')
+                    ->latest('updated_at')
+                    ->limit(25)
+                    ->get()
+                : collect(),
+            'campaigns' => $this->migrationReady
+                ? OutreachCampaign::query()
+                    ->where('user_id', $userId)
+                    ->with(['newsletter:id,name', 'project:id,name'])
+                    ->latest('created_at')
+                    ->limit(50)
+                    ->get()
+                : collect(),
+            'automations' => $this->migrationReady
+                ? OutreachAutomation::query()
+                    ->where('user_id', $userId)
+                    ->with(['newsletter:id,name', 'project:id,name'])
+                    ->latest('updated_at')
+                    ->limit(50)
+                    ->get()
+                : collect(),
+            'substackConnection' => $this->migrationReady
+                ? OutreachSubstackConnection::query()
+                    ->where('user_id', $userId)
+                    ->first()
+                : null,
+            'activityLogs' => $this->migrationReady
+                ? OutreachActivityLog::query()
+                    ->where('user_id', $userId)
+                    ->with(['campaign:id,name', 'newsletter:id,name', 'automation:id,name'])
+                    ->latest('created_at')
+                    ->limit(100)
+                    ->get()
+                : collect(),
         ]);
+    }
+
+    protected function hasOutreachSchema(): bool
+    {
+        return Schema::hasTable('outreach_newsletters')
+            && Schema::hasTable('outreach_campaigns')
+            && Schema::hasTable('outreach_campaign_recipients')
+            && Schema::hasTable('outreach_automations')
+            && Schema::hasTable('outreach_substack_connections')
+            && Schema::hasTable('outreach_activity_logs');
     }
 }
