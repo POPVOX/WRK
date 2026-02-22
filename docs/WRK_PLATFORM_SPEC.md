@@ -1,6 +1,6 @@
 ---
 title: WRK Platform — Document Management & Relationship Mapping Specification
-version: 1.0
+version: 1.1
 status: Draft
 author: Marci Harris / Claude (AI-assisted)
 stack: Laravel / PHP / Livewire / Forge / AWS / PostgreSQL
@@ -19,7 +19,7 @@ The WRK platform is the front-end application for POPVOX Foundation's operationa
 1. **Human staff** — who need to create, edit, browse, and cross-reference organizational documents through an intuitive web interface.
 2. **AI agents** — who need structured, consistent, machine-readable data to assist with tasks across the organization.
 
-The platform manages structured markdown documents stored in Box (via Box API), with PostgreSQL as the relational backbone for metadata, cross-references, and search. The markdown files in Box remain the canonical content layer; the database is the canonical relationship and metadata layer.
+The platform manages structured markdown documents stored in Box (via Box API), with PostgreSQL as the relational backbone for metadata, cross-references, and search. The markdown files in Box remain the canonical content layer; the database is the canonical relationship and metadata layer. This is an incremental evolution of WRK's existing schema, not a greenfield rewrite.
 
 This spec covers three phases:
 
@@ -70,14 +70,38 @@ This spec covers three phases:
 | File reference | PostgreSQL (`documents.box_file_id`) | Links DB record to Box file |
 
 When a document is saved through the platform, the system:
-1. Writes/updates the markdown file in Box (content + regenerated YAML frontmatter)
-2. Upserts the metadata into PostgreSQL
-3. Upserts any relationships into the `relationships` table
-4. Re-indexes for search
+1. Upserts metadata and relationships in PostgreSQL
+2. Enqueues an idempotent Box sync outbox job
+3. Worker writes/updates markdown in Box (content + regenerated YAML frontmatter)
+4. Re-indexes for search and records sync status
 
 When a document is read, the system:
 1. Loads metadata and relationships from PostgreSQL (fast)
-2. Fetches markdown body from Box on demand (for the editor)
+2. Fetches markdown body from Box on demand (for the editor), or cached content when fresh
+
+### 2.1 Compatibility With Current WRK Schema
+
+WRK already has operational tables in production. This spec adds a document graph layer that coexists with them.
+
+| Existing Table (Current WRK) | Role Today | v1.1 Handling |
+|---|---|---|
+| `projects`, `organizations`, `people`, `meetings`, `trips`, `actions`, `project_tasks` | Core operational records | Remain canonical for operational workflows |
+| `project_documents`, `trip_documents` | Domain document records | Continue to run; bridge to new `documents` layer with mapping fields |
+| `box_items`, `box_webhook_events`, `box_project_document_links` | Box metadata + webhook ingest | Reused directly; no replacement |
+| `agents`, `agent_permissions`, `agent_suggestions` | Agent governance and execution | Reused; relationship graph is additive context |
+
+Implementation rule:
+- Do not break existing pages by swapping table dependencies all at once.
+- Add adapters and backfills, then migrate read paths incrementally per module.
+
+### 2.2 Entity Reference Standard
+
+All cross-entity edges use a canonical tuple:
+- `entity_type` (enum-like string)
+- `entity_id` (BIGINT)
+
+Allowed entity types:
+- `document`, `folder`, `project`, `funder`, `contract`, `organization`, `person`, `meeting`, `trip`, `action`
 
 ---
 
@@ -162,39 +186,46 @@ The cross-referencing backbone. Every relationship is stored as a typed, directi
 ```sql
 CREATE TABLE relationships (
     id              BIGSERIAL PRIMARY KEY,
-    source_type     VARCHAR(64) NOT NULL,   -- 'document' or 'folder'
+    source_type     VARCHAR(64) NOT NULL,   -- see entity_type standard in Section 2.2
     source_id       BIGINT NOT NULL,
-    target_type     VARCHAR(64) NOT NULL,   -- 'document' or 'folder'
+    target_type     VARCHAR(64) NOT NULL,   -- see entity_type standard in Section 2.2
     target_id       BIGINT NOT NULL,
     relation_type   VARCHAR(64) NOT NULL,   -- enum: see below
     metadata        JSONB DEFAULT '{}',     -- extra context (role, notes, etc.)
     created_by      BIGINT REFERENCES users(id),
+    updated_by      BIGINT REFERENCES users(id),
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at      TIMESTAMPTZ,
 
-    UNIQUE(source_type, source_id, target_type, target_id, relation_type)
+    CHECK (NOT (source_type = target_type AND source_id = target_id))
 );
 
-CREATE INDEX idx_rel_source ON relationships(source_type, source_id);
-CREATE INDEX idx_rel_target ON relationships(target_type, target_id);
+CREATE UNIQUE INDEX uq_relationships_active
+ON relationships(source_type, source_id, target_type, target_id, relation_type)
+WHERE deleted_at IS NULL;
+
+CREATE INDEX idx_rel_source ON relationships(source_type, source_id, deleted_at);
+CREATE INDEX idx_rel_target ON relationships(target_type, target_id, deleted_at);
 CREATE INDEX idx_rel_type ON relationships(relation_type);
+CREATE INDEX idx_rel_metadata ON relationships USING GIN(metadata);
 
 -- relation_type enum values:
--- 'funded_by'          project → funder
--- 'funds'              funder → project (inverse)
--- 'governed_by'        project → contract
--- 'governs'            contract → project (inverse)
--- 'partner_on'         organization → project
--- 'has_partner'        project → organization (inverse)
+-- 'funded_by'          project/document → funder
+-- 'funds'              funder → project/document (inverse)
+-- 'governed_by'        project/document → contract
+-- 'governs'            contract → project/document (inverse)
+-- 'partner_on'         organization/person → project
+-- 'has_partner'        project → organization/person (inverse)
 -- 'team_member_of'     person → project (with metadata.role)
 -- 'has_team_member'    project → person (inverse)
 -- 'related_to'         generic bidirectional
 -- 'child_of'           hierarchical (e.g., subproject)
 -- 'parent_of'          hierarchical inverse
 -- 'references'         one doc references another
--- 'meeting_for'        meeting → project/funder/org
--- 'trip_for'           trip → project/org
--- 'deliverable_of'     document → contract
+-- 'meeting_for'        meeting → project/funder/organization
+-- 'trip_for'           trip → project/organization
+-- 'deliverable_of'     document → contract/project
 ```
 
 #### `users`
@@ -222,7 +253,7 @@ CREATE TABLE activity_log (
     id              BIGSERIAL PRIMARY KEY,
     user_id         BIGINT REFERENCES users(id),
     action          VARCHAR(64) NOT NULL,   -- 'created', 'updated', 'deleted', 'relationship_added', etc.
-    entity_type     VARCHAR(64) NOT NULL,   -- 'document', 'folder', 'relationship'
+    entity_type     VARCHAR(64) NOT NULL,   -- any entity type from Section 2.2
     entity_id       BIGINT NOT NULL,
     changes         JSONB,                  -- diff of what changed
     created_at      TIMESTAMPTZ DEFAULT NOW()
@@ -231,6 +262,31 @@ CREATE TABLE activity_log (
 CREATE INDEX idx_activity_entity ON activity_log(entity_type, entity_id);
 CREATE INDEX idx_activity_user ON activity_log(user_id);
 CREATE INDEX idx_activity_created ON activity_log(created_at);
+```
+
+#### `sync_outbox`
+
+Tracks cross-system writes (especially Box sync) as retryable, idempotent jobs.
+
+```sql
+CREATE TABLE sync_outbox (
+    id                  BIGSERIAL PRIMARY KEY,
+    operation           VARCHAR(64) NOT NULL,      -- 'document_sync_to_box', etc.
+    entity_type         VARCHAR(64) NOT NULL,      -- usually 'document'
+    entity_id           BIGINT NOT NULL,
+    dedupe_key          VARCHAR(255) NOT NULL,     -- stable idempotency key
+    payload             JSONB NOT NULL DEFAULT '{}',
+    status              VARCHAR(32) NOT NULL DEFAULT 'pending', -- pending/running/failed/synced
+    attempt_count       INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at     TIMESTAMPTZ DEFAULT NOW(),
+    last_error          TEXT,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW(),
+
+    UNIQUE(dedupe_key)
+);
+
+CREATE INDEX idx_sync_outbox_status ON sync_outbox(status, next_attempt_at);
 ```
 
 ### 3.2 Document Type Schemas
@@ -523,8 +579,10 @@ class RelationSelector extends Component
     public function getResults()
     {
         return Document::where('doc_type', $this->targetDocType)
-            ->where('title', 'ILIKE', "%{$this->search}%")
-            ->orWhereRaw("metadata->>'short_name' ILIKE ?", ["%{$this->search}%"])
+            ->where(function ($query) {
+                $query->where('title', 'ILIKE', "%{$this->search}%")
+                    ->orWhereRaw("metadata->>'short_name' ILIKE ?", ["%{$this->search}%"]);
+            })
             ->limit(20)
             ->get();
     }
@@ -561,27 +619,33 @@ When the user clicks **"Save & Sync to Box"**:
 
 ```
 1. Validate metadata against doc_type schema
-2. Generate YAML frontmatter from metadata
-   - Relation fields → render as folder paths (e.g., "FUNDERS/FFDW")
-     for human/AI readability in the raw markdown
-3. Combine frontmatter + markdown body
-4. Upload/update file in Box via Box API
-5. Upsert document record in PostgreSQL
-6. Upsert all relationships in PostgreSQL
+2. In one DB transaction:
+   - Upsert metadata + relationships locally
+   - Write an outbox/sync job row (`pending_box_sync`)
+   - Write activity log row (`save_requested`)
+3. Queue worker consumes outbox row
+4. Generate YAML frontmatter from metadata
+   - Relation fields render as stable IDs plus readable paths
+5. Upload/update file in Box via Box API (idempotent)
+6. Mark sync row `synced` (or `failed` with retry/backoff)
 7. Update search index
-8. Log activity
+8. Log `save_completed` or `save_failed`
 ```
+
+Why this pattern:
+- Cross-system writes are not truly atomic. The outbox/saga pattern avoids split-brain state and provides retries + auditability.
 
 The reverse sync (Box → Platform) should also be supported for initial import and for changes made directly in Box:
 
 ```
 1. Webhook or polling detects Box file change
-2. Fetch updated content from Box
-3. Parse YAML frontmatter
-4. Upsert metadata into PostgreSQL
-5. Attempt to resolve relation paths to existing DB records
-   (e.g., "FUNDERS/FFDW" → look up folder with that name → find its profile doc)
-6. Flag unresolvable relations for manual review
+2. Verify webhook signature and dedupe by delivery ID
+3. Fetch updated content from Box
+4. Parse YAML frontmatter
+5. Upsert metadata into PostgreSQL
+6. Resolve relation IDs first, then fallback to path/name resolution
+7. Flag unresolvable relations for manual review
+8. Log provenance (`source=box_webhook`, `delivery_id`, `box_event_id`)
 ```
 
 ---
@@ -605,21 +669,25 @@ class RelationService
         string $relationType,
         array $metadata = []
     ): void {
+        if ($sourceType === $targetType && $sourceId === $targetId) {
+            throw new InvalidArgumentException('Self-referential edge is not allowed.');
+        }
+
         $inverse = self::getInverseType($relationType);
 
-        Relationship::updateOrCreate(
+        Relationship::withTrashed()->updateOrCreate(
             ['source_type' => $sourceType, 'source_id' => $sourceId,
              'target_type' => $targetType, 'target_id' => $targetId,
              'relation_type' => $relationType],
-            ['metadata' => $metadata, 'updated_at' => now()]
+            ['metadata' => $metadata, 'deleted_at' => null, 'updated_at' => now()]
         );
 
         if ($inverse) {
-            Relationship::updateOrCreate(
+            Relationship::withTrashed()->updateOrCreate(
                 ['source_type' => $targetType, 'source_id' => $targetId,
                  'target_type' => $sourceType, 'target_id' => $sourceId,
                  'relation_type' => $inverse],
-                ['metadata' => $metadata, 'updated_at' => now()]
+                ['metadata' => $metadata, 'deleted_at' => null, 'updated_at' => now()]
             );
         }
     }
@@ -650,9 +718,10 @@ class RelationService
      */
     public static function getRelationsFor(string $entityType, int $entityId): Collection
     {
-        return Relationship::where('source_type', $entityType)
+        return Relationship::query()
+            ->whereNull('deleted_at')
+            ->where('source_type', $entityType)
             ->where('source_id', $entityId)
-            ->with('targetDocument', 'targetFolder')
             ->get()
             ->groupBy('relation_type');
     }
@@ -663,34 +732,47 @@ class RelationService
      */
     public static function getGraph(array $filters = []): array
     {
-        $query = Relationship::query();
+        $query = Relationship::query()->whereNull('deleted_at');
 
         if (isset($filters['relation_types'])) {
             $query->whereIn('relation_type', $filters['relation_types']);
         }
 
         $edges = $query->get();
-        $nodeIds = $edges->pluck('source_id')
-            ->merge($edges->pluck('target_id'))
-            ->unique();
+        $nodeRefs = $edges
+            ->flatMap(fn ($rel) => [
+                ['type' => $rel->source_type, 'id' => (int) $rel->source_id],
+                ['type' => $rel->target_type, 'id' => (int) $rel->target_id],
+            ])
+            ->unique(fn ($ref) => $ref['type'].':'.$ref['id'])
+            ->values();
 
-        $nodes = Document::whereIn('id', $nodeIds)->get()->map(fn ($doc) => [
-            'id' => $doc->id,
-            'label' => $doc->title,
-            'type' => $doc->doc_type,
-            'status' => $doc->metadata['status'] ?? null,
-            'group' => $doc->folder->name ?? 'unknown',
-        ]);
+        $nodes = $nodeRefs->map(function (array $ref) {
+            return self::resolveGraphNode($ref['type'], $ref['id']);
+        })->filter()->values();
 
         return [
             'nodes' => $nodes,
             'edges' => $edges->map(fn ($rel) => [
-                'source' => $rel->source_id,
-                'target' => $rel->target_id,
+                'source' => $rel->source_type.':'.$rel->source_id,
+                'target' => $rel->target_type.':'.$rel->target_id,
                 'type' => $rel->relation_type,
                 'metadata' => $rel->metadata,
             ]),
         ];
+    }
+
+    private static function resolveGraphNode(string $type, int $id): ?array
+    {
+        return match ($type) {
+            'document' => self::mapDocumentNode($id),
+            'project' => self::mapProjectNode($id),
+            'organization' => self::mapOrganizationNode($id),
+            'person' => self::mapPersonNode($id),
+            'meeting' => self::mapMeetingNode($id),
+            'trip' => self::mapTripNode($id),
+            default => ['id' => $type.':'.$id, 'label' => strtoupper($type).' #'.$id, 'type' => $type],
+        };
     }
 }
 ```
@@ -714,7 +796,7 @@ For AI agents and internal tooling:
 ```
 GET /api/v1/relationships?entity_type=document&entity_id=42
 GET /api/v1/relationships?relation_type=funded_by
-GET /api/v1/graph?center=42&depth=2
+GET /api/v1/graph?center_type=project&center_id=42&depth=2
 GET /api/v1/documents?doc_type=project_brief&status=Active
 GET /api/v1/documents/42/related?relation_type=funded_by
 ```
@@ -898,6 +980,10 @@ class BoxService
 }
 ```
 
+Notes:
+- `syncToBox()` is invoked by a queue worker processing `sync_outbox` rows, not directly in a user request transaction.
+- Box writes should include idempotency guards (`dedupe_key`, `etag`/version checks) to prevent duplicate updates.
+
 ### 7.2 Webhook Handler (Box → Platform Sync)
 
 ```php
@@ -907,11 +993,32 @@ class BoxWebhookController extends Controller
 {
     public function handle(Request $request): Response
     {
+        // 1) Verify Box signature (primary/secondary key) before processing
+        if (! $this->signatureVerifier->isValid($request)) {
+            return response('Invalid signature', 401);
+        }
+
+        // 2) Idempotency: skip if delivery already processed
+        $deliveryId = (string) $request->header('BOX-DELIVERY-ID');
+        if (BoxWebhookEvent::where('delivery_id', $deliveryId)->exists()) {
+            return response('Already processed', 200);
+        }
+
         $event = $request->input('trigger');
         $fileId = $request->input('source.id');
+        $eventId = $request->input('id');
+
+        BoxWebhookEvent::create([
+            'delivery_id' => $deliveryId,
+            'trigger' => $event,
+            'source_type' => $request->input('source.type'),
+            'source_id' => $fileId,
+            'payload' => $request->all(),
+            'status' => 'received',
+        ]);
 
         if (in_array($event, ['FILE.UPLOADED', 'FILE.MODIFIED'])) {
-            ImportFromBoxJob::dispatch($fileId);
+            ImportFromBoxJob::dispatch($fileId, $deliveryId, $eventId);
         }
 
         return response('OK', 200);
@@ -1036,37 +1143,42 @@ This command:
 
 ### 10.2 Frontmatter Path Resolution
 
-When importing, the system resolves frontmatter paths like `FUNDERS/FFDW` to database records:
+When importing, the system resolves relationship references in this order:
+
+1. Stable entity reference (preferred), e.g. `funder:15` or `document:88`
+2. Box IDs in metadata (if present)
+3. Human-readable path fallback like `FUNDERS/FFDW`
 
 ```php
-// "FUNDERS/FFDW" → find folder named "FFDW" under folder named "FUNDERS"
-// → find its profile document → return document ID
-private function resolvePathToDocument(string $path): ?int
+private function resolveReference(string $value): ?array
 {
-    $parts = explode('/', $path);
-    $folder = Folder::where('name', $parts[0])
-        ->whereHas('parent', fn ($q) => $q->where('name', 'WRK'))
-        ->first();
-
-    if (count($parts) > 1 && $folder) {
-        $subfolder = Folder::where('name', $parts[1])
-            ->where('parent_id', $folder->id)
-            ->first();
-
-        if ($subfolder) {
-            return Document::where('folder_id', $subfolder->id)
-                ->whereIn('doc_type', ['project_brief', 'funder_profile', 'contract_summary', 'org_profile', 'team_profile'])
-                ->first()?->id;
-        }
+    // 1) Stable ref: "entity_type:entity_id"
+    if (preg_match('/^(document|project|funder|contract|organization|person|meeting|trip):(\d+)$/', $value, $m)) {
+        return ['entity_type' => $m[1], 'entity_id' => (int) $m[2]];
     }
 
-    return null;
+    // 2) Optional Box ID metadata mapping
+    $boxMatch = $this->resolveByBoxId($value);
+    if ($boxMatch) {
+        return $boxMatch;
+    }
+
+    // 3) Legacy fallback: "FUNDERS/FFDW"
+    return $this->resolveByPath($value);
 }
 ```
 
 ---
 
 ## 11. MIGRATION ROADMAP
+
+### Phase 0: Compatibility Bridge (Week 0-1)
+
+- [ ] Add document-graph tables without changing existing WRK page behavior
+- [ ] Add adapters between existing domain entities and new `documents` / `relationships`
+- [ ] Backfill stable entity references (`entity_type`, `entity_id`) for graph edges
+- [ ] Add sync outbox table and worker for Box write retries
+- [ ] Validate Box webhook signature + replay protection in production
 
 ### Phase 1: MVP (Weeks 1-6)
 
@@ -1079,6 +1191,7 @@ private function resolvePathToDocument(string $path): ?int
 - [ ] Folder-level auth (admin vs staff vs viewer)
 - [ ] Basic search (PostgreSQL full-text)
 - [ ] Activity logging
+- [ ] Production readiness checks (idempotency, retry policies, dead-letter queue)
 
 ### Phase 2: Relationships & API (Weeks 7-12)
 
@@ -1116,12 +1229,13 @@ private function resolvePathToDocument(string $path): ?int
 
 1. The **database** is authoritative for metadata and relationships.
 2. The **Box markdown file** is authoritative for content body.
-3. On save from the platform, both are updated atomically.
-4. On import from Box, the database is updated but flagged for review if relationships can't be resolved.
-5. `last_updated` in frontmatter is always set to the current timestamp on save.
+3. On save from the platform, metadata writes are local-transactional and Box writes are asynchronous via outbox.
+4. On import from Box, the database is updated and flagged for review if relationships can't be resolved.
+5. Runtime entities (`projects`, `people`, `organizations`, `meetings`, `trips`, `actions`) remain canonical for operational workflows.
+6. `last_updated` in frontmatter is always set to the current timestamp on successful Box sync.
 
 ### Relationship Integrity
 
-- Deleting a document should soft-delete its relationships (not cascade hard-delete).
+- Deleting a document should soft-delete its relationships (`relationships.deleted_at`) rather than hard-delete.
 - The UI should warn when creating a relationship to a "Complete" or "Inactive" entity.
 - Orphaned relationships (where one side is deleted) should be surfaced in an admin review queue.
