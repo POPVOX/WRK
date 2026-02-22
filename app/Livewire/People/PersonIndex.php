@@ -837,6 +837,7 @@ PROMPT;
         $direction = $this->normalizeSortDirection($this->sortDirection);
         $sortBy = $this->normalizeSortBy($this->sortBy);
         $domainExpr = $this->emailDomainExpression();
+        $linkedInExpr = $this->linkedInUrlSortExpression();
 
         if ($sortBy === 'organization') {
             $query->orderBy(
@@ -855,13 +856,21 @@ PROMPT;
             return;
         }
 
+        if ($sortBy === 'linkedin_url') {
+            $query->orderByRaw("CASE WHEN {$linkedInExpr} = '' THEN 1 ELSE 0 END")
+                ->orderByRaw("{$linkedInExpr} {$direction}")
+                ->orderBy('people.name');
+
+            return;
+        }
+
         $query->orderBy('people.name', $direction);
     }
 
     protected function normalizeSortBy(string $value): string
     {
         $value = trim(strtolower($value));
-        $allowed = ['name', 'organization', 'email_domain'];
+        $allowed = ['name', 'organization', 'email_domain', 'linkedin_url'];
 
         return in_array($value, $allowed, true) ? $value : 'name';
     }
@@ -904,5 +913,10 @@ PROMPT;
         }
 
         return "coalesce(case when instr(lower(people.email), '@') > 0 then substr(lower(people.email), instr(lower(people.email), '@') + 1) else '' end, '')";
+    }
+
+    protected function linkedInUrlSortExpression(): string
+    {
+        return "coalesce(replace(replace(replace(lower(people.linkedin_url), 'https://', ''), 'http://', ''), 'www.', ''), '')";
     }
 }

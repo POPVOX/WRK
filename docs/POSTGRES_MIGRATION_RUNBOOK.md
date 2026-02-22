@@ -180,6 +180,6 @@ If cutover fails:
 4. Capture failed migration logs and query errors for follow-up patch.
 
 ## Known Constraints
-- Current test suite runs SQLite in-memory by default (`phpunit.xml`).
+- Test suite is configured for Postgres by default in `phpunit.xml` (database `wrk_test` on `127.0.0.1:5432` unless overridden in the shell).
 - Postgres-specific behavior should be validated in a staging environment.
 - AI/model improvements are out of scope for DB migration and should be tracked separately.

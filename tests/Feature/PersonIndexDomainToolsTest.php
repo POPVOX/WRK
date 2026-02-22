@@ -63,3 +63,30 @@ test('contacts can be sorted by email domain', function () {
         ]);
 });
 
+test('contacts can be sorted by linkedin url', function () {
+    $user = User::factory()->create();
+
+    Person::create([
+        'name' => 'Zulu Link',
+        'linkedin_url' => 'https://www.linkedin.com/in/zulu-link',
+    ]);
+    Person::create([
+        'name' => 'Alpha Link',
+        'linkedin_url' => 'http://linkedin.com/in/alpha-link',
+    ]);
+    Person::create([
+        'name' => 'No Link',
+        'linkedin_url' => null,
+    ]);
+
+    Livewire::actingAs($user)
+        ->test(PersonIndex::class)
+        ->set('viewMode', 'table')
+        ->set('sortBy', 'linkedin_url')
+        ->set('sortDirection', 'asc')
+        ->assertSeeInOrder([
+            'Alpha Link',
+            'Zulu Link',
+            'No Link',
+        ]);
+});

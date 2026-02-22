@@ -54,6 +54,7 @@
                 <option value="name">Sort: Name</option>
                 <option value="organization">Sort: Organization</option>
                 <option value="email_domain">Sort: Email Domain (@)</option>
+                <option value="linkedin_url">Sort: LinkedIn URL</option>
             </select>
             <select wire:model.live="sortDirection"
                 class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
