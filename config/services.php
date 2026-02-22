@@ -40,6 +40,13 @@ return [
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect_uri' => env('GOOGLE_REDIRECT_URI', 'http://localhost:8000/google/callback'),
         'login_redirect_uri' => env('GOOGLE_LOGIN_REDIRECT_URI', env('APP_URL', 'http://localhost').'/auth/google/callback'),
+        'workspace_scopes' => array_values(array_filter(array_map(
+            static fn ($scope) => trim((string) $scope),
+            explode(',', (string) env(
+                'GOOGLE_WORKSPACE_SCOPES',
+                'https://www.googleapis.com/auth/calendar.readonly,https://www.googleapis.com/auth/gmail.readonly'
+            ))
+        ))),
     ],
 
     'box' => [

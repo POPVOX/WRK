@@ -27,7 +27,7 @@ class GoogleAuthController extends Controller
     {
         if ($request->has('error')) {
             return redirect()->route('dashboard')
-                ->with('error', 'Google Calendar connection was cancelled.');
+                ->with('error', 'Google Workspace connection was cancelled.');
         }
 
         // Verify the state parameter for CSRF protection
@@ -53,23 +53,23 @@ class GoogleAuthController extends Controller
             }
 
             return redirect()->route('dashboard')
-                ->with('success', 'Google Calendar connected successfully!');
+                ->with('success', 'Google Workspace connected (Calendar + Gmail).');
         } catch (\Exception $e) {
             \Log::error('Google OAuth Error: '.$e->getMessage());
 
             return redirect()->route('dashboard')
-                ->with('error', 'Failed to connect Google Calendar. Please try again.');
+                ->with('error', 'Failed to connect Google Workspace. Please try again.');
         }
     }
 
     /**
-     * Disconnect Google Calendar.
+     * Disconnect Google Workspace integrations.
      */
     public function disconnect()
     {
         $this->calendarService->disconnect(Auth::user());
 
         return redirect()->route('dashboard')
-            ->with('success', 'Google Calendar disconnected.');
+            ->with('success', 'Google Workspace disconnected.');
     }
 }

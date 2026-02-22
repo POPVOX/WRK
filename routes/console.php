@@ -22,3 +22,18 @@ Schedule::command('calendars:sync --sync')
     ->withoutOverlapping(120)
     ->onOneServer()
     ->description('Daily inline calendar backstop sync');
+
+// Primary Gmail sync: keep outreach signals fresh in the workspace.
+Schedule::command('gmail:sync')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping(12)
+    ->onOneServer()
+    ->runInBackground()
+    ->description('Continuous Gmail metadata sync');
+
+// Backstop Gmail sync: inline daily catch-up.
+Schedule::command('gmail:sync --sync --days=90 --max=500')
+    ->dailyAt('05:45')
+    ->withoutOverlapping(120)
+    ->onOneServer()
+    ->description('Daily inline Gmail backstop sync');

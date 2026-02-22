@@ -13,6 +13,7 @@ use App\Models\Project;
 use App\Models\Trip;
 use App\Services\ChatService;
 use App\Services\GoogleCalendarService;
+use App\Services\GoogleGmailService;
 use App\Support\AI\AnthropicClient;
 use App\Support\AI\PromptProfile;
 use Carbon\Carbon;
@@ -41,9 +42,15 @@ class Dashboard extends Component
 
     public ?string $calendarWarning = null;
 
+    public ?string $gmailWarning = null;
+
     public ?string $passportWarning = null;
 
     public bool $showTimezonePrompt = false;
+
+    public bool $isSyncingGmail = false;
+
+    public ?string $lastGmailSyncAt = null;
 
     public string $omniInput = '';
 
@@ -63,6 +70,7 @@ class Dashboard extends Component
 
         $this->isCalendarConnected = $calendarService->isConnected($this->user);
         $this->lastSyncAt = $this->user->calendar_import_date?->diffForHumans();
+        $this->lastGmailSyncAt = $this->user->gmail_import_date?->diffForHumans();
 
         if (! config('ai.enabled')) {
             $this->aiWarning = 'AI features are disabled by the administrator.';
@@ -72,6 +80,12 @@ class Dashboard extends Component
             $this->calendarWarning = 'Calendar is not connected. Connect to keep meetings and focus windows accurate.';
         } elseif ($this->user->calendar_import_date && $this->user->calendar_import_date->lt(now()->subDays(7))) {
             $this->calendarWarning = 'Calendar has not synced in over a week.';
+        }
+
+        if ($this->isCalendarConnected && ! $this->user->gmail_import_date) {
+            $this->gmailWarning = 'Gmail has not synced yet. Reconnect Google if needed, then run Sync Gmail.';
+        } elseif ($this->user->gmail_import_date && $this->user->gmail_import_date->lt(now()->subDays(7))) {
+            $this->gmailWarning = 'Gmail has not synced in over a week.';
         }
 
         $travelProfile = $this->user->travelProfile;
@@ -453,6 +467,15 @@ class Dashboard extends Component
             ];
         }
 
+        if ($this->isCalendarConnected) {
+            $actions[] = [
+                'key' => 'sync_gmail',
+                'label' => 'Sync Gmail',
+                'command' => '/sync gmail',
+                'auto_submit' => true,
+            ];
+        }
+
         return $actions;
     }
 
@@ -511,11 +534,14 @@ class Dashboard extends Component
             } elseif (Str::startsWith($normalized, ['/help', 'help'])) {
                 $this->addConversationMessage(
                     'assistant',
-                    "Try:\n• /task Draft donor follow-up | due:today | priority:high\n• /remind Send receipts | due:tomorrow\nOr just ask a question in plain language."
+                    "Try:\n• /task Draft donor follow-up | due:today | priority:high\n• /remind Send receipts | due:tomorrow\n• /sync calendar\n• /sync gmail\nOr just ask a question in plain language."
                 );
             } elseif (Str::startsWith($normalized, ['/sync calendar'])) {
                 $this->syncCalendar();
                 $this->addConversationMessage('assistant', 'Calendar sync started. I updated your workspace context.');
+            } elseif (Str::startsWith($normalized, ['/sync gmail', '/sync inbox'])) {
+                $result = $this->syncGmail();
+                $this->addConversationMessage('assistant', $result);
             } else {
                 $proposalResult = $this->buildCompanionSuggestionResponse($command);
                 $suggestions = is_array($proposalResult['suggestions'] ?? null)
@@ -1570,6 +1596,42 @@ PROMPT;
 
         $this->calendarWarning = null;
         $this->isSyncing = false;
+    }
+
+    public function syncGmail(): string
+    {
+        if (! $this->isCalendarConnected) {
+            return 'Google Workspace is not connected yet.';
+        }
+
+        $this->isSyncingGmail = true;
+        $message = 'Gmail sync completed.';
+
+        try {
+            $summary = app(GoogleGmailService::class)->syncRecentMessages($this->user, 60, 300);
+            $message = sprintf(
+                'Gmail sync complete. Processed %d messages (%d new, %d updated).',
+                (int) ($summary['processed'] ?? 0),
+                (int) ($summary['imported'] ?? 0),
+                (int) ($summary['updated'] ?? 0)
+            );
+        } catch (\Throwable $e) {
+            \Log::warning('Workspace Gmail sync failed: '.$e->getMessage());
+            $message = 'Gmail sync failed: '.$e->getMessage();
+            $this->gmailWarning = $message;
+        }
+
+        $this->user->refresh();
+        $this->lastGmailSyncAt = $this->user->gmail_import_date
+            ? $this->user->gmail_import_date->diffForHumans()
+            : 'just now';
+
+        if (! str_starts_with($message, 'Gmail sync failed')) {
+            $this->gmailWarning = null;
+        }
+        $this->isSyncingGmail = false;
+
+        return $message;
     }
 
     protected function addConversationMessage(string $role, string $content): void

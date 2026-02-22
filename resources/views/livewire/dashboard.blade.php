@@ -1,7 +1,7 @@
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
-        @if($aiWarning || $calendarWarning || $passportWarning)
+        @if($aiWarning || $calendarWarning || $gmailWarning || $passportWarning)
             <div class="space-y-2">
                 @if($aiWarning)
                     <div class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-300">
@@ -11,6 +11,11 @@
                 @if($calendarWarning)
                     <div class="rounded-lg border border-blue-200 bg-blue-50 text-blue-800 px-4 py-3 text-sm dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300">
                         {{ $calendarWarning }}
+                    </div>
+                @endif
+                @if($gmailWarning)
+                    <div class="rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-800 px-4 py-3 text-sm dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-300">
+                        {{ $gmailWarning }}
                     </div>
                 @endif
                 @if($passportWarning)
@@ -51,6 +56,18 @@
                                 {{ $lastSyncAt ? 'Synced '.$lastSyncAt : 'Sync calendar' }}
                             </span>
                             <span class="ml-2" wire:loading wire:target="syncCalendar">Syncing...</span>
+                        </button>
+
+                        <button wire:click="syncGmail" wire:loading.attr="disabled"
+                            class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                            <svg class="w-4 h-4 {{ $isSyncingGmail ? 'animate-spin' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8m-18 8h18a2 2 0 002-2V8a2 2 0 00-2-2H3a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                            </svg>
+                            <span class="ml-2" wire:loading.remove wire:target="syncGmail">
+                                {{ $lastGmailSyncAt ? 'Gmail '.$lastGmailSyncAt : 'Sync Gmail' }}
+                            </span>
+                            <span class="ml-2" wire:loading wire:target="syncGmail">Syncing...</span>
                         </button>
                     @endif
                 </div>
@@ -151,7 +168,7 @@
 
                     <p class="text-xs text-gray-500 dark:text-gray-400">
                         Shortcuts: <span class="font-mono">/task</span>, <span class="font-mono">/remind</span>,
-                        <span class="font-mono">/help</span>. Free-form notes create suggested actions only until you approve.
+                        <span class="font-mono">/sync gmail</span>, <span class="font-mono">/help</span>. Free-form notes create suggested actions only until you approve.
                     </p>
                 </form>
             </div>

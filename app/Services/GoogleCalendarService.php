@@ -6,6 +6,8 @@ use App\Models\Meeting;
 use App\Models\User;
 use Google\Client as GoogleClient;
 use Google\Service\Calendar as GoogleCalendar;
+use Google\Service\Gmail as GoogleGmail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class GoogleCalendarService
@@ -18,7 +20,13 @@ class GoogleCalendarService
         $this->client->setClientId(config('services.google.client_id'));
         $this->client->setClientSecret(config('services.google.client_secret'));
         $this->client->setRedirectUri(config('services.google.redirect_uri'));
-        $this->client->addScope(GoogleCalendar::CALENDAR_READONLY);
+        $scopes = (array) config('services.google.workspace_scopes', [
+            GoogleCalendar::CALENDAR_READONLY,
+            GoogleGmail::GMAIL_READONLY,
+        ]);
+        foreach (array_values(array_unique(array_filter($scopes))) as $scope) {
+            $this->client->addScope($scope);
+        }
         $this->client->setAccessType('offline');
         $this->client->setPrompt('consent');
     }
@@ -81,11 +89,20 @@ class GoogleCalendarService
      */
     public function disconnect(User $user): void
     {
-        $user->update([
+        $updates = [
             'google_access_token' => null,
             'google_refresh_token' => null,
             'google_token_expires_at' => null,
-        ]);
+        ];
+
+        if (Schema::hasColumn('users', 'gmail_import_date')) {
+            $updates['gmail_import_date'] = null;
+        }
+        if (Schema::hasColumn('users', 'gmail_history_id')) {
+            $updates['gmail_history_id'] = null;
+        }
+
+        $user->update($updates);
     }
 
     /**

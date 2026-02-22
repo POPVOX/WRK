@@ -50,6 +50,8 @@ class User extends Authenticatable
         'google_refresh_token',
         'google_token_expires_at',
         'calendar_import_date',
+        'gmail_import_date',
+        'gmail_history_id',
         'activation_token',
         'activation_token_expires_at',
         'activated_at',
@@ -84,6 +86,7 @@ class User extends Authenticatable
             'profile_completed_at' => 'datetime',
             'google_token_expires_at' => 'datetime',
             'calendar_import_date' => 'datetime',
+            'gmail_import_date' => 'datetime',
             'activation_token_expires_at' => 'datetime',
             'activated_at' => 'datetime',
             'timezone_confirmed_at' => 'datetime',
@@ -172,5 +175,13 @@ class User extends Authenticatable
     public function assignedActions(): HasMany
     {
         return $this->hasMany(Action::class, 'assigned_to');
+    }
+
+    /**
+     * Get Gmail messages synced for this user.
+     */
+    public function gmailMessages(): HasMany
+    {
+        return $this->hasMany(GmailMessage::class);
     }
 }
