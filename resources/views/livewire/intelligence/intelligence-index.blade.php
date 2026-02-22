@@ -3,8 +3,7 @@
         <div>
             <h1 class="text-3xl font-semibold text-gray-900 dark:text-white">Intelligence</h1>
             <p class="mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-300">
-                Monitor agent activity across WRK and review cross-domain signals before they become blockers.
-                Insights are tied to live operational data and suggest where to act next.
+                Build specialist and project agents, direct them from one thread, and manage approvals with full traceability.
             </p>
         </div>
         <div class="inline-flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-600 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
@@ -16,12 +15,479 @@
         </div>
     </div>
 
+    @if(!$migrationReady)
+        <section class="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100">
+            <h2 class="text-lg font-semibold">Agent stack not initialized</h2>
+            <p class="mt-2 text-sm">{{ $migrationMessage }}</p>
+            <p class="mt-3 text-sm">Run: <span class="font-mono">php artisan migrate --force</span></p>
+        </section>
+    @else
+        <section class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                    Create specialist: {{ ($permissionSnapshot['can_create_specialist'] ?? false) ? 'Yes' : 'No' }}
+                </span>
+                <span class="rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                    Create project agents: {{ ($permissionSnapshot['can_create_project'] ?? false) ? 'Yes' : 'No' }}
+                </span>
+                <span class="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                    Project scope: {{ str_replace('_', ' ', $permissionSnapshot['project_scope'] ?? 'all') }}
+                </span>
+                <span class="rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                    Medium approvals: {{ ($permissionSnapshot['can_approve_medium_risk'] ?? false) ? 'Yes' : 'No' }}
+                </span>
+                <span class="rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                    High approvals: {{ ($permissionSnapshot['can_approve_high_risk'] ?? false) ? 'Yes' : 'No' }}
+                </span>
+                @if(auth()->user()?->isAdmin())
+                    <a href="{{ route('admin.permissions') }}" wire:navigate
+                        class="ml-auto rounded-lg border border-gray-300 px-2.5 py-1 font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                        Manage permissions
+                    </a>
+                @endif
+            </div>
+        </section>
+
+        <section class="grid gap-6 xl:grid-cols-12">
+            <div class="xl:col-span-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Build Agent</h2>
+                <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Create persistent specialist or project-scoped agents with governance tiers.</p>
+
+                <form wire:submit.prevent="createAgent" class="mt-4 space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Agent name</label>
+                        <input type="text" wire:model.defer="createForm.name"
+                            class="mt-1 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            placeholder="Ex: Digital Parliaments Copilot">
+                        @error('createForm.name')
+                            <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Scope</label>
+                            <select wire:model="createForm.scope"
+                                class="mt-1 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                <option value="specialist">Specialist</option>
+                                <option value="project">Project</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Specialty</label>
+                            <input type="text" wire:model.defer="createForm.specialty"
+                                class="mt-1 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                placeholder="policy, grants, research">
+                        </div>
+                    </div>
+
+                    @if(($createForm['scope'] ?? 'specialist') === 'project')
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Project</label>
+                            <select wire:model.defer="createForm.project_id"
+                                class="mt-1 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                <option value="">Select project</option>
+                                @foreach($projectOptions as $project)
+                                    <option value="{{ $project['id'] }}">{{ $project['name'] }} ({{ $project['status'] }})</option>
+                                @endforeach
+                            </select>
+                            @error('createForm.project_id')
+                                <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    @endif
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Template</label>
+                        <select wire:model.defer="createForm.template_id"
+                            class="mt-1 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                            <option value="">None</option>
+                            @foreach($templateOptions as $template)
+                                @if($template['agent_type'] === ($createForm['scope'] ?? 'specialist') || $template['agent_type'] === 'specialist')
+                                    <option value="{{ $template['id'] }}">{{ $template['name'] }}</option>
+                                @endif
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Mission</label>
+                        <textarea wire:model.defer="createForm.mission" rows="2"
+                            class="mt-1 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            placeholder="What this agent is responsible for"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Instructions</label>
+                        <textarea wire:model.defer="createForm.instructions" rows="3"
+                            class="mt-1 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            placeholder="How this agent should work"></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Autonomy mode</label>
+                            <select wire:model.defer="createForm.autonomy_mode"
+                                class="mt-1 w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                <option value="tiered">Tiered</option>
+                                <option value="propose_only">Propose only</option>
+                            </select>
+                        </div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-6">
+                            Tiered mode can auto-run low-risk actions if governance allows.
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Low</label>
+                            <select wire:model.defer="createForm.governance_low"
+                                class="mt-1 w-full rounded-lg border-gray-300 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                <option value="autonomous">Autonomous</option>
+                                <option value="team_approval">Team approval</option>
+                                <option value="management_approval">Mgmt approval</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Medium</label>
+                            <select wire:model.defer="createForm.governance_medium"
+                                class="mt-1 w-full rounded-lg border-gray-300 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                <option value="team_approval">Team approval</option>
+                                <option value="autonomous">Autonomous</option>
+                                <option value="management_approval">Mgmt approval</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">High</label>
+                            <select wire:model.defer="createForm.governance_high"
+                                class="mt-1 w-full rounded-lg border-gray-300 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                <option value="management_approval">Mgmt approval</option>
+                                <option value="team_approval">Team approval</option>
+                                <option value="autonomous">Autonomous</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit"
+                        class="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700">
+                        Create Agent
+                    </button>
+                </form>
+            </div>
+
+            <div class="xl:col-span-8 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Agent Directory</h2>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ count($agentDirectory) }} active records</span>
+                </div>
+
+                @if(empty($agentDirectory))
+                    <div class="mt-4 rounded-xl border border-dashed border-gray-300 p-5 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                        No agents yet. Create one in the panel on the left.
+                    </div>
+                @else
+                    <div class="mt-4 grid gap-3 md:grid-cols-2">
+                        @foreach($agentDirectory as $agent)
+                            @php
+                                $selected = (int) ($agent['id'] ?? 0) === (int) $selectedAgentId;
+                                $isPaused = ($agent['status'] ?? '') === 'paused';
+                            @endphp
+                            <article wire:key="agent-card-{{ $agent['id'] }}"
+                                class="rounded-xl border p-4 transition {{ $selected ? 'border-indigo-400 bg-indigo-50/70 dark:border-indigo-700 dark:bg-indigo-900/20' : 'border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-900/30' }}">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div>
+                                        <button wire:click="selectAgent({{ $agent['id'] }})"
+                                            class="text-left text-sm font-semibold {{ $selected ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-900 dark:text-white' }}">
+                                            {{ $agent['name'] }}
+                                        </button>
+                                        <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                                            {{ ucfirst($agent['scope']) }}
+                                            @if(!empty($agent['specialty']))
+                                                · {{ $agent['specialty'] }}
+                                            @endif
+                                            @if(!empty($agent['project_name']))
+                                                · {{ $agent['project_name'] }}
+                                            @endif
+                                        </p>
+                                    </div>
+                                    <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold {{ $isPaused ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' }}">
+                                        {{ $isPaused ? 'Paused' : 'Active' }}
+                                    </span>
+                                </div>
+
+                                <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-gray-600 dark:text-gray-300">
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 dark:bg-gray-700">
+                                        Pending approvals: {{ $agent['pending_suggestions_count'] ?? 0 }}
+                                    </span>
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 dark:bg-gray-700">
+                                        Last directed: {{ $agent['last_directed_at'] ?: 'Never' }}
+                                    </span>
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 dark:bg-gray-700">
+                                        {{ $agent['autonomy_mode'] === 'propose_only' ? 'Propose only' : 'Tiered autonomy' }}
+                                    </span>
+                                </div>
+
+                                <div class="mt-3 flex justify-between items-center">
+                                    <button wire:click="selectAgent({{ $agent['id'] }})"
+                                        class="text-xs font-medium text-indigo-700 hover:text-indigo-900 dark:text-indigo-300 dark:hover:text-indigo-200">
+                                        Open workspace
+                                    </button>
+                                    <button wire:click="toggleAgentStatus({{ $agent['id'] }})"
+                                        class="text-xs font-medium rounded-lg border px-2.5 py-1 {{ $isPaused ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/30' : 'border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30' }}">
+                                        {{ $isPaused ? 'Resume' : 'Pause' }}
+                                    </button>
+                                </div>
+                            </article>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+        </section>
+
+        <section class="grid gap-6 xl:grid-cols-12">
+            <div class="xl:col-span-7 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+                x-data
+                x-init="$nextTick(() => { if ($refs.thread) $refs.thread.scrollTop = $refs.thread.scrollHeight; })"
+                x-on:workspace-thread-updated.window="$nextTick(() => { if ($refs.thread) $refs.thread.scrollTop = $refs.thread.scrollHeight; })">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Direct Agent</h2>
+                    @if($selectedAgent)
+                        <span class="text-xs text-gray-500 dark:text-gray-400">{{ $selectedAgent->name }}</span>
+                    @endif
+                </div>
+
+                @if(!$selectedAgent)
+                    <div class="mt-4 rounded-xl border border-dashed border-gray-300 p-5 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                        Select an agent to start directing work.
+                    </div>
+                @else
+                    <div class="mt-4 rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40 overflow-hidden">
+                        <div x-ref="thread" class="h-[360px] overflow-y-auto p-4 space-y-3">
+                            @forelse($agentMessages as $message)
+                                @php
+                                    $isUser = ($message['role'] ?? 'assistant') === 'user';
+                                @endphp
+                                <div class="flex {{ $isUser ? 'justify-end' : 'justify-start' }}">
+                                    <div class="max-w-[95%] rounded-xl px-3 py-2 {{ $isUser ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-600' }}">
+                                        <div class="text-[11px] mb-1 {{ $isUser ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-400' }}">
+                                            {{ $isUser ? 'You' : 'WRK Agent' }} • {{ $message['timestamp'] ?? '' }}
+                                        </div>
+                                        <div class="whitespace-pre-wrap text-sm">{{ $message['content'] ?? '' }}</div>
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="h-full flex items-center justify-center text-center text-sm text-gray-500 dark:text-gray-400">
+                                    No thread yet. Direct this agent with goals, notes, and requested follow-ups.
+                                </div>
+                            @endforelse
+                        </div>
+
+                        <form wire:submit.prevent="directSelectedAgent" class="border-t border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+                            <div class="flex items-start gap-3">
+                                <textarea wire:model="directiveInput" rows="3"
+                                    class="flex-1 rounded-xl border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                    placeholder="Example: Create follow-up tasks from today's notes, draft a donor email, and suggest whether this should become a subproject."></textarea>
+                                <button type="submit"
+                                    class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700">
+                                    Enter
+                                </button>
+                            </div>
+                            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                Agent will propose actions and follow governance tiers before execution.
+                            </p>
+                        </form>
+                    </div>
+                @endif
+            </div>
+
+            <div class="xl:col-span-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Approval Queue</h2>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ count($pendingSuggestions) }} pending</span>
+                </div>
+
+                @if(empty($pendingSuggestions))
+                    <div class="mt-4 rounded-xl border border-dashed border-gray-300 p-5 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                        No pending suggestions.
+                    </div>
+                @else
+                    <div class="mt-4 space-y-3 max-h-[560px] overflow-y-auto pr-1">
+                        @foreach($pendingSuggestions as $suggestion)
+                            @php
+                                $riskClass = match($suggestion['risk_level']) {
+                                    'high' => 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+                                    'low' => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+                                    default => 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+                                };
+                            @endphp
+                            <article wire:key="pending-{{ $suggestion['id'] }}" class="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                                        {{ str_replace('_', ' ', $suggestion['suggestion_type']) }}
+                                    </span>
+                                    <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold {{ $riskClass }}">
+                                        {{ strtoupper($suggestion['risk_level']) }}
+                                    </span>
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                                        {{ str_replace('_', ' ', $suggestion['governance_mode']) }}
+                                    </span>
+                                </div>
+
+                                <h3 class="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{{ $suggestion['title'] }}</h3>
+                                @if(!empty($suggestion['reasoning']))
+                                    <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ $suggestion['reasoning'] }}</p>
+                                @endif
+
+                                @if(!empty($suggestion['sources']))
+                                    <div class="mt-2 flex flex-wrap gap-1.5">
+                                        @foreach($suggestion['sources'] as $source)
+                                            @if(!empty($source['source_url']))
+                                                <a href="{{ $source['source_url'] }}" wire:navigate
+                                                    class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600">
+                                                    {{ ucfirst($source['source_type']) }}: {{ $source['source_title'] }}
+                                                </a>
+                                            @else
+                                                <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                                                    {{ ucfirst($source['source_type']) }}: {{ $source['source_title'] }}
+                                                </span>
+                                            @endif
+                                        @endforeach
+                                    </div>
+                                @endif
+
+                                <input type="text" wire:model.defer="suggestionOverrides.{{ $suggestion['id'] }}"
+                                    class="mt-3 w-full rounded-lg border-gray-300 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                    placeholder="Optional edit before approving">
+
+                                <div class="mt-3 flex items-center gap-2">
+                                    <button wire:click="approveSuggestion({{ $suggestion['id'] }})"
+                                        @if(empty($suggestion['can_review'])) disabled @endif
+                                        class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
+                                        Approve
+                                    </button>
+                                    <button wire:click="dismissSuggestion({{ $suggestion['id'] }})"
+                                        @if(empty($suggestion['can_review'])) disabled @endif
+                                        class="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                                        Dismiss
+                                    </button>
+                                    @if(empty($suggestion['can_review']))
+                                        <span class="text-[11px] text-red-600 dark:text-red-300">No permission for this risk tier</span>
+                                    @endif
+                                </div>
+                            </article>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+        </section>
+
+        <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Audit & Traceability</h2>
+                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                        Every run includes directive, reasoning chain, alternatives considered, and source links.
+                    </p>
+                </div>
+                <span class="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                    {{ count($recentRuns) }} recent runs
+                </span>
+            </div>
+
+            @if(empty($recentRuns))
+                <div class="mt-4 rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                    Run history will appear here after the first directive.
+                </div>
+            @else
+                <div class="mt-5 space-y-4">
+                    @foreach($recentRuns as $run)
+                        <article class="rounded-xl border border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-900/30">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold {{ $run['status'] === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : ($run['status'] === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300') }}">
+                                    {{ strtoupper($run['status']) }}
+                                </span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400">Run #{{ $run['id'] }} • {{ $run['created_at'] }}</span>
+                            </div>
+
+                            @if(!empty($run['directive']))
+                                <p class="mt-2 text-sm font-medium text-gray-900 dark:text-white">{{ $run['directive'] }}</p>
+                            @endif
+                            @if(!empty($run['result_summary']))
+                                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ $run['result_summary'] }}</p>
+                            @endif
+                            @if(!empty($run['error_message']))
+                                <p class="mt-1 text-sm text-red-700 dark:text-red-300">{{ $run['error_message'] }}</p>
+                            @endif
+
+                            @if(!empty($run['reasoning_chain']))
+                                <div class="mt-3">
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Reasoning chain</p>
+                                    <ul class="mt-1 space-y-1 text-sm text-gray-600 dark:text-gray-300">
+                                        @foreach($run['reasoning_chain'] as $item)
+                                            <li>• {{ $item }}</li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @endif
+
+                            @if(!empty($run['alternatives_considered']))
+                                <div class="mt-3">
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Alternatives considered</p>
+                                    <ul class="mt-1 space-y-1 text-sm text-gray-600 dark:text-gray-300">
+                                        @foreach($run['alternatives_considered'] as $item)
+                                            <li>• {{ $item }}</li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @endif
+
+                            @if(!empty($run['suggestions']))
+                                <div class="mt-3 space-y-2">
+                                    @foreach($run['suggestions'] as $suggestion)
+                                        <div class="rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-800">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                                                    {{ str_replace('_', ' ', $suggestion['type']) }}
+                                                </span>
+                                                <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                                                    {{ $suggestion['status'] }}
+                                                </span>
+                                            </div>
+                                            <p class="mt-1 font-medium text-gray-900 dark:text-white">{{ $suggestion['title'] }}</p>
+
+                                            @if(!empty($suggestion['sources']))
+                                                <div class="mt-2 flex flex-wrap gap-1.5">
+                                                    @foreach($suggestion['sources'] as $source)
+                                                        @if(!empty($source['url']))
+                                                            <a href="{{ $source['url'] }}" wire:navigate
+                                                                class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600">
+                                                                {{ ucfirst($source['type']) }}: {{ $source['title'] }}
+                                                            </a>
+                                                        @else
+                                                            <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                                                                {{ ucfirst($source['type']) }}: {{ $source['title'] }}
+                                                            </span>
+                                                        @endif
+                                                    @endforeach
+                                                </div>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </article>
+                    @endforeach
+                </div>
+            @endif
+        </section>
+    @endif
+
     <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Agent Council</h2>
                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                    Specialized agents monitor key operating domains and surface intelligence to the organization.
+                    Cross-domain monitoring agents surfacing organization-level signals.
                 </p>
             </div>
             <div class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
@@ -35,7 +501,7 @@
         </div>
 
         <div class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            @foreach($agents as $agent)
+            @foreach($agentCouncil as $agent)
                 @php
                     $isWatch = $agent['status'] === 'watch';
                 @endphp
