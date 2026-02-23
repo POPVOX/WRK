@@ -31,6 +31,9 @@ class OutreachIndex extends Component
     #[Url(as: 'tab')]
     public string $tab = 'newsletters';
 
+    #[Url(as: 'substack_mode')]
+    public string $substackMode = 'develop';
+
     public bool $migrationReady = false;
 
     public string $migrationMessage = '';
@@ -134,6 +137,7 @@ class OutreachIndex extends Component
     public function mount(): void
     {
         $this->normalizeTab();
+        $this->normalizeSubstackMode();
         $this->substackPresets = $this->substackPresetDefinitions();
         $this->substackDraftForm['days_back'] = (int) config('outreach.substack.default_days_back', 7);
         $this->substackDraftForm['max_messages'] = (int) config('outreach.substack.default_message_limit', 80);
@@ -162,6 +166,7 @@ class OutreachIndex extends Component
     public function updatedTab(): void
     {
         $this->normalizeTab();
+        $this->normalizeSubstackMode();
 
         if ($this->tab === 'substack' && $this->migrationReady) {
             if ($this->staffOptions === []) {
@@ -172,6 +177,12 @@ class OutreachIndex extends Component
                 $this->selectSubstackPreset((string) ($this->substackPresets[0]['slug'] ?? ''));
             }
         }
+    }
+
+    public function setSubstackMode(string $mode): void
+    {
+        $this->substackMode = $mode;
+        $this->normalizeSubstackMode();
     }
 
     public function updatedSubstackDraftFormNewsletterId(mixed $value = null): void
@@ -1386,6 +1397,13 @@ class OutreachIndex extends Component
     {
         if (! in_array($this->tab, ['newsletters', 'campaigns', 'automations', 'substack', 'activity'], true)) {
             $this->tab = 'newsletters';
+        }
+    }
+
+    protected function normalizeSubstackMode(): void
+    {
+        if (! in_array($this->substackMode, ['develop', 'setup'], true)) {
+            $this->substackMode = 'develop';
         }
     }
 

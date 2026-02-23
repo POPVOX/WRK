@@ -509,83 +509,23 @@
         @endif
 
         @if($migrationReady && $tab === 'substack')
-            <section class="grid grid-cols-1 xl:grid-cols-12 gap-4">
-                <article class="xl:col-span-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                    <div class="flex items-center justify-between">
-                        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Substack Integration</h2>
-                        @if($substackConnection)
-                            <span class="rounded-full px-2.5 py-1 text-xs font-medium {{ $substackConnection->status === 'connected' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' }}">
-                                {{ strtoupper($substackConnection->status) }}
-                            </span>
-                        @endif
-                    </div>
-                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Store publication settings and validate feed access.</p>
-
-                    @if($substackConnection && $substackConnection->last_error)
-                        <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-                            {{ $substackConnection->last_error }}
-                        </div>
-                    @endif
-
-                    <div class="mt-4 space-y-3">
+            <section class="space-y-4">
+                <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Publication Name</label>
-                            <input type="text" wire:model.defer="substackForm.publication_name"
-                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Substack Workspace</h2>
+                            <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Keep setup separate from writing so newsletter development stays focused.</p>
                         </div>
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Publication URL</label>
-                            <input type="url" wire:model.defer="substackForm.publication_url"
-                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                placeholder="https://example.substack.com">
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">RSS Feed URL (optional)</label>
-                            <input type="url" wire:model.defer="substackForm.rss_feed_url"
-                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                placeholder="https://example.substack.com/feed">
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">From Email (optional)</label>
-                            <input type="email" wire:model.defer="substackForm.email_from"
-                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">API Key (optional)</label>
-                            <textarea rows="3" wire:model.defer="substackForm.api_key"
-                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                placeholder="Store key for future API workflows (send/list sync)."></textarea>
-                        </div>
-
-                        <div class="rounded-lg border {{ $slackConfigured ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200' : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200' }} px-3 py-2 text-xs">
-                            Slack ingest: {{ $slackConfigured ? 'configured' : 'missing SLACK_BOT_USER_OAUTH_TOKEN' }}
-                        </div>
-
-                        <div class="flex flex-wrap items-center gap-2">
-                            <button wire:click="saveSubstackConnection"
-                                class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-                                Save Settings
+                        <div class="inline-flex items-center rounded-lg border border-gray-300 bg-gray-100 p-1 dark:border-gray-600 dark:bg-gray-700">
+                            <button type="button" wire:click="setSubstackMode('develop')"
+                                class="rounded-md px-3 py-1.5 text-sm font-medium {{ $substackMode === 'develop' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-800 dark:text-white' : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white' }}">
+                                Newsletter Development
                             </button>
-                            <button wire:click="syncSubstack"
-                                class="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
-                                Sync Feed
+                            <button type="button" wire:click="setSubstackMode('setup')"
+                                class="rounded-md px-3 py-1.5 text-sm font-medium {{ $substackMode === 'setup' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-800 dark:text-white' : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white' }}">
+                                Setup & Profiles
                             </button>
                         </div>
-                    </div>
-                </article>
-
-                <article class="xl:col-span-8 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Newsletter Draft Studio</h2>
-                            <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Pull Slack brainstorm threads into a standardized Substack draft.</p>
-                        </div>
-                        <button type="button" wire:click="installSubstackPresets" wire:loading.attr="disabled"
-                            wire:target="installSubstackPresets"
-                            class="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
-                            <span wire:loading.remove wire:target="installSubstackPresets">Apply all preset defaults</span>
-                            <span wire:loading wire:target="installSubstackPresets">Applying...</span>
-                        </button>
                     </div>
 
                     @if($presetStatusMessage !== '')
@@ -594,204 +534,355 @@
                         </div>
                     @endif
 
-                    <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Newsletter</label>
-                            <select wire:model.live="substackDraftForm.newsletter_id"
-                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                <option value="">Select newsletter</option>
-                                @foreach($newsletterOptions as $newsletter)
-                                    <option value="{{ $newsletter['id'] }}">{{ $newsletter['name'] }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Slack Channel ID</label>
-                            <input type="text" wire:model.defer="substackDraftForm.slack_channel_id"
-                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                placeholder="C0123456789">
-                            @error('substackDraftForm.slack_channel_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Days Back</label>
-                            <input type="number" min="1" max="30" wire:model.defer="substackDraftForm.days_back"
-                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                            @error('substackDraftForm.days_back') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Max Messages</label>
-                            <input type="number" min="10" max="400" wire:model.defer="substackDraftForm.max_messages"
-                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                            @error('substackDraftForm.max_messages') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                        </div>
-                    </div>
+                    @if($substackMode === 'develop')
+                        <div class="mt-4 space-y-4">
+                            @if(!$slackConfigured)
+                                <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                                    Slack ingest is not configured. Add `SLACK_BOT_USER_OAUTH_TOKEN`, then finish setup in Setup & Profiles.
+                                </div>
+                            @endif
 
-                    <div class="mt-4 flex flex-wrap items-center gap-2">
-                        <button wire:click="generateSubstackDraftFromSlack"
-                            class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-                            Generate Draft from Slack
-                        </button>
-                        <span class="text-xs text-gray-500 dark:text-gray-400">Creates a draft campaign in Outreach and shows preview below.</span>
-                    </div>
+                            <div class="grid grid-cols-1 gap-4 xl:grid-cols-12">
+                                <article class="xl:col-span-4 rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-gray-700 dark:bg-gray-900/40">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <h3 class="text-base font-semibold text-gray-900 dark:text-white">Profiles</h3>
+                                        <button type="button" wire:click="setSubstackMode('setup')"
+                                            class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                                            Edit setup
+                                        </button>
+                                    </div>
+                                    <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">Choose a newsletter profile, then generate a draft.</p>
 
-                    @if(!empty($substackPresets))
-                        <div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40">
-                            <div class="flex items-center justify-between gap-3">
-                                <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Preset Publications (click to edit)</p>
-                                @if($selectedPresetSlug !== '')
-                                    <button type="button" wire:click="savePresetConfiguration" wire:loading.attr="disabled"
-                                        wire:target="savePresetConfiguration"
-                                        class="inline-flex items-center rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">
-                                        <span wire:loading.remove wire:target="savePresetConfiguration">Save selected preset</span>
-                                        <span wire:loading wire:target="savePresetConfiguration">Saving...</span>
-                                    </button>
-                                @endif
-                            </div>
-                            <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                @foreach($substackPresets as $preset)
-                                    <button type="button"
-                                        wire:key="preset-card-{{ $preset['slug'] }}"
-                                        wire:click="selectSubstackPreset('{{ $preset['slug'] }}')"
-                                        class="rounded-md border px-2.5 py-2 text-left text-xs transition {{ $selectedPresetSlug === ($preset['slug'] ?? '') ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-500 dark:bg-indigo-900/30' : 'border-gray-200 bg-white hover:border-indigo-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-indigo-500' }}">
-                                        <div class="flex items-center justify-between gap-2">
-                                            <div class="font-semibold text-gray-800 dark:text-gray-100">{{ $preset['name'] ?? 'Newsletter' }}</div>
-                                            @if(!empty($preset['installed']))
-                                                <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">saved</span>
-                                            @endif
-                                        </div>
-                                        <div class="mt-0.5 text-gray-500 dark:text-gray-400">{{ ($preset['lead'] ?? '') ?: 'Lead not set' }}</div>
-                                        @if(!empty($preset['publication_url']))
-                                            <div class="mt-1 inline-flex text-indigo-600 dark:text-indigo-300">
-                                                {{ $preset['publication_url'] }}
+                                    <div class="mt-3 space-y-2">
+                                        @forelse($substackPresets as $preset)
+                                            <button type="button"
+                                                wire:key="develop-preset-card-{{ $preset['slug'] }}"
+                                                wire:click="selectSubstackPreset('{{ $preset['slug'] }}')"
+                                                class="w-full rounded-lg border px-3 py-2 text-left text-xs transition {{ $selectedPresetSlug === ($preset['slug'] ?? '') ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-500 dark:bg-indigo-900/30' : 'border-gray-200 bg-white hover:border-indigo-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-indigo-500' }}">
+                                                <div class="flex items-center justify-between gap-2">
+                                                    <span class="font-semibold text-gray-800 dark:text-gray-100">{{ $preset['name'] ?? 'Newsletter' }}</span>
+                                                    @if(!empty($preset['installed']))
+                                                        <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">saved</span>
+                                                    @endif
+                                                </div>
+                                                <div class="mt-0.5 text-gray-500 dark:text-gray-400">
+                                                    {{ ($preset['lead'] ?? '') !== '' ? ('Lead: '.$preset['lead']) : 'Lead not set' }}
+                                                </div>
+                                                @if(!empty($preset['slack_channel_id']))
+                                                    <div class="mt-0.5 text-gray-500 dark:text-gray-400">{{ $preset['slack_channel_id'] }}</div>
+                                                @endif
+                                            </button>
+                                        @empty
+                                            <div class="rounded-lg border border-dashed border-gray-300 p-3 text-xs text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                                                No profiles found. Open Setup & Profiles to install defaults.
                                             </div>
-                                        @endif
-                                    </button>
-                                @endforeach
-                            </div>
+                                        @endforelse
+                                    </div>
+                                </article>
 
-                            @if($selectedPresetSlug !== '')
-                                <div class="mt-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800/70">
-                                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Edit Selected Preset</p>
-                                    <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                        <div>
-                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Newsletter Name</label>
-                                            <input type="text" wire:model.defer="presetEditor.name"
-                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                            @error('presetEditor.name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                                        </div>
-                                        <div>
-                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Lead</label>
-                                            <select wire:model.defer="presetEditor.lead_user_id"
-                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                                <option value="">Select staff lead</option>
-                                                @foreach($staffOptions as $staff)
-                                                    <option value="{{ $staff['id'] }}">{{ $staff['label'] }}</option>
-                                                @endforeach
-                                            </select>
-                                            @error('presetEditor.lead_user_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                <article class="xl:col-span-8 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900/20">
+                                    <h3 class="text-base font-semibold text-gray-900 dark:text-white">Newsletter Draft Studio</h3>
+                                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Pull recent Slack brainstorm threads into a standardized Substack draft.</p>
+
+                                    @if($selectedPresetSlug !== '')
+                                        <div class="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/70 px-3 py-2 text-xs text-indigo-900 dark:border-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200">
+                                            Using profile: <span class="font-semibold">{{ $presetEditor['name'] ?? 'Selected profile' }}</span>
                                             @if(($presetEditor['lead'] ?? '') !== '')
-                                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Current lead: {{ $presetEditor['lead'] }}</p>
+                                                · Lead: {{ $presetEditor['lead'] }}
+                                            @endif
+                                            @if(($presetEditor['slack_channel_id'] ?? '') !== '')
+                                                · Default channel: {{ $presetEditor['slack_channel_id'] }}
                                             @endif
                                         </div>
+                                    @endif
+
+                                    @if(empty($newsletterOptions))
+                                        <div class="mt-3 rounded-lg border border-dashed border-gray-300 px-3 py-3 text-sm text-gray-600 dark:border-gray-600 dark:text-gray-300">
+                                            You do not have any outreach newsletters yet.
+                                            <a href="{{ route('communications.outreach', ['tab' => 'newsletters']) }}" wire:navigate
+                                                class="font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-300 dark:hover:text-indigo-200">
+                                                Create one in Newsletters
+                                            </a>.
+                                        </div>
+                                    @else
+                                        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                            <div>
+                                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Newsletter</label>
+                                                <select wire:model.live="substackDraftForm.newsletter_id"
+                                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                    <option value="">Select newsletter</option>
+                                                    @foreach($newsletterOptions as $newsletter)
+                                                        <option value="{{ $newsletter['id'] }}">{{ $newsletter['name'] }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Slack Channel ID</label>
+                                                <input type="text" wire:model.defer="substackDraftForm.slack_channel_id"
+                                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                                    placeholder="C0123456789">
+                                                @error('substackDraftForm.slack_channel_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                            </div>
+                                            <div>
+                                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Days Back</label>
+                                                <input type="number" min="1" max="30" wire:model.defer="substackDraftForm.days_back"
+                                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                @error('substackDraftForm.days_back') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                            </div>
+                                            <div>
+                                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Max Messages</label>
+                                                <input type="number" min="10" max="400" wire:model.defer="substackDraftForm.max_messages"
+                                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                @error('substackDraftForm.max_messages') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-3 flex flex-wrap items-center gap-2">
+                                            <button type="button" wire:click="generateSubstackDraftFromSlack" wire:loading.attr="disabled"
+                                                wire:target="generateSubstackDraftFromSlack"
+                                                class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                                                <span wire:loading.remove wire:target="generateSubstackDraftFromSlack">Generate Draft from Slack</span>
+                                                <span wire:loading wire:target="generateSubstackDraftFromSlack">Generating...</span>
+                                            </button>
+                                            <span wire:loading wire:target="generateSubstackDraftFromSlack"
+                                                class="text-xs text-gray-500 dark:text-gray-400">Scanning Slack messages and building a campaign draft...</span>
+                                        </div>
+                                    @endif
+                                </article>
+                            </div>
+
+                            @if(!empty($substackDraftPreview))
+                                <div class="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 dark:border-emerald-800 dark:bg-emerald-900/20">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                         <div>
-                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Publication URL</label>
-                                            <input type="url" wire:model.defer="presetEditor.publication_url"
-                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                            @error('presetEditor.publication_url') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                            <p class="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Draft generated</p>
+                                            <p class="text-xs text-emerald-800 dark:text-emerald-200">
+                                                Campaign #{{ $substackDraftPreview['campaign_id'] ?? 'n/a' }} ·
+                                                Messages scanned: {{ $substackDraftPreview['messages_scanned'] ?? 0 }}
+                                            </p>
                                         </div>
-                                        <div>
-                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Slack Channel ID</label>
-                                            <input type="text" wire:model.defer="presetEditor.slack_channel_id"
-                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                                placeholder="C0123456789">
-                                            @error('presetEditor.slack_channel_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                        <a href="{{ route('communications.outreach', ['tab' => 'campaigns']) }}" wire:navigate
+                                            class="inline-flex items-center rounded-lg border border-emerald-300 px-2.5 py-1.5 text-xs font-medium text-emerald-900 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-200 dark:hover:bg-emerald-900/30">
+                                            Open campaigns
+                                        </a>
+                                    </div>
+
+                                    <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                                        <div class="rounded-lg border border-emerald-200 bg-white p-3 dark:border-emerald-800 dark:bg-gray-800">
+                                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Subject</p>
+                                            <p class="mt-1 text-sm text-gray-900 dark:text-gray-100">{{ $substackDraftPreview['subject'] ?? '' }}</p>
+                                            <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Key Signals</p>
+                                            <ul class="mt-1 space-y-1 text-xs text-gray-700 dark:text-gray-300">
+                                                @forelse(($substackDraftPreview['key_signals'] ?? []) as $signal)
+                                                    <li>• {{ $signal }}</li>
+                                                @empty
+                                                    <li>• No strong signals found in selected range.</li>
+                                                @endforelse
+                                            </ul>
                                         </div>
-                                        <div>
-                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Cadence</label>
-                                            <select wire:model.defer="presetEditor.cadence"
-                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                                <option value="weekly">Weekly</option>
-                                                <option value="biweekly">Biweekly</option>
-                                                <option value="monthly">Monthly</option>
-                                                <option value="ad_hoc">Ad hoc</option>
-                                            </select>
+                                        <div class="rounded-lg border border-emerald-200 bg-white p-3 dark:border-emerald-800 dark:bg-gray-800">
+                                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Link Roundup</p>
+                                            <ul class="mt-1 space-y-1 text-xs text-gray-700 dark:text-gray-300">
+                                                @forelse(($substackDraftPreview['link_roundup'] ?? []) as $entry)
+                                                    <li>• <a href="{{ $entry['url'] ?? '#' }}" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:text-indigo-700 dark:text-indigo-300 dark:hover:text-indigo-200">{{ $entry['url'] ?? '' }}</a></li>
+                                                @empty
+                                                    <li>• No links detected in selected messages.</li>
+                                                @endforelse
+                                            </ul>
                                         </div>
-                                        <div>
-                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Project</label>
-                                            <select wire:model.defer="presetEditor.project_id"
-                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                                <option value="">Auto match / none</option>
-                                                @foreach($projectOptions as $project)
-                                                    <option value="{{ $project['id'] }}">{{ $project['name'] }}</option>
-                                                @endforeach
-                                            </select>
-                                        </div>
-                                        <div class="sm:col-span-2">
-                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Default Subject Prefix</label>
-                                            <input type="text" wire:model.defer="presetEditor.default_subject_prefix"
-                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                        </div>
-                                        <div class="sm:col-span-2">
-                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Template Sections (one per line)</label>
-                                            <textarea rows="4" wire:model.defer="presetEditor.template_sections"
-                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
-                                            @error('presetEditor.template_sections') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                                        </div>
+                                    </div>
+                                    <div class="mt-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900/40">
+                                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Draft Body (Markdown)</p>
+                                        <pre class="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-gray-900 px-3 py-2 text-[11px] text-gray-100">{{ $substackDraftPreview['body_markdown'] ?? '' }}</pre>
                                     </div>
                                 </div>
                             @endif
                         </div>
-                    @endif
+                    @else
+                        <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+                            <article class="xl:col-span-5 rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-gray-700 dark:bg-gray-900/40">
+                                <div class="flex items-center justify-between">
+                                    <h3 class="text-base font-semibold text-gray-900 dark:text-white">Integration Settings</h3>
+                                    @if($substackConnection)
+                                        <span class="rounded-full px-2.5 py-1 text-xs font-medium {{ $substackConnection->status === 'connected' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' }}">
+                                            {{ strtoupper($substackConnection->status) }}
+                                        </span>
+                                    @endif
+                                </div>
+                                <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Configure Substack and Slack connectivity.</p>
 
-                    @if(!empty($substackDraftPreview))
-                        <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 dark:border-emerald-800 dark:bg-emerald-900/20">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                    <p class="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Draft generated</p>
-                                    <p class="text-xs text-emerald-800 dark:text-emerald-200">
-                                        Campaign #{{ $substackDraftPreview['campaign_id'] ?? 'n/a' }} ·
-                                        Messages scanned: {{ $substackDraftPreview['messages_scanned'] ?? 0 }}
-                                    </p>
-                                </div>
-                                <a href="{{ route('communications.outreach', ['tab' => 'campaigns']) }}" wire:navigate
-                                    class="inline-flex items-center rounded-lg border border-emerald-300 px-2.5 py-1.5 text-xs font-medium text-emerald-900 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-200 dark:hover:bg-emerald-900/30">
-                                    Open campaigns
-                                </a>
-                            </div>
+                                @if($substackConnection && $substackConnection->last_error)
+                                    <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                                        {{ $substackConnection->last_error }}
+                                    </div>
+                                @endif
 
-                            <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-                                <div class="rounded-lg border border-emerald-200 bg-white p-3 dark:border-emerald-800 dark:bg-gray-800">
-                                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Subject</p>
-                                    <p class="mt-1 text-sm text-gray-900 dark:text-gray-100">{{ $substackDraftPreview['subject'] ?? '' }}</p>
-                                    <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Key Signals</p>
-                                    <ul class="mt-1 space-y-1 text-xs text-gray-700 dark:text-gray-300">
-                                        @forelse(($substackDraftPreview['key_signals'] ?? []) as $signal)
-                                            <li>• {{ $signal }}</li>
-                                        @empty
-                                            <li>• No strong signals found in selected range.</li>
-                                        @endforelse
-                                    </ul>
+                                <div class="mt-3 space-y-3">
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Publication Name</label>
+                                        <input type="text" wire:model.defer="substackForm.publication_name"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Publication URL</label>
+                                        <input type="url" wire:model.defer="substackForm.publication_url"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                            placeholder="https://example.substack.com">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">RSS Feed URL (optional)</label>
+                                        <input type="url" wire:model.defer="substackForm.rss_feed_url"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                            placeholder="https://example.substack.com/feed">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">From Email (optional)</label>
+                                        <input type="email" wire:model.defer="substackForm.email_from"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">API Key (optional)</label>
+                                        <textarea rows="3" wire:model.defer="substackForm.api_key"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                            placeholder="Store key for future API workflows (send/list sync)."></textarea>
+                                    </div>
+                                    <div class="rounded-lg border {{ $slackConfigured ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200' : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200' }} px-3 py-2 text-xs">
+                                        Slack ingest: {{ $slackConfigured ? 'configured' : 'missing SLACK_BOT_USER_OAUTH_TOKEN' }}
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <button type="button" wire:click="saveSubstackConnection" wire:loading.attr="disabled" wire:target="saveSubstackConnection"
+                                            class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                                            <span wire:loading.remove wire:target="saveSubstackConnection">Save settings</span>
+                                            <span wire:loading wire:target="saveSubstackConnection">Saving...</span>
+                                        </button>
+                                        <button type="button" wire:click="syncSubstack" wire:loading.attr="disabled" wire:target="syncSubstack"
+                                            class="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                                            <span wire:loading.remove wire:target="syncSubstack">Sync feed</span>
+                                            <span wire:loading wire:target="syncSubstack">Syncing...</span>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="rounded-lg border border-emerald-200 bg-white p-3 dark:border-emerald-800 dark:bg-gray-800">
-                                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Link Roundup</p>
-                                    <ul class="mt-1 space-y-1 text-xs text-gray-700 dark:text-gray-300">
-                                        @forelse(($substackDraftPreview['link_roundup'] ?? []) as $entry)
-                                            <li>• <a href="{{ $entry['url'] ?? '#' }}" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:text-indigo-700 dark:text-indigo-300 dark:hover:text-indigo-200">{{ $entry['url'] ?? '' }}</a></li>
-                                        @empty
-                                            <li>• No links detected in selected messages.</li>
-                                        @endforelse
-                                    </ul>
+                            </article>
+
+                            <article class="xl:col-span-7 rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-gray-700 dark:bg-gray-900/40">
+                                <div class="flex items-center justify-between gap-3">
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Newsletter Profiles</p>
+                                    <div class="flex items-center gap-2">
+                                        <button type="button" wire:click="installSubstackPresets" wire:loading.attr="disabled"
+                                            wire:target="installSubstackPresets"
+                                            class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                                            <span wire:loading.remove wire:target="installSubstackPresets">Apply all defaults</span>
+                                            <span wire:loading wire:target="installSubstackPresets">Applying...</span>
+                                        </button>
+                                        @if($selectedPresetSlug !== '')
+                                            <button type="button" wire:click="savePresetConfiguration" wire:loading.attr="disabled"
+                                                wire:target="savePresetConfiguration"
+                                                class="inline-flex items-center rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">
+                                                <span wire:loading.remove wire:target="savePresetConfiguration">Save selected profile</span>
+                                                <span wire:loading wire:target="savePresetConfiguration">Saving...</span>
+                                            </button>
+                                        @endif
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="mt-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900/40">
-                                <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Draft Body (Markdown)</p>
-                                <pre class="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-gray-900 px-3 py-2 text-[11px] text-gray-100">{{ $substackDraftPreview['body_markdown'] ?? '' }}</pre>
-                            </div>
+                                <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    @foreach($substackPresets as $preset)
+                                        <button type="button"
+                                            wire:key="setup-preset-card-{{ $preset['slug'] }}"
+                                            wire:click="selectSubstackPreset('{{ $preset['slug'] }}')"
+                                            class="rounded-md border px-2.5 py-2 text-left text-xs transition {{ $selectedPresetSlug === ($preset['slug'] ?? '') ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-500 dark:bg-indigo-900/30' : 'border-gray-200 bg-white hover:border-indigo-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-indigo-500' }}">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <div class="font-semibold text-gray-800 dark:text-gray-100">{{ $preset['name'] ?? 'Newsletter' }}</div>
+                                                @if(!empty($preset['installed']))
+                                                    <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">saved</span>
+                                                @endif
+                                            </div>
+                                            <div class="mt-0.5 text-gray-500 dark:text-gray-400">{{ ($preset['lead'] ?? '') !== '' ? ('Lead: '.$preset['lead']) : 'Lead not set' }}</div>
+                                            @if(!empty($preset['publication_url']))
+                                                <div class="mt-1 inline-flex text-indigo-600 dark:text-indigo-300">
+                                                    {{ $preset['publication_url'] }}
+                                                </div>
+                                            @endif
+                                        </button>
+                                    @endforeach
+                                </div>
+
+                                @if($selectedPresetSlug !== '')
+                                    <div class="mt-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800/70">
+                                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Edit Selected Profile</p>
+                                        <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                            <div>
+                                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Newsletter Name</label>
+                                                <input type="text" wire:model.defer="presetEditor.name"
+                                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                @error('presetEditor.name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                            </div>
+                                            <div>
+                                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Lead</label>
+                                                <select wire:model.defer="presetEditor.lead_user_id"
+                                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                    <option value="">Select staff lead</option>
+                                                    @foreach($staffOptions as $staff)
+                                                        <option value="{{ $staff['id'] }}">{{ $staff['label'] }}</option>
+                                                    @endforeach
+                                                </select>
+                                                @error('presetEditor.lead_user_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                                @if(($presetEditor['lead'] ?? '') !== '')
+                                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Current lead: {{ $presetEditor['lead'] }}</p>
+                                                @endif
+                                            </div>
+                                            <div>
+                                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Publication URL</label>
+                                                <input type="url" wire:model.defer="presetEditor.publication_url"
+                                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                @error('presetEditor.publication_url') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                            </div>
+                                            <div>
+                                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Slack Channel ID</label>
+                                                <input type="text" wire:model.defer="presetEditor.slack_channel_id"
+                                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                                    placeholder="C0123456789">
+                                                @error('presetEditor.slack_channel_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                            </div>
+                                            <div>
+                                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Cadence</label>
+                                                <select wire:model.defer="presetEditor.cadence"
+                                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                    <option value="weekly">Weekly</option>
+                                                    <option value="biweekly">Biweekly</option>
+                                                    <option value="monthly">Monthly</option>
+                                                    <option value="ad_hoc">Ad hoc</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Project</label>
+                                                <select wire:model.defer="presetEditor.project_id"
+                                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                    <option value="">Auto match / none</option>
+                                                    @foreach($projectOptions as $project)
+                                                        <option value="{{ $project['id'] }}">{{ $project['name'] }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div class="sm:col-span-2">
+                                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Default Subject Prefix</label>
+                                                <input type="text" wire:model.defer="presetEditor.default_subject_prefix"
+                                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            </div>
+                                            <div class="sm:col-span-2">
+                                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Template Sections (one per line)</label>
+                                                <textarea rows="4" wire:model.defer="presetEditor.template_sections"
+                                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
+                                                @error('presetEditor.template_sections') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endif
+                            </article>
                         </div>
                     @endif
                 </article>
 
-                <article class="xl:col-span-12 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
                     <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Substack Posts</h2>
                     <div class="mt-4 space-y-3">
                         @forelse($substackPosts as $post)
