@@ -8,6 +8,7 @@ This folder contains WRK v2 architecture, data contract, and rollout planning do
 - `WRK_V2_DATA_CONTRACT.md` - Canonical IDs, entity requirements, provenance/event contracts.
 - `WRK_V2_SCHEMA_PROPOSAL.md` - Frozen schema direction and relationship map.
 - `BOX_TAXONOMY_AND_PERMISSION_MAPPING.md` - Box folder taxonomy and ACL projection rules.
+- `BOX_ACCESS_ARCHITECTURE_V1_IMPLEMENTATION_SPEC.md` - Concrete Box governance implementation plan (tables, jobs, APIs, UI states).
 - `SLACK_AGENT_MVP_SCOPE.md` - Slack-first agent MVP workflows and guardrails.
 - `POSTGRES_MIGRATION_RUNBOOK.md` - Production migration/cutover runbook.
 
