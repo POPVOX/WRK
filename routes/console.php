@@ -45,3 +45,11 @@ Schedule::command('outreach:run-scheduled')
     ->onOneServer()
     ->runInBackground()
     ->description('Run scheduled outreach campaigns and automation');
+
+// Reconcile Box permission drift on managed policies.
+Schedule::command('box:reconcile-permissions --full')
+    ->dailyAt('03:30')
+    ->withoutOverlapping(120)
+    ->onOneServer()
+    ->runInBackground()
+    ->description('Nightly full Box permission reconciliation');

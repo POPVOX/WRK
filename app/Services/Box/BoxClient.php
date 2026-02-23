@@ -101,6 +101,60 @@ class BoxClient
         ]);
     }
 
+    public function listFolderCollaborations(string $folderId, int $offset = 0, int $limit = 100): array
+    {
+        return $this->getJson("folders/{$folderId}/collaborations", [
+            'offset' => max(0, $offset),
+            'limit' => max(1, min($limit, 1000)),
+            'fields' => implode(',', [
+                'id',
+                'type',
+                'role',
+                'status',
+                'accessible_by',
+                'item',
+                'created_at',
+                'modified_at',
+                'expires_at',
+            ]),
+        ]);
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    public function createFolderCollaboration(string $folderId, string $userEmail, string $role): array
+    {
+        return $this->postJson('collaborations', [
+            'item' => [
+                'type' => 'folder',
+                'id' => $folderId,
+            ],
+            'accessible_by' => [
+                'type' => 'user',
+                'login' => $userEmail,
+            ],
+            'role' => $role,
+        ]);
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    public function updateCollaboration(string $collaborationId, string $role): array
+    {
+        return $this->putJson("collaborations/{$collaborationId}", [
+            'role' => $role,
+        ]);
+    }
+
+    public function deleteCollaboration(string $collaborationId): void
+    {
+        $this->sendWithRefreshRetry(
+            fn (bool $refresh) => $this->request($refresh)->delete("collaborations/{$collaborationId}")
+        )->throw();
+    }
+
     public function itemNotFound(RequestException $exception): bool
     {
         return $exception->response instanceof Response && $exception->response->status() === 404;
@@ -185,6 +239,18 @@ class BoxClient
     private function postJson(string $uri, array $payload = []): array
     {
         $response = $this->sendWithRefreshRetry(fn (bool $refresh) => $this->request($refresh)->post($uri, $payload));
+        $data = $response->json();
+
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     * @return array<string,mixed>
+     */
+    private function putJson(string $uri, array $payload = []): array
+    {
+        $response = $this->sendWithRefreshRetry(fn (bool $refresh) => $this->request($refresh)->put($uri, $payload));
         $data = $response->json();
 
         return is_array($data) ? $data : [];

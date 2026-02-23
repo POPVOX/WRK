@@ -242,4 +242,28 @@ class User extends Authenticatable
     {
         return $this->hasMany(OutreachActivityLog::class);
     }
+
+    /**
+     * Box access grants assigned to this user.
+     */
+    public function boxAccessGrants(): HasMany
+    {
+        return $this->hasMany(BoxAccessGrant::class, 'subject_id');
+    }
+
+    /**
+     * Box access operations initiated by this user.
+     */
+    public function boxAccessOperations(): HasMany
+    {
+        return $this->hasMany(BoxAccessOperation::class, 'actor_user_id');
+    }
+
+    /**
+     * Drift findings resolved by this user.
+     */
+    public function resolvedBoxAccessDriftFindings(): HasMany
+    {
+        return $this->hasMany(BoxAccessDriftFinding::class, 'resolved_by');
+    }
 }
