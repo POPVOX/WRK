@@ -138,17 +138,24 @@ class OutreachIndex extends Component
         $this->normalizeTab();
     }
 
-    public function updatedSubstackDraftFormNewsletterId(): void
+    public function updatedSubstackDraftFormNewsletterId(mixed $value = null): void
     {
-        $newsletterId = (int) ($this->substackDraftForm['newsletter_id'] ?? 0);
+        $newsletterId = (int) ($value ?? $this->substackDraftForm['newsletter_id'] ?? 0);
         if ($newsletterId <= 0) {
             return;
         }
 
-        $newsletter = OutreachNewsletter::query()
-            ->where('id', $newsletterId)
-            ->where('user_id', Auth::id())
-            ->first();
+        try {
+            $newsletter = OutreachNewsletter::query()
+                ->where('id', $newsletterId)
+                ->where('user_id', Auth::id())
+                ->first();
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->dispatch('notify', type: 'error', message: 'Could not load newsletter defaults for Slack drafting.');
+
+            return;
+        }
 
         if (! $newsletter) {
             return;
@@ -594,70 +601,77 @@ class OutreachIndex extends Component
         $created = 0;
         $updated = 0;
 
-        foreach ($presets as $preset) {
-            $slug = trim((string) ($preset['slug'] ?? ''));
-            $name = trim((string) ($preset['name'] ?? ''));
-            if ($slug === '' || $name === '') {
-                continue;
-            }
-
-            $ownedNewsletter = OutreachNewsletter::query()
-                ->where('user_id', $user->id)
-                ->whereIn('slug', [$slug, $slug.'-u'.$user->id])
-                ->first();
-
-            if ($ownedNewsletter) {
-                $newsletter = $ownedNewsletter;
-            } else {
-                $slugCandidate = $slug;
-                $slugTakenByOther = OutreachNewsletter::query()
-                    ->where('slug', $slug)
-                    ->where('user_id', '!=', $user->id)
-                    ->exists();
-                if ($slugTakenByOther) {
-                    $slugCandidate = $slug.'-u'.$user->id;
+        try {
+            foreach ($presets as $preset) {
+                $slug = trim((string) ($preset['slug'] ?? ''));
+                $name = trim((string) ($preset['name'] ?? ''));
+                if ($slug === '' || $name === '') {
+                    continue;
                 }
 
-                $newsletter = new OutreachNewsletter([
-                    'user_id' => $user->id,
-                    'slug' => $slugCandidate,
+                $ownedNewsletter = OutreachNewsletter::query()
+                    ->where('user_id', $user->id)
+                    ->whereIn('slug', [$slug, $slug.'-u'.$user->id])
+                    ->first();
+
+                if ($ownedNewsletter) {
+                    $newsletter = $ownedNewsletter;
+                } else {
+                    $slugCandidate = $slug;
+                    $slugTakenByOther = OutreachNewsletter::query()
+                        ->where('slug', $slug)
+                        ->where('user_id', '!=', $user->id)
+                        ->exists();
+                    if ($slugTakenByOther) {
+                        $slugCandidate = $slug.'-u'.$user->id;
+                    }
+
+                    $newsletter = new OutreachNewsletter([
+                        'user_id' => $user->id,
+                        'slug' => $slugCandidate,
+                    ]);
+                }
+
+                $isNew = ! $newsletter->exists;
+                $existingWorkflow = $this->extractNewsletterWorkflow($newsletter);
+                $nextWorkflow = [
+                    'lead' => trim((string) ($existingWorkflow['lead'] ?? '')) !== ''
+                        ? (string) $existingWorkflow['lead']
+                        : trim((string) ($preset['lead'] ?? '')),
+                    'slack_channel_id' => trim((string) ($existingWorkflow['slack_channel_id'] ?? '')) !== ''
+                        ? (string) $existingWorkflow['slack_channel_id']
+                        : trim((string) ($preset['slack_channel_id'] ?? '')),
+                    'template_sections' => $existingWorkflow['template_sections'] !== []
+                        ? $existingWorkflow['template_sections']
+                        : array_values(array_filter(array_map(
+                            static fn ($item): string => trim((string) $item),
+                            (array) ($preset['template_sections'] ?? [])
+                        ))),
+                ];
+
+                $newsletter->fill([
+                    'project_id' => $newsletter->project_id ?: $this->resolvePresetProjectId((array) ($preset['project_match_terms'] ?? [])),
+                    'name' => $newsletter->name ?: $name,
+                    'channel' => $newsletter->channel ?: 'substack',
+                    'status' => $newsletter->status ?: 'planning',
+                    'cadence' => $newsletter->cadence ?: ((string) ($preset['cadence'] ?? '') ?: null),
+                    'substack_publication_url' => $newsletter->substack_publication_url ?: (trim((string) ($preset['publication_url'] ?? '')) ?: null),
+                    'default_subject_prefix' => $newsletter->default_subject_prefix ?: (trim((string) ($preset['default_subject_prefix'] ?? '')) ?: null),
+                    'publishing_checklist' => $this->mergeNewsletterWorkflow($newsletter->publishing_checklist, $nextWorkflow),
                 ]);
+                $newsletter->save();
+
+                if ($isNew) {
+                    $created++;
+                } else {
+                    $updated++;
+                }
             }
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->dispatch('notify', type: 'error', message: 'Could not install presets: '.$exception->getMessage());
 
-            $isNew = ! $newsletter->exists;
-            $existingWorkflow = $this->extractNewsletterWorkflow($newsletter);
-            $nextWorkflow = [
-                'lead' => trim((string) ($existingWorkflow['lead'] ?? '')) !== ''
-                    ? (string) $existingWorkflow['lead']
-                    : trim((string) ($preset['lead'] ?? '')),
-                'slack_channel_id' => trim((string) ($existingWorkflow['slack_channel_id'] ?? '')) !== ''
-                    ? (string) $existingWorkflow['slack_channel_id']
-                    : trim((string) ($preset['slack_channel_id'] ?? '')),
-                'template_sections' => $existingWorkflow['template_sections'] !== []
-                    ? $existingWorkflow['template_sections']
-                    : array_values(array_filter(array_map(
-                        static fn ($item): string => trim((string) $item),
-                        (array) ($preset['template_sections'] ?? [])
-                    ))),
-            ];
-
-            $newsletter->fill([
-                'project_id' => $newsletter->project_id ?: $this->resolvePresetProjectId((array) ($preset['project_match_terms'] ?? [])),
-                'name' => $newsletter->name ?: $name,
-                'channel' => $newsletter->channel ?: 'substack',
-                'status' => $newsletter->status ?: 'planning',
-                'cadence' => $newsletter->cadence ?: ((string) ($preset['cadence'] ?? '') ?: null),
-                'substack_publication_url' => $newsletter->substack_publication_url ?: (trim((string) ($preset['publication_url'] ?? '')) ?: null),
-                'default_subject_prefix' => $newsletter->default_subject_prefix ?: (trim((string) ($preset['default_subject_prefix'] ?? '')) ?: null),
-                'publishing_checklist' => $this->mergeNewsletterWorkflow($newsletter->publishing_checklist, $nextWorkflow),
-            ]);
-            $newsletter->save();
-
-            if ($isNew) {
-                $created++;
-            } else {
-                $updated++;
-            }
+            return;
         }
 
         $this->loadOptions();
