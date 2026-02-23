@@ -580,11 +580,19 @@
                             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Newsletter Draft Studio</h2>
                             <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Pull Slack brainstorm threads into a standardized Substack draft.</p>
                         </div>
-                        <button wire:click="installSubstackPresets"
+                        <button type="button" wire:click="installSubstackPresets" wire:loading.attr="disabled"
+                            wire:target="installSubstackPresets"
                             class="inline-flex items-center rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
-                            Install 4 POPVOX presets
+                            <span wire:loading.remove wire:target="installSubstackPresets">Apply all preset defaults</span>
+                            <span wire:loading wire:target="installSubstackPresets">Applying...</span>
                         </button>
                     </div>
+
+                    @if($presetStatusMessage !== '')
+                        <div class="mt-3 rounded-lg border px-3 py-2 text-sm {{ $presetStatusType === 'error' ? 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-200' : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200' }}">
+                            {{ $presetStatusMessage }}
+                        </div>
+                    @endif
 
                     <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
@@ -628,20 +636,103 @@
 
                     @if(!empty($substackPresets))
                         <div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40">
-                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Preset Publications</p>
+                            <div class="flex items-center justify-between gap-3">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Preset Publications (click to edit)</p>
+                                @if($selectedPresetSlug !== '')
+                                    <button type="button" wire:click="savePresetConfiguration" wire:loading.attr="disabled"
+                                        wire:target="savePresetConfiguration"
+                                        class="inline-flex items-center rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">
+                                        <span wire:loading.remove wire:target="savePresetConfiguration">Save selected preset</span>
+                                        <span wire:loading wire:target="savePresetConfiguration">Saving...</span>
+                                    </button>
+                                @endif
+                            </div>
                             <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                                 @foreach($substackPresets as $preset)
-                                    <div class="rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs dark:border-gray-700 dark:bg-gray-800">
-                                        <div class="font-semibold text-gray-800 dark:text-gray-100">{{ $preset['name'] ?? 'Newsletter' }}</div>
+                                    <button type="button"
+                                        wire:key="preset-card-{{ $preset['slug'] }}"
+                                        wire:click="selectSubstackPreset('{{ $preset['slug'] }}')"
+                                        class="rounded-md border px-2.5 py-2 text-left text-xs transition {{ $selectedPresetSlug === ($preset['slug'] ?? '') ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-500 dark:bg-indigo-900/30' : 'border-gray-200 bg-white hover:border-indigo-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-indigo-500' }}">
+                                        <div class="flex items-center justify-between gap-2">
+                                            <div class="font-semibold text-gray-800 dark:text-gray-100">{{ $preset['name'] ?? 'Newsletter' }}</div>
+                                            @if(!empty($preset['installed']))
+                                                <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">saved</span>
+                                            @endif
+                                        </div>
                                         <div class="mt-0.5 text-gray-500 dark:text-gray-400">{{ ($preset['lead'] ?? '') ?: 'Lead not set' }}</div>
                                         @if(!empty($preset['publication_url']))
-                                            <a href="{{ $preset['publication_url'] }}" target="_blank" rel="noopener noreferrer" class="mt-1 inline-flex text-indigo-600 hover:text-indigo-700 dark:text-indigo-300 dark:hover:text-indigo-200">
+                                            <div class="mt-1 inline-flex text-indigo-600 dark:text-indigo-300">
                                                 {{ $preset['publication_url'] }}
-                                            </a>
+                                            </div>
                                         @endif
-                                    </div>
+                                    </button>
                                 @endforeach
                             </div>
+
+                            @if($selectedPresetSlug !== '')
+                                <div class="mt-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800/70">
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Edit Selected Preset</p>
+                                    <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                        <div>
+                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Newsletter Name</label>
+                                            <input type="text" wire:model.defer="presetEditor.name"
+                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            @error('presetEditor.name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                        </div>
+                                        <div>
+                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Lead</label>
+                                            <input type="text" wire:model.defer="presetEditor.lead"
+                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                                placeholder="Owner name">
+                                            @error('presetEditor.lead') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                        </div>
+                                        <div>
+                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Publication URL</label>
+                                            <input type="url" wire:model.defer="presetEditor.publication_url"
+                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            @error('presetEditor.publication_url') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                        </div>
+                                        <div>
+                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Slack Channel ID</label>
+                                            <input type="text" wire:model.defer="presetEditor.slack_channel_id"
+                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                                placeholder="C0123456789">
+                                            @error('presetEditor.slack_channel_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                        </div>
+                                        <div>
+                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Cadence</label>
+                                            <select wire:model.defer="presetEditor.cadence"
+                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                <option value="weekly">Weekly</option>
+                                                <option value="biweekly">Biweekly</option>
+                                                <option value="monthly">Monthly</option>
+                                                <option value="ad_hoc">Ad hoc</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Project</label>
+                                            <select wire:model.defer="presetEditor.project_id"
+                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                <option value="">Auto match / none</option>
+                                                @foreach($projectOptions as $project)
+                                                    <option value="{{ $project['id'] }}">{{ $project['name'] }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        <div class="sm:col-span-2">
+                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Default Subject Prefix</label>
+                                            <input type="text" wire:model.defer="presetEditor.default_subject_prefix"
+                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        </div>
+                                        <div class="sm:col-span-2">
+                                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Template Sections (one per line)</label>
+                                            <textarea rows="4" wire:model.defer="presetEditor.template_sections"
+                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
+                                            @error('presetEditor.template_sections') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
                         </div>
                     @endif
 

@@ -97,6 +97,24 @@ class OutreachIndex extends Component
 
     public array $substackPresets = [];
 
+    public string $selectedPresetSlug = '';
+
+    public array $presetEditor = [
+        'slug' => '',
+        'name' => '',
+        'lead' => '',
+        'publication_url' => '',
+        'cadence' => 'weekly',
+        'slack_channel_id' => '',
+        'default_subject_prefix' => '',
+        'project_id' => '',
+        'template_sections' => '',
+    ];
+
+    public string $presetStatusMessage = '';
+
+    public string $presetStatusType = 'info';
+
     public array $projectOptions = [];
 
     public array $newsletterOptions = [];
@@ -119,6 +137,7 @@ class OutreachIndex extends Component
 
         if (! $this->migrationReady) {
             $this->migrationMessage = 'Outreach tables are not available yet. Run migrations to enable newsletters, campaigns, automations, and Substack sync.';
+            $this->selectSubstackPreset((string) ($this->substackPresets[0]['slug'] ?? ''));
 
             return;
         }
@@ -127,6 +146,8 @@ class OutreachIndex extends Component
             $this->loadOptions();
             $this->primeSubstackForm();
             $this->primeSubstackDraftDefaults();
+            $this->loadSubstackPresetStates();
+            $this->selectSubstackPreset((string) ($this->substackPresets[0]['slug'] ?? ''));
         } catch (\Throwable $exception) {
             report($exception);
             $this->runtimeError = 'Outreach loaded with partial data: '.$exception->getMessage();
@@ -136,6 +157,13 @@ class OutreachIndex extends Component
     public function updatedTab(): void
     {
         $this->normalizeTab();
+
+        if ($this->tab === 'substack' && $this->migrationReady) {
+            $this->loadSubstackPresetStates();
+            if ($this->selectedPresetSlug === '' && $this->substackPresets !== []) {
+                $this->selectSubstackPreset((string) ($this->substackPresets[0]['slug'] ?? ''));
+            }
+        }
     }
 
     public function updatedSubstackDraftFormNewsletterId(mixed $value = null): void
@@ -166,6 +194,146 @@ class OutreachIndex extends Component
         if ($existingChannel === '' && ($workflow['slack_channel_id'] ?? '') !== '') {
             $this->substackDraftForm['slack_channel_id'] = (string) $workflow['slack_channel_id'];
         }
+    }
+
+    public function selectSubstackPreset(string $slug): void
+    {
+        $preset = collect($this->substackPresets)
+            ->first(fn ($item) => (string) ($item['slug'] ?? '') === $slug);
+        if (! is_array($preset)) {
+            return;
+        }
+
+        $this->selectedPresetSlug = $slug;
+        $this->presetEditor = [
+            'slug' => (string) ($preset['slug'] ?? ''),
+            'name' => (string) ($preset['name'] ?? ''),
+            'lead' => (string) ($preset['lead'] ?? ''),
+            'publication_url' => (string) ($preset['publication_url'] ?? ''),
+            'cadence' => (string) (($preset['cadence'] ?? '') ?: 'weekly'),
+            'slack_channel_id' => (string) ($preset['slack_channel_id'] ?? ''),
+            'default_subject_prefix' => (string) ($preset['default_subject_prefix'] ?? ''),
+            'project_id' => (string) ($preset['project_id'] ?? ''),
+            'template_sections' => implode("\n", (array) ($preset['template_sections'] ?? [])),
+        ];
+
+        if (! empty($preset['newsletter_id'])) {
+            $this->substackDraftForm['newsletter_id'] = (string) $preset['newsletter_id'];
+        }
+        if (($preset['slack_channel_id'] ?? '') !== '') {
+            $this->substackDraftForm['slack_channel_id'] = (string) $preset['slack_channel_id'];
+        }
+    }
+
+    public function savePresetConfiguration(OutreachCampaignService $campaignService): void
+    {
+        if (! $this->migrationReady) {
+            $this->setPresetStatus('Run migrations before editing presets.', 'error');
+
+            return;
+        }
+
+        if (trim((string) ($this->presetEditor['slug'] ?? '')) === '') {
+            $this->setPresetStatus('Select a preset card first.', 'error');
+
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'presetEditor.slug' => ['required', 'string', 'max:120'],
+            'presetEditor.name' => ['required', 'string', 'max:160'],
+            'presetEditor.lead' => ['nullable', 'string', 'max:160'],
+            'presetEditor.publication_url' => ['nullable', 'url', 'max:255'],
+            'presetEditor.cadence' => ['nullable', Rule::in(['weekly', 'biweekly', 'monthly', 'ad_hoc'])],
+            'presetEditor.slack_channel_id' => ['nullable', 'string', 'max:64'],
+            'presetEditor.default_subject_prefix' => ['nullable', 'string', 'max:180'],
+            'presetEditor.project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')],
+            'presetEditor.template_sections' => ['nullable', 'string', 'max:4000'],
+        ]);
+
+        $slug = trim((string) $validated['presetEditor']['slug']);
+        $definition = collect($this->substackPresetDefinitions())
+            ->first(fn ($preset) => is_array($preset) && (string) ($preset['slug'] ?? '') === $slug);
+        if (! is_array($definition)) {
+            $this->setPresetStatus('Preset definition not found.', 'error');
+
+            return;
+        }
+
+        $sections = $this->parseTemplateSections((string) ($validated['presetEditor']['template_sections'] ?? ''));
+        if ($sections === []) {
+            $sections = array_values(array_filter(array_map(
+                static fn ($item): string => trim((string) $item),
+                (array) ($definition['template_sections'] ?? [])
+            )));
+        }
+
+        try {
+            $newsletter = $this->findOwnedPresetNewsletter($user->id, $slug);
+            if (! $newsletter) {
+                $slugCandidate = $slug;
+                $slugTakenByOther = OutreachNewsletter::query()
+                    ->where('slug', $slug)
+                    ->where('user_id', '!=', $user->id)
+                    ->exists();
+                if ($slugTakenByOther) {
+                    $slugCandidate = $slug.'-u'.$user->id;
+                }
+                $newsletter = new OutreachNewsletter([
+                    'user_id' => $user->id,
+                    'slug' => $slugCandidate,
+                ]);
+            }
+
+            $workflow = [
+                'lead' => trim((string) ($validated['presetEditor']['lead'] ?? '')),
+                'slack_channel_id' => trim((string) ($validated['presetEditor']['slack_channel_id'] ?? '')),
+                'template_sections' => $sections,
+            ];
+
+            $newsletter->fill([
+                'project_id' => ($validated['presetEditor']['project_id'] ?? null)
+                    ?: $newsletter->project_id
+                    ?: $this->resolvePresetProjectId((array) ($definition['project_match_terms'] ?? [])),
+                'name' => trim((string) $validated['presetEditor']['name']),
+                'channel' => 'substack',
+                'status' => $newsletter->status ?: 'planning',
+                'cadence' => trim((string) ($validated['presetEditor']['cadence'] ?? '')) ?: null,
+                'substack_publication_url' => trim((string) ($validated['presetEditor']['publication_url'] ?? '')) ?: null,
+                'default_subject_prefix' => trim((string) ($validated['presetEditor']['default_subject_prefix'] ?? '')) ?: null,
+                'publishing_checklist' => $this->mergeNewsletterWorkflow($newsletter->publishing_checklist, $workflow),
+            ]);
+            $newsletter->save();
+
+            $campaignService->log(
+                campaignId: null,
+                userId: $user->id,
+                action: 'substack_preset_saved',
+                summary: 'Saved Substack preset configuration.',
+                details: [
+                    'preset_slug' => $slug,
+                    'newsletter_id' => $newsletter->id,
+                    'slack_channel_id' => $workflow['slack_channel_id'],
+                ],
+                newsletterId: $newsletter->id
+            );
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->setPresetStatus('Could not save preset: '.$exception->getMessage(), 'error');
+
+            return;
+        }
+
+        $this->loadOptions();
+        $this->loadSubstackPresetStates();
+        $this->selectSubstackPreset($slug);
+        $this->primeSubstackDraftDefaults();
+        $this->setPresetStatus('Preset saved. You can now generate drafts from this channel.', 'success');
     }
 
     public function createNewsletter(OutreachCampaignService $campaignService): void
@@ -581,7 +749,7 @@ class OutreachIndex extends Component
     public function installSubstackPresets(OutreachCampaignService $campaignService): void
     {
         if (! $this->migrationReady) {
-            $this->dispatch('notify', type: 'error', message: 'Run migrations before installing Substack presets.');
+            $this->setPresetStatus('Run migrations before installing Substack presets.', 'error');
 
             return;
         }
@@ -593,7 +761,7 @@ class OutreachIndex extends Component
 
         $presets = $this->substackPresetDefinitions();
         if ($presets === []) {
-            $this->dispatch('notify', type: 'error', message: 'No Substack presets are configured.');
+            $this->setPresetStatus('No Substack presets are configured.', 'error');
 
             return;
         }
@@ -609,10 +777,7 @@ class OutreachIndex extends Component
                     continue;
                 }
 
-                $ownedNewsletter = OutreachNewsletter::query()
-                    ->where('user_id', $user->id)
-                    ->whereIn('slug', [$slug, $slug.'-u'.$user->id])
-                    ->first();
+                $ownedNewsletter = $this->findOwnedPresetNewsletter((int) $user->id, $slug);
 
                 if ($ownedNewsletter) {
                     $newsletter = $ownedNewsletter;
@@ -669,12 +834,13 @@ class OutreachIndex extends Component
             }
         } catch (\Throwable $exception) {
             report($exception);
-            $this->dispatch('notify', type: 'error', message: 'Could not install presets: '.$exception->getMessage());
+            $this->setPresetStatus('Could not install presets: '.$exception->getMessage(), 'error');
 
             return;
         }
 
         $this->loadOptions();
+        $this->loadSubstackPresetStates();
         $this->primeSubstackDraftDefaults();
 
         $campaignService->log(
@@ -685,7 +851,7 @@ class OutreachIndex extends Component
             details: ['created' => $created, 'updated' => $updated]
         );
 
-        $this->dispatch('notify', type: 'success', message: "Substack presets installed. Created {$created}, updated {$updated}.");
+        $this->setPresetStatus("Presets applied. Created {$created}, updated {$updated}.", 'success');
     }
 
     public function generateSubstackDraftFromSlack(
@@ -918,6 +1084,74 @@ class OutreachIndex extends Component
         }
     }
 
+    protected function loadSubstackPresetStates(): void
+    {
+        $definitions = $this->substackPresetDefinitions();
+        $userId = (int) Auth::id();
+
+        if (! $this->migrationReady || $userId <= 0) {
+            $this->substackPresets = $definitions;
+
+            return;
+        }
+
+        $slugs = collect($definitions)
+            ->map(static fn ($preset): string => trim((string) ($preset['slug'] ?? '')))
+            ->filter()
+            ->values()
+            ->all();
+
+        $slugVariants = collect($slugs)
+            ->flatMap(static fn (string $slug): array => [$slug, $slug.'-u'.$userId])
+            ->values()
+            ->all();
+
+        $newsletters = OutreachNewsletter::query()
+            ->where('user_id', $userId)
+            ->whereIn('slug', $slugVariants)
+            ->get();
+
+        $next = [];
+        foreach ($definitions as $preset) {
+            $slug = trim((string) ($preset['slug'] ?? ''));
+            if ($slug === '') {
+                continue;
+            }
+
+            /** @var OutreachNewsletter|null $newsletter */
+            $newsletter = $newsletters->first(
+                static fn (OutreachNewsletter $item): bool => in_array($item->slug, [$slug, $slug.'-u'.$userId], true)
+            );
+
+            $workflow = $newsletter ? $this->extractNewsletterWorkflow($newsletter) : [
+                'lead' => '',
+                'slack_channel_id' => '',
+                'template_sections' => [],
+            ];
+
+            $defaultSections = array_values(array_filter(array_map(
+                static fn ($item): string => trim((string) $item),
+                (array) ($preset['template_sections'] ?? [])
+            )));
+
+            $next[] = [
+                'slug' => $slug,
+                'name' => (string) ($newsletter?->name ?? $preset['name'] ?? $slug),
+                'lead' => (string) (($workflow['lead'] ?? '') !== '' ? $workflow['lead'] : (string) ($preset['lead'] ?? '')),
+                'publication_url' => (string) ($newsletter?->substack_publication_url ?? $preset['publication_url'] ?? ''),
+                'cadence' => (string) ($newsletter?->cadence ?? $preset['cadence'] ?? 'weekly'),
+                'slack_channel_id' => (string) (($workflow['slack_channel_id'] ?? '') !== '' ? $workflow['slack_channel_id'] : (string) ($preset['slack_channel_id'] ?? '')),
+                'default_subject_prefix' => (string) ($newsletter?->default_subject_prefix ?? $preset['default_subject_prefix'] ?? ''),
+                'template_sections' => (array) (($workflow['template_sections'] ?? []) !== [] ? $workflow['template_sections'] : $defaultSections),
+                'project_id' => $newsletter?->project_id ?? null,
+                'newsletter_id' => $newsletter?->id ?? null,
+                'installed' => $newsletter !== null,
+            ];
+        }
+
+        $this->substackPresets = $next;
+    }
+
     /**
      * @return array<int,array<string,mixed>>
      */
@@ -927,6 +1161,34 @@ class OutreachIndex extends Component
             (array) config('outreach.substack.presets', []),
             static fn ($preset): bool => is_array($preset) && trim((string) ($preset['slug'] ?? '')) !== ''
         ));
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    protected function parseTemplateSections(string $raw): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $raw) ?: [];
+
+        return array_values(array_filter(array_map(
+            static fn ($item): string => trim((string) $item),
+            $lines
+        )));
+    }
+
+    protected function findOwnedPresetNewsletter(int $userId, string $slug): ?OutreachNewsletter
+    {
+        return OutreachNewsletter::query()
+            ->where('user_id', $userId)
+            ->whereIn('slug', [$slug, $slug.'-u'.$userId])
+            ->first();
+    }
+
+    protected function setPresetStatus(string $message, string $type = 'info'): void
+    {
+        $this->presetStatusMessage = trim($message);
+        $this->presetStatusType = in_array($type, ['success', 'error', 'info'], true) ? $type : 'info';
+        $this->dispatch('notify', type: $this->presetStatusType === 'error' ? 'error' : 'success', message: $this->presetStatusMessage);
     }
 
     /**
