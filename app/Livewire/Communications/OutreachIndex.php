@@ -11,7 +11,9 @@ use App\Models\Project;
 use App\Services\Outreach\OutreachAudienceService;
 use App\Services\Outreach\OutreachAutomationService;
 use App\Services\Outreach\OutreachCampaignService;
+use App\Services\Outreach\SlackInsightService;
 use App\Services\Outreach\SubstackFeedService;
+use App\Services\Outreach\SubstackDraftBuilder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -84,6 +86,17 @@ class OutreachIndex extends Component
 
     public array $substackPosts = [];
 
+    public array $substackDraftForm = [
+        'newsletter_id' => '',
+        'slack_channel_id' => '',
+        'days_back' => 7,
+        'max_messages' => 80,
+    ];
+
+    public array $substackDraftPreview = [];
+
+    public array $substackPresets = [];
+
     public array $projectOptions = [];
 
     public array $newsletterOptions = [];
@@ -99,6 +112,9 @@ class OutreachIndex extends Component
     public function mount(): void
     {
         $this->normalizeTab();
+        $this->substackPresets = $this->substackPresetDefinitions();
+        $this->substackDraftForm['days_back'] = (int) config('outreach.substack.default_days_back', 7);
+        $this->substackDraftForm['max_messages'] = (int) config('outreach.substack.default_message_limit', 80);
         $this->migrationReady = $this->hasOutreachSchema();
 
         if (! $this->migrationReady) {
@@ -110,6 +126,7 @@ class OutreachIndex extends Component
         try {
             $this->loadOptions();
             $this->hydrateSubstackForm();
+            $this->hydrateSubstackDraftDefaults();
         } catch (\Throwable $exception) {
             report($exception);
             $this->runtimeError = 'Outreach loaded with partial data: '.$exception->getMessage();
@@ -119,6 +136,29 @@ class OutreachIndex extends Component
     public function updatedTab(): void
     {
         $this->normalizeTab();
+    }
+
+    public function updatedSubstackDraftFormNewsletterId(): void
+    {
+        $newsletterId = (int) ($this->substackDraftForm['newsletter_id'] ?? 0);
+        if ($newsletterId <= 0) {
+            return;
+        }
+
+        $newsletter = OutreachNewsletter::query()
+            ->where('id', $newsletterId)
+            ->where('user_id', Auth::id())
+            ->first();
+
+        if (! $newsletter) {
+            return;
+        }
+
+        $workflow = $this->extractNewsletterWorkflow($newsletter);
+        $existingChannel = trim((string) ($this->substackDraftForm['slack_channel_id'] ?? ''));
+        if ($existingChannel === '' && ($workflow['slack_channel_id'] ?? '') !== '') {
+            $this->substackDraftForm['slack_channel_id'] = (string) $workflow['slack_channel_id'];
+        }
     }
 
     public function createNewsletter(OutreachCampaignService $campaignService): void
@@ -531,6 +571,232 @@ class OutreachIndex extends Component
         }
     }
 
+    public function installSubstackPresets(OutreachCampaignService $campaignService): void
+    {
+        if (! $this->migrationReady) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations before installing Substack presets.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $presets = $this->substackPresetDefinitions();
+        if ($presets === []) {
+            $this->dispatch('notify', type: 'error', message: 'No Substack presets are configured.');
+
+            return;
+        }
+
+        $created = 0;
+        $updated = 0;
+
+        foreach ($presets as $preset) {
+            $slug = trim((string) ($preset['slug'] ?? ''));
+            $name = trim((string) ($preset['name'] ?? ''));
+            if ($slug === '' || $name === '') {
+                continue;
+            }
+
+            $ownedNewsletter = OutreachNewsletter::query()
+                ->where('user_id', $user->id)
+                ->whereIn('slug', [$slug, $slug.'-u'.$user->id])
+                ->first();
+
+            if ($ownedNewsletter) {
+                $newsletter = $ownedNewsletter;
+            } else {
+                $slugCandidate = $slug;
+                $slugTakenByOther = OutreachNewsletter::query()
+                    ->where('slug', $slug)
+                    ->where('user_id', '!=', $user->id)
+                    ->exists();
+                if ($slugTakenByOther) {
+                    $slugCandidate = $slug.'-u'.$user->id;
+                }
+
+                $newsletter = new OutreachNewsletter([
+                    'user_id' => $user->id,
+                    'slug' => $slugCandidate,
+                ]);
+            }
+
+            $isNew = ! $newsletter->exists;
+            $existingWorkflow = $this->extractNewsletterWorkflow($newsletter);
+            $nextWorkflow = [
+                'lead' => trim((string) ($existingWorkflow['lead'] ?? '')) !== ''
+                    ? (string) $existingWorkflow['lead']
+                    : trim((string) ($preset['lead'] ?? '')),
+                'slack_channel_id' => trim((string) ($existingWorkflow['slack_channel_id'] ?? '')) !== ''
+                    ? (string) $existingWorkflow['slack_channel_id']
+                    : trim((string) ($preset['slack_channel_id'] ?? '')),
+                'template_sections' => $existingWorkflow['template_sections'] !== []
+                    ? $existingWorkflow['template_sections']
+                    : array_values(array_filter(array_map(
+                        static fn ($item): string => trim((string) $item),
+                        (array) ($preset['template_sections'] ?? [])
+                    ))),
+            ];
+
+            $newsletter->fill([
+                'project_id' => $newsletter->project_id ?: $this->resolvePresetProjectId((array) ($preset['project_match_terms'] ?? [])),
+                'name' => $newsletter->name ?: $name,
+                'channel' => $newsletter->channel ?: 'substack',
+                'status' => $newsletter->status ?: 'planning',
+                'cadence' => $newsletter->cadence ?: ((string) ($preset['cadence'] ?? '') ?: null),
+                'substack_publication_url' => $newsletter->substack_publication_url ?: (trim((string) ($preset['publication_url'] ?? '')) ?: null),
+                'default_subject_prefix' => $newsletter->default_subject_prefix ?: (trim((string) ($preset['default_subject_prefix'] ?? '')) ?: null),
+                'publishing_checklist' => $this->mergeNewsletterWorkflow($newsletter->publishing_checklist, $nextWorkflow),
+            ]);
+            $newsletter->save();
+
+            if ($isNew) {
+                $created++;
+            } else {
+                $updated++;
+            }
+        }
+
+        $this->loadOptions();
+        $this->hydrateSubstackDraftDefaults();
+
+        $campaignService->log(
+            campaignId: null,
+            userId: $user->id,
+            action: 'substack_presets_installed',
+            summary: 'Installed default Substack newsletter presets.',
+            details: ['created' => $created, 'updated' => $updated]
+        );
+
+        $this->dispatch('notify', type: 'success', message: "Substack presets installed. Created {$created}, updated {$updated}.");
+    }
+
+    public function generateSubstackDraftFromSlack(
+        SlackInsightService $slackInsightService,
+        SubstackDraftBuilder $substackDraftBuilder,
+        OutreachCampaignService $campaignService
+    ): void {
+        if (! $this->migrationReady) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations before generating Substack drafts.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'substackDraftForm.newsletter_id' => ['required', 'integer', Rule::exists('outreach_newsletters', 'id')],
+            'substackDraftForm.slack_channel_id' => ['nullable', 'string', 'max:64'],
+            'substackDraftForm.days_back' => ['required', 'integer', 'min:1', 'max:30'],
+            'substackDraftForm.max_messages' => ['required', 'integer', 'min:10', 'max:400'],
+        ]);
+
+        $newsletterId = (int) ($validated['substackDraftForm']['newsletter_id'] ?? 0);
+        $newsletter = OutreachNewsletter::query()
+            ->where('id', $newsletterId)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (! $newsletter) {
+            $this->dispatch('notify', type: 'error', message: 'Newsletter not found.');
+
+            return;
+        }
+
+        $workflow = $this->extractNewsletterWorkflow($newsletter);
+        $channelId = trim((string) ($validated['substackDraftForm']['slack_channel_id'] ?? ''));
+        if ($channelId === '') {
+            $channelId = trim((string) ($workflow['slack_channel_id'] ?? ''));
+            $this->substackDraftForm['slack_channel_id'] = $channelId;
+        }
+
+        if ($channelId === '') {
+            $this->dispatch('notify', type: 'error', message: 'Set a Slack channel ID first (or install presets with channel IDs).');
+
+            return;
+        }
+
+        try {
+            $digest = $slackInsightService->fetchChannelInsights(
+                channelId: $channelId,
+                daysBack: (int) $validated['substackDraftForm']['days_back'],
+                maxMessages: (int) $validated['substackDraftForm']['max_messages'],
+            );
+
+            $draft = $substackDraftBuilder->build(
+                newsletter: $newsletter,
+                messages: (array) ($digest['messages'] ?? []),
+                context: [
+                    'lead' => $workflow['lead'] ?? null,
+                    'publication_url' => $newsletter->substack_publication_url,
+                    'template_sections' => $workflow['template_sections'] ?? [],
+                ]
+            );
+
+            $campaign = OutreachCampaign::query()->create([
+                'newsletter_id' => $newsletter->id,
+                'user_id' => $user->id,
+                'project_id' => $newsletter->project_id,
+                'name' => $draft['campaign_name'],
+                'campaign_type' => 'newsletter',
+                'channel' => 'substack',
+                'status' => 'draft',
+                'subject' => $draft['subject'],
+                'preheader' => null,
+                'body_text' => $draft['body_markdown'],
+                'body_markdown' => $draft['body_markdown'],
+                'send_mode' => 'draft',
+                'metadata' => [
+                    'source' => 'slack_substack_draft',
+                    'slack_channel_id' => $channelId,
+                    'days_back' => (int) $validated['substackDraftForm']['days_back'],
+                    'messages_scanned' => (int) ($digest['message_count'] ?? 0),
+                    'key_signal_count' => count((array) ($draft['key_signals'] ?? [])),
+                    'link_roundup_count' => count((array) ($draft['link_roundup'] ?? [])),
+                ],
+            ]);
+
+            $this->substackDraftPreview = [
+                'campaign_id' => (int) $campaign->id,
+                'campaign_name' => (string) ($draft['campaign_name'] ?? ''),
+                'subject' => (string) ($draft['subject'] ?? ''),
+                'body_markdown' => (string) ($draft['body_markdown'] ?? ''),
+                'key_signals' => (array) ($draft['key_signals'] ?? []),
+                'link_roundup' => (array) ($draft['link_roundup'] ?? []),
+                'messages_scanned' => (int) ($digest['message_count'] ?? 0),
+                'generated_at' => now()->toDateTimeString(),
+            ];
+
+            $campaignService->log(
+                campaignId: $campaign->id,
+                userId: $user->id,
+                action: 'substack_draft_generated_from_slack',
+                summary: 'Generated Substack draft from Slack insights.',
+                details: [
+                    'newsletter_id' => $newsletter->id,
+                    'newsletter' => $newsletter->name,
+                    'campaign_id' => $campaign->id,
+                    'slack_channel_id' => $channelId,
+                    'messages_scanned' => (int) ($digest['message_count'] ?? 0),
+                    'key_signal_count' => count((array) ($draft['key_signals'] ?? [])),
+                    'link_roundup_count' => count((array) ($draft['link_roundup'] ?? [])),
+                ],
+                newsletterId: $newsletter->id
+            );
+
+            $this->dispatch('notify', type: 'success', message: 'Substack draft created from Slack insights.');
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->dispatch('notify', type: 'error', message: 'Draft generation failed: '.$exception->getMessage());
+        }
+    }
+
     protected function loadOptions(): void
     {
         if (! $this->migrationReady) {
@@ -598,6 +864,130 @@ class OutreachIndex extends Component
         $this->substackForm['rss_feed_url'] = (string) ($connection->rss_feed_url ?? '');
         $this->substackForm['email_from'] = (string) ($connection->email_from ?? '');
         $this->substackForm['api_key'] = (string) ($connection->api_key ?? '');
+    }
+
+    protected function hydrateSubstackDraftDefaults(): void
+    {
+        if (! $this->migrationReady || (int) Auth::id() <= 0) {
+            return;
+        }
+
+        $selectedNewsletterId = (int) ($this->substackDraftForm['newsletter_id'] ?? 0);
+        if ($selectedNewsletterId <= 0) {
+            $firstNewsletterId = OutreachNewsletter::query()
+                ->where('user_id', (int) Auth::id())
+                ->orderBy('name')
+                ->value('id');
+            if ($firstNewsletterId) {
+                $selectedNewsletterId = (int) $firstNewsletterId;
+                $this->substackDraftForm['newsletter_id'] = (string) $selectedNewsletterId;
+            }
+        }
+
+        if ($selectedNewsletterId <= 0) {
+            return;
+        }
+
+        $newsletter = OutreachNewsletter::query()
+            ->where('id', $selectedNewsletterId)
+            ->where('user_id', Auth::id())
+            ->first();
+        if (! $newsletter) {
+            return;
+        }
+
+        if (trim((string) ($this->substackDraftForm['slack_channel_id'] ?? '')) === '') {
+            $workflow = $this->extractNewsletterWorkflow($newsletter);
+            if (($workflow['slack_channel_id'] ?? '') !== '') {
+                $this->substackDraftForm['slack_channel_id'] = (string) $workflow['slack_channel_id'];
+            }
+        }
+    }
+
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    protected function substackPresetDefinitions(): array
+    {
+        return array_values(array_filter(
+            (array) config('outreach.substack.presets', []),
+            static fn ($preset): bool => is_array($preset) && trim((string) ($preset['slug'] ?? '')) !== ''
+        ));
+    }
+
+    /**
+     * @param  array<int,mixed>  $terms
+     */
+    protected function resolvePresetProjectId(array $terms): ?int
+    {
+        $cleanTerms = array_values(array_filter(array_map(
+            static fn ($term): string => trim((string) $term),
+            $terms
+        )));
+
+        if ($cleanTerms === []) {
+            return null;
+        }
+
+        foreach ($cleanTerms as $term) {
+            $projectId = Project::query()
+                ->whereRaw('LOWER(name) LIKE ?', ['%'.Str::lower($term).'%'])
+                ->value('id');
+            if ($projectId) {
+                return (int) $projectId;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{lead:string,slack_channel_id:string,template_sections:array<int,string>}
+     */
+    protected function extractNewsletterWorkflow(OutreachNewsletter $newsletter): array
+    {
+        $checklist = (array) ($newsletter->publishing_checklist ?? []);
+        $workflow = [];
+
+        if (isset($checklist['workflow']) && is_array($checklist['workflow'])) {
+            $workflow = $checklist['workflow'];
+        }
+
+        $sections = array_values(array_filter(array_map(
+            static fn ($section): string => trim((string) $section),
+            (array) ($workflow['template_sections'] ?? [])
+        )));
+
+        return [
+            'lead' => trim((string) ($workflow['lead'] ?? '')),
+            'slack_channel_id' => trim((string) ($workflow['slack_channel_id'] ?? '')),
+            'template_sections' => $sections,
+        ];
+    }
+
+    /**
+     * @param  mixed  $existingChecklist
+     * @param  array{lead:string,slack_channel_id:string,template_sections:array<int,string>}  $workflow
+     * @return array<string,mixed>
+     */
+    protected function mergeNewsletterWorkflow(mixed $existingChecklist, array $workflow): array
+    {
+        $checklist = is_array($existingChecklist) ? $existingChecklist : [];
+        $currentWorkflow = [];
+        if (isset($checklist['workflow']) && is_array($checklist['workflow'])) {
+            $currentWorkflow = $checklist['workflow'];
+        }
+
+        $currentWorkflow['lead'] = trim((string) ($workflow['lead'] ?? $currentWorkflow['lead'] ?? ''));
+        $currentWorkflow['slack_channel_id'] = trim((string) ($workflow['slack_channel_id'] ?? $currentWorkflow['slack_channel_id'] ?? ''));
+        $currentWorkflow['template_sections'] = array_values(array_filter(array_map(
+            static fn ($section): string => trim((string) $section),
+            (array) ($workflow['template_sections'] ?? $currentWorkflow['template_sections'] ?? [])
+        )));
+
+        $checklist['workflow'] = $currentWorkflow;
+
+        return $checklist;
     }
 
     protected function resetCampaignForm(): void
@@ -696,6 +1086,12 @@ class OutreachIndex extends Component
             'automations' => $automations,
             'substackConnection' => $substackConnection,
             'activityLogs' => $activityLogs,
+            'substackPresets' => $this->substackPresets,
+            'substackDraftPreview' => $this->substackDraftPreview,
+            'slackConfigured' => trim((string) (
+                config('services.slack.bot_token')
+                ?: config('services.slack.notifications.bot_user_oauth_token')
+            )) !== '',
         ]);
     }
 

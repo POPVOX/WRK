@@ -29,6 +29,8 @@ return [
     ],
 
     'slack' => [
+        'api_base' => env('SLACK_API_BASE', 'https://slack.com/api'),
+        'bot_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
