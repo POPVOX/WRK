@@ -50,6 +50,10 @@ class InboxIndex extends Component
 
     public string $composeBody = '';
 
+    public string $composeStatus = '';
+
+    public string $composeStatusType = 'info';
+
     public bool $isSyncingGmail = false;
 
     public ?string $lastGmailSyncAt = null;
@@ -97,6 +101,7 @@ class InboxIndex extends Component
 
     public function openComposer(): void
     {
+        $this->clearComposeStatus();
         $this->showComposer = true;
         $this->composeTo = '';
         $this->composeCc = '';
@@ -107,6 +112,7 @@ class InboxIndex extends Component
 
     public function openComposerForReply(): void
     {
+        $this->clearComposeStatus();
         $snapshot = $this->selectedThreadSnapshot();
         if (! $snapshot) {
             $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
@@ -136,6 +142,7 @@ class InboxIndex extends Component
 
     public function closeComposer(): void
     {
+        $this->clearComposeStatus();
         $this->showComposer = false;
         $this->composeBody = '';
         $this->composeSubject = '';
@@ -209,11 +216,14 @@ class InboxIndex extends Component
             return;
         }
 
+        $this->clearComposeStatus();
+
         $to = trim($this->composeTo);
         $subject = trim($this->composeSubject);
         $body = trim($this->composeBody);
 
         if ($to === '' || $subject === '' || $body === '') {
+            $this->setComposeStatus('error', 'To, subject, and message are required.');
             $this->dispatch('notify', type: 'error', message: 'To, subject, and message are required.');
 
             return;
@@ -244,6 +254,7 @@ class InboxIndex extends Component
                 ]
             );
 
+            $this->setComposeStatus('success', 'Email sent.');
             $this->dispatch('notify', type: 'success', message: 'Email sent.');
             $this->showComposer = false;
             $this->composeBody = '';
@@ -265,6 +276,7 @@ class InboxIndex extends Component
                 ]
             );
 
+            $this->setComposeStatus('error', 'Send failed: '.$exception->getMessage());
             $this->dispatch('notify', type: 'error', message: 'Send failed: '.$exception->getMessage());
         }
     }
@@ -276,11 +288,14 @@ class InboxIndex extends Component
             return;
         }
 
+        $this->clearComposeStatus();
+
         $to = trim($this->composeTo);
         $subject = trim($this->composeSubject);
         $body = trim($this->composeBody);
 
         if ($to === '' || $subject === '' || $body === '') {
+            $this->setComposeStatus('error', 'To, subject, and message are required to save a Gmail draft.');
             $this->dispatch('notify', type: 'error', message: 'To, subject, and message are required to save a Gmail draft.');
 
             return;
@@ -312,6 +327,7 @@ class InboxIndex extends Component
                 ]
             );
 
+            $this->setComposeStatus('success', 'Draft saved to Gmail.');
             $this->dispatch('notify', type: 'success', message: 'Draft saved to Gmail.');
             $this->syncGmail();
         } catch (\Throwable $exception) {
@@ -327,6 +343,7 @@ class InboxIndex extends Component
                 ]
             );
 
+            $this->setComposeStatus('error', 'Draft save failed: '.$exception->getMessage());
             $this->dispatch('notify', type: 'error', message: 'Draft save failed: '.$exception->getMessage());
         }
     }
@@ -736,19 +753,41 @@ class InboxIndex extends Component
             $gmailMessageId = (int) ($latestMessage['id'] ?? 0);
         }
 
-        InboxActionLog::query()->create([
-            'user_id' => $user->id,
-            'gmail_message_id' => $gmailMessageId > 0 ? $gmailMessageId : null,
-            'project_id' => $projectId > 0 ? $projectId : null,
-            'thread_key' => $threadKey !== '' ? $threadKey : null,
-            'suggestion_key' => $suggestionKey,
-            'action_label' => $actionLabel,
-            'action_status' => $actionStatus,
-            'subject' => $subject !== '' ? Str::limit($subject, 255, '') : null,
-            'counterpart_name' => $counterpartName !== '' ? Str::limit($counterpartName, 255, '') : null,
-            'counterpart_email' => $counterpartEmail !== '' ? Str::limit($counterpartEmail, 255, '') : null,
-            'details' => $details,
-        ]);
+        try {
+            InboxActionLog::query()->create([
+                'user_id' => $user->id,
+                'gmail_message_id' => $gmailMessageId > 0 ? $gmailMessageId : null,
+                'project_id' => $projectId > 0 ? $projectId : null,
+                'thread_key' => $threadKey !== '' ? $threadKey : null,
+                'suggestion_key' => $suggestionKey,
+                'action_label' => $actionLabel,
+                'action_status' => $actionStatus,
+                'subject' => $subject !== '' ? Str::limit($subject, 255, '') : null,
+                'counterpart_name' => $counterpartName !== '' ? Str::limit($counterpartName, 255, '') : null,
+                'counterpart_email' => $counterpartEmail !== '' ? Str::limit($counterpartEmail, 255, '') : null,
+                'details' => $details,
+            ]);
+        } catch (\Throwable $exception) {
+            \Log::warning('Inbox action log write failed', [
+                'user_id' => $user->id,
+                'suggestion_key' => $suggestionKey,
+                'action_label' => $actionLabel,
+                'action_status' => $actionStatus,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    protected function clearComposeStatus(): void
+    {
+        $this->composeStatus = '';
+        $this->composeStatusType = 'info';
+    }
+
+    protected function setComposeStatus(string $type, string $message): void
+    {
+        $this->composeStatusType = in_array($type, ['success', 'error', 'warning', 'info'], true) ? $type : 'info';
+        $this->composeStatus = trim($message);
     }
 
     protected function selectedThreadSnapshot(): ?array

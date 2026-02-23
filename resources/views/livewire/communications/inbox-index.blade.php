@@ -373,6 +373,20 @@
                         </header>
 
                         <div class="space-y-3 p-5">
+                            @if($composeStatus !== '')
+                                @php
+                                    $composeStatusClass = match($composeStatusType) {
+                                        'success' => 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200',
+                                        'error' => 'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200',
+                                        'warning' => 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200',
+                                        default => 'border-gray-200 bg-gray-50 text-gray-800 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-200',
+                                    };
+                                @endphp
+                                <div class="rounded-lg border px-3 py-2 text-sm {{ $composeStatusClass }}">
+                                    {{ $composeStatus }}
+                                </div>
+                            @endif
+
                             <div class="grid gap-3 sm:grid-cols-2">
                                 <label class="space-y-1">
                                     <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">To</span>
