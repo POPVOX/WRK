@@ -681,10 +681,17 @@
                                         </div>
                                         <div>
                                             <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Lead</label>
-                                            <input type="text" wire:model.defer="presetEditor.lead"
-                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                                placeholder="Owner name">
-                                            @error('presetEditor.lead') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                            <select wire:model.defer="presetEditor.lead_user_id"
+                                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                <option value="">Select staff lead</option>
+                                                @foreach($staffOptions as $staff)
+                                                    <option value="{{ $staff['id'] }}">{{ $staff['label'] }}</option>
+                                                @endforeach
+                                            </select>
+                                            @error('presetEditor.lead_user_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                            @if(($presetEditor['lead'] ?? '') !== '')
+                                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Current lead: {{ $presetEditor['lead'] }}</p>
+                                            @endif
                                         </div>
                                         <div>
                                             <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Publication URL</label>

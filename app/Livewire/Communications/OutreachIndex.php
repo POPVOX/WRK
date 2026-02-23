@@ -8,6 +8,7 @@ use App\Models\OutreachCampaign;
 use App\Models\OutreachNewsletter;
 use App\Models\OutreachSubstackConnection;
 use App\Models\Project;
+use App\Models\User;
 use App\Services\Outreach\OutreachAudienceService;
 use App\Services\Outreach\OutreachAutomationService;
 use App\Services\Outreach\OutreachCampaignService;
@@ -103,6 +104,7 @@ class OutreachIndex extends Component
         'slug' => '',
         'name' => '',
         'lead' => '',
+        'lead_user_id' => '',
         'publication_url' => '',
         'cadence' => 'weekly',
         'slack_channel_id' => '',
@@ -118,6 +120,8 @@ class OutreachIndex extends Component
     public array $projectOptions = [];
 
     public array $newsletterOptions = [];
+
+    public array $staffOptions = [];
 
     public array $contactStatusOptions = [
         'lead' => 'Lead',
@@ -144,6 +148,7 @@ class OutreachIndex extends Component
 
         try {
             $this->loadOptions();
+            $this->loadStaffOptions();
             $this->primeSubstackForm();
             $this->primeSubstackDraftDefaults();
             $this->loadSubstackPresetStates();
@@ -159,6 +164,9 @@ class OutreachIndex extends Component
         $this->normalizeTab();
 
         if ($this->tab === 'substack' && $this->migrationReady) {
+            if ($this->staffOptions === []) {
+                $this->loadStaffOptions();
+            }
             $this->loadSubstackPresetStates();
             if ($this->selectedPresetSlug === '' && $this->substackPresets !== []) {
                 $this->selectSubstackPreset((string) ($this->substackPresets[0]['slug'] ?? ''));
@@ -196,6 +204,23 @@ class OutreachIndex extends Component
         }
     }
 
+    public function updatedPresetEditorLeadUserId(mixed $value = null): void
+    {
+        $leadUserId = (int) ($value ?? 0);
+        if ($leadUserId <= 0) {
+            return;
+        }
+
+        $name = (string) (collect($this->staffOptions)->firstWhere('id', $leadUserId)['name'] ?? '');
+        if ($name === '') {
+            $name = (string) (User::query()->where('id', $leadUserId)->value('name') ?? '');
+        }
+
+        if ($name !== '') {
+            $this->presetEditor['lead'] = $name;
+        }
+    }
+
     public function selectSubstackPreset(string $slug): void
     {
         $preset = collect($this->substackPresets)
@@ -204,11 +229,24 @@ class OutreachIndex extends Component
             return;
         }
 
+        $leadUserId = (string) ($preset['lead_user_id'] ?? '');
+        if ($leadUserId === '') {
+            $leadName = Str::lower(trim((string) ($preset['lead'] ?? '')));
+            if ($leadName !== '') {
+                $matched = collect($this->staffOptions)
+                    ->first(fn ($option) => Str::lower(trim((string) ($option['name'] ?? ''))) === $leadName);
+                if (is_array($matched) && isset($matched['id'])) {
+                    $leadUserId = (string) $matched['id'];
+                }
+            }
+        }
+
         $this->selectedPresetSlug = $slug;
         $this->presetEditor = [
             'slug' => (string) ($preset['slug'] ?? ''),
             'name' => (string) ($preset['name'] ?? ''),
             'lead' => (string) ($preset['lead'] ?? ''),
+            'lead_user_id' => $leadUserId,
             'publication_url' => (string) ($preset['publication_url'] ?? ''),
             'cadence' => (string) (($preset['cadence'] ?? '') ?: 'weekly'),
             'slack_channel_id' => (string) ($preset['slack_channel_id'] ?? ''),
@@ -248,6 +286,7 @@ class OutreachIndex extends Component
             'presetEditor.slug' => ['required', 'string', 'max:120'],
             'presetEditor.name' => ['required', 'string', 'max:160'],
             'presetEditor.lead' => ['nullable', 'string', 'max:160'],
+            'presetEditor.lead_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
             'presetEditor.publication_url' => ['nullable', 'url', 'max:255'],
             'presetEditor.cadence' => ['nullable', Rule::in(['weekly', 'biweekly', 'monthly', 'ad_hoc'])],
             'presetEditor.slack_channel_id' => ['nullable', 'string', 'max:64'],
@@ -263,6 +302,19 @@ class OutreachIndex extends Component
             $this->setPresetStatus('Preset definition not found.', 'error');
 
             return;
+        }
+
+        $leadUserId = (int) ($validated['presetEditor']['lead_user_id'] ?? 0);
+        $leadName = '';
+        if ($leadUserId > 0) {
+            $leadName = (string) (collect($this->staffOptions)->firstWhere('id', $leadUserId)['name'] ?? '');
+            if ($leadName === '') {
+                $leadName = (string) (User::query()->where('id', $leadUserId)->value('name') ?? '');
+            }
+        }
+
+        if ($leadName === '') {
+            $leadName = trim((string) ($validated['presetEditor']['lead'] ?? ''));
         }
 
         $sections = $this->parseTemplateSections((string) ($validated['presetEditor']['template_sections'] ?? ''));
@@ -291,7 +343,8 @@ class OutreachIndex extends Component
             }
 
             $workflow = [
-                'lead' => trim((string) ($validated['presetEditor']['lead'] ?? '')),
+                'lead' => $leadName,
+                'lead_user_id' => $leadUserId > 0 ? $leadUserId : null,
                 'slack_channel_id' => trim((string) ($validated['presetEditor']['slack_channel_id'] ?? '')),
                 'template_sections' => $sections,
             ];
@@ -803,6 +856,9 @@ class OutreachIndex extends Component
                     'lead' => trim((string) ($existingWorkflow['lead'] ?? '')) !== ''
                         ? (string) $existingWorkflow['lead']
                         : trim((string) ($preset['lead'] ?? '')),
+                    'lead_user_id' => isset($existingWorkflow['lead_user_id']) && (int) $existingWorkflow['lead_user_id'] > 0
+                        ? (int) $existingWorkflow['lead_user_id']
+                        : null,
                     'slack_channel_id' => trim((string) ($existingWorkflow['slack_channel_id'] ?? '')) !== ''
                         ? (string) $existingWorkflow['slack_channel_id']
                         : trim((string) ($preset['slack_channel_id'] ?? '')),
@@ -1018,6 +1074,29 @@ class OutreachIndex extends Component
         }
     }
 
+    protected function loadStaffOptions(): void
+    {
+        try {
+            $this->staffOptions = User::query()
+                ->where('is_visible', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'title', 'email'])
+                ->map(static fn (User $user): array => [
+                    'id' => (int) $user->id,
+                    'name' => (string) $user->name,
+                    'label' => trim((string) $user->name.' '.($user->title ? '('.$user->title.')' : '')),
+                    'email' => (string) ($user->email ?? ''),
+                ])
+                ->all();
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->staffOptions = [];
+            if ($this->runtimeError === '') {
+                $this->runtimeError = 'Outreach staff list failed to load: '.$exception->getMessage();
+            }
+        }
+    }
+
     protected function primeSubstackForm(): void
     {
         if (! $this->migrationReady) {
@@ -1125,9 +1204,18 @@ class OutreachIndex extends Component
 
             $workflow = $newsletter ? $this->extractNewsletterWorkflow($newsletter) : [
                 'lead' => '',
+                'lead_user_id' => null,
                 'slack_channel_id' => '',
                 'template_sections' => [],
             ];
+
+            $leadUserId = isset($workflow['lead_user_id']) ? (int) $workflow['lead_user_id'] : null;
+            $leadNameFromUser = $leadUserId
+                ? (string) (collect($this->staffOptions)->firstWhere('id', $leadUserId)['name'] ?? '')
+                : '';
+            $leadName = $leadNameFromUser !== ''
+                ? $leadNameFromUser
+                : (string) (($workflow['lead'] ?? '') !== '' ? $workflow['lead'] : (string) ($preset['lead'] ?? ''));
 
             $defaultSections = array_values(array_filter(array_map(
                 static fn ($item): string => trim((string) $item),
@@ -1137,7 +1225,8 @@ class OutreachIndex extends Component
             $next[] = [
                 'slug' => $slug,
                 'name' => (string) ($newsletter?->name ?? $preset['name'] ?? $slug),
-                'lead' => (string) (($workflow['lead'] ?? '') !== '' ? $workflow['lead'] : (string) ($preset['lead'] ?? '')),
+                'lead' => $leadName,
+                'lead_user_id' => $leadUserId,
                 'publication_url' => (string) ($newsletter?->substack_publication_url ?? $preset['publication_url'] ?? ''),
                 'cadence' => (string) ($newsletter?->cadence ?? $preset['cadence'] ?? 'weekly'),
                 'slack_channel_id' => (string) (($workflow['slack_channel_id'] ?? '') !== '' ? $workflow['slack_channel_id'] : (string) ($preset['slack_channel_id'] ?? '')),
@@ -1218,7 +1307,7 @@ class OutreachIndex extends Component
     }
 
     /**
-     * @return array{lead:string,slack_channel_id:string,template_sections:array<int,string>}
+     * @return array{lead:string,lead_user_id:?int,slack_channel_id:string,template_sections:array<int,string>}
      */
     protected function extractNewsletterWorkflow(OutreachNewsletter $newsletter): array
     {
@@ -1236,6 +1325,7 @@ class OutreachIndex extends Component
 
         return [
             'lead' => trim((string) ($workflow['lead'] ?? '')),
+            'lead_user_id' => isset($workflow['lead_user_id']) ? (int) $workflow['lead_user_id'] : null,
             'slack_channel_id' => trim((string) ($workflow['slack_channel_id'] ?? '')),
             'template_sections' => $sections,
         ];
@@ -1243,7 +1333,7 @@ class OutreachIndex extends Component
 
     /**
      * @param  mixed  $existingChecklist
-     * @param  array{lead:string,slack_channel_id:string,template_sections:array<int,string>}  $workflow
+     * @param  array{lead:string,lead_user_id:?int,slack_channel_id:string,template_sections:array<int,string>}  $workflow
      * @return array<string,mixed>
      */
     protected function mergeNewsletterWorkflow(mixed $existingChecklist, array $workflow): array
@@ -1255,6 +1345,9 @@ class OutreachIndex extends Component
         }
 
         $currentWorkflow['lead'] = trim((string) ($workflow['lead'] ?? $currentWorkflow['lead'] ?? ''));
+        $currentWorkflow['lead_user_id'] = isset($workflow['lead_user_id']) && (int) $workflow['lead_user_id'] > 0
+            ? (int) $workflow['lead_user_id']
+            : null;
         $currentWorkflow['slack_channel_id'] = trim((string) ($workflow['slack_channel_id'] ?? $currentWorkflow['slack_channel_id'] ?? ''));
         $currentWorkflow['template_sections'] = array_values(array_filter(array_map(
             static fn ($section): string => trim((string) $section),
