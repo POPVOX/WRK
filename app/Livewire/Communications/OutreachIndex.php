@@ -125,8 +125,8 @@ class OutreachIndex extends Component
 
         try {
             $this->loadOptions();
-            $this->hydrateSubstackForm();
-            $this->hydrateSubstackDraftDefaults();
+            $this->primeSubstackForm();
+            $this->primeSubstackDraftDefaults();
         } catch (\Throwable $exception) {
             report($exception);
             $this->runtimeError = 'Outreach loaded with partial data: '.$exception->getMessage();
@@ -675,7 +675,7 @@ class OutreachIndex extends Component
         }
 
         $this->loadOptions();
-        $this->hydrateSubstackDraftDefaults();
+        $this->primeSubstackDraftDefaults();
 
         $campaignService->log(
             campaignId: null,
@@ -852,7 +852,7 @@ class OutreachIndex extends Component
         }
     }
 
-    protected function hydrateSubstackForm(): void
+    protected function primeSubstackForm(): void
     {
         if (! $this->migrationReady) {
             return;
@@ -880,7 +880,7 @@ class OutreachIndex extends Component
         $this->substackForm['api_key'] = (string) ($connection->api_key ?? '');
     }
 
-    protected function hydrateSubstackDraftDefaults(): void
+    protected function primeSubstackDraftDefaults(): void
     {
         if (! $this->migrationReady || (int) Auth::id() <= 0) {
             return;
