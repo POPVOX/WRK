@@ -24,10 +24,10 @@
         @if($migrationReady)
             <nav class="flex flex-wrap items-center gap-2">
                 @foreach(['newsletters' => 'Newsletters', 'campaigns' => 'Campaigns', 'automations' => 'Automations', 'substack' => 'Substack', 'activity' => 'Activity'] as $key => $label)
-                    <button wire:click="$set('tab', '{{ $key }}')"
+                    <a href="{{ route('communications.outreach', ['tab' => $key]) }}" wire:navigate
                         class="rounded-lg px-3 py-2 text-sm font-medium {{ $tab === $key ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700' }}">
                         {{ $label }}
-                    </button>
+                    </a>
                 @endforeach
             </nav>
         @endif
