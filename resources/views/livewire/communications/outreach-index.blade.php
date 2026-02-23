@@ -21,6 +21,13 @@
             </section>
         @endif
 
+        @if($runtimeError !== '')
+            <section class="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-900 shadow-sm dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-100">
+                <h2 class="text-sm font-semibold">Outreach data warning</h2>
+                <p class="mt-1 text-sm">{{ $runtimeError }}</p>
+            </section>
+        @endif
+
         @if($migrationReady)
             <nav class="flex flex-wrap items-center gap-2">
                 @foreach(['newsletters' => 'Newsletters', 'campaigns' => 'Campaigns', 'automations' => 'Automations', 'substack' => 'Substack', 'activity' => 'Activity'] as $key => $label)

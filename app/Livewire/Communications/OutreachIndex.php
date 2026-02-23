@@ -32,6 +32,8 @@ class OutreachIndex extends Component
 
     public string $migrationMessage = '';
 
+    public string $runtimeError = '';
+
     public array $newsletterForm = [
         'name' => '',
         'project_id' => '',
@@ -105,8 +107,13 @@ class OutreachIndex extends Component
             return;
         }
 
-        $this->loadOptions();
-        $this->hydrateSubstackForm();
+        try {
+            $this->loadOptions();
+            $this->hydrateSubstackForm();
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->runtimeError = 'Outreach loaded with partial data: '.$exception->getMessage();
+        }
     }
 
     public function updatedTab(): void
@@ -538,24 +545,31 @@ class OutreachIndex extends Component
             return;
         }
 
-        $this->projectOptions = Project::query()
-            ->orderBy('name')
-            ->get(['id', 'name'])
-            ->map(fn (Project $project): array => [
-                'id' => (int) $project->id,
-                'name' => (string) $project->name,
-            ])
-            ->all();
+        try {
+            $this->projectOptions = Project::query()
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn (Project $project): array => [
+                    'id' => (int) $project->id,
+                    'name' => (string) $project->name,
+                ])
+                ->all();
 
-        $this->newsletterOptions = OutreachNewsletter::query()
-            ->where('user_id', $user->id)
-            ->orderBy('name')
-            ->get(['id', 'name'])
-            ->map(fn (OutreachNewsletter $newsletter): array => [
-                'id' => (int) $newsletter->id,
-                'name' => (string) $newsletter->name,
-            ])
-            ->all();
+            $this->newsletterOptions = OutreachNewsletter::query()
+                ->where('user_id', $user->id)
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn (OutreachNewsletter $newsletter): array => [
+                    'id' => (int) $newsletter->id,
+                    'name' => (string) $newsletter->name,
+                ])
+                ->all();
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->projectOptions = [];
+            $this->newsletterOptions = [];
+            $this->runtimeError = 'Outreach options failed to load: '.$exception->getMessage();
+        }
     }
 
     protected function hydrateSubstackForm(): void
@@ -564,9 +578,16 @@ class OutreachIndex extends Component
             return;
         }
 
-        $connection = OutreachSubstackConnection::query()
-            ->where('user_id', Auth::id())
-            ->first();
+        try {
+            $connection = OutreachSubstackConnection::query()
+                ->where('user_id', Auth::id())
+                ->first();
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->runtimeError = 'Substack connection failed to load: '.$exception->getMessage();
+
+            return;
+        }
 
         if (! $connection) {
             return;
@@ -613,44 +634,68 @@ class OutreachIndex extends Component
     {
         $userId = (int) Auth::id();
 
-        return view('livewire.communications.outreach-index', [
-            'newsletters' => $this->migrationReady
-                ? OutreachNewsletter::query()
+        $newsletters = collect();
+        $campaigns = collect();
+        $automations = collect();
+        $substackConnection = null;
+        $activityLogs = collect();
+
+        if ($this->migrationReady) {
+            $newsletters = $this->safeQuery(
+                fn () => OutreachNewsletter::query()
                     ->where('user_id', $userId)
                     ->with('project:id,name')
                     ->latest('updated_at')
                     ->limit(25)
-                    ->get()
-                : collect(),
-            'campaigns' => $this->migrationReady
-                ? OutreachCampaign::query()
+                    ->get(),
+                'newsletter data'
+            );
+
+            $campaigns = $this->safeQuery(
+                fn () => OutreachCampaign::query()
                     ->where('user_id', $userId)
                     ->with(['newsletter:id,name', 'project:id,name'])
                     ->latest('created_at')
                     ->limit(50)
-                    ->get()
-                : collect(),
-            'automations' => $this->migrationReady
-                ? OutreachAutomation::query()
+                    ->get(),
+                'campaign data'
+            );
+
+            $automations = $this->safeQuery(
+                fn () => OutreachAutomation::query()
                     ->where('user_id', $userId)
                     ->with(['newsletter:id,name', 'project:id,name'])
                     ->latest('updated_at')
                     ->limit(50)
-                    ->get()
-                : collect(),
-            'substackConnection' => $this->migrationReady
-                ? OutreachSubstackConnection::query()
+                    ->get(),
+                'automation data'
+            );
+
+            $substackConnection = $this->safeQuery(
+                fn () => OutreachSubstackConnection::query()
                     ->where('user_id', $userId)
-                    ->first()
-                : null,
-            'activityLogs' => $this->migrationReady
-                ? OutreachActivityLog::query()
+                    ->first(),
+                'Substack connection',
+                null
+            );
+
+            $activityLogs = $this->safeQuery(
+                fn () => OutreachActivityLog::query()
                     ->where('user_id', $userId)
                     ->with(['campaign:id,name', 'newsletter:id,name', 'automation:id,name'])
                     ->latest('created_at')
                     ->limit(100)
-                    ->get()
-                : collect(),
+                    ->get(),
+                'activity log'
+            );
+        }
+
+        return view('livewire.communications.outreach-index', [
+            'newsletters' => $newsletters,
+            'campaigns' => $campaigns,
+            'automations' => $automations,
+            'substackConnection' => $substackConnection,
+            'activityLogs' => $activityLogs,
         ]);
     }
 
@@ -662,5 +707,26 @@ class OutreachIndex extends Component
             && Schema::hasTable('outreach_automations')
             && Schema::hasTable('outreach_substack_connections')
             && Schema::hasTable('outreach_activity_logs');
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable():T  $query
+     * @param  T|null  $fallback
+     * @return T
+     */
+    protected function safeQuery(callable $query, string $label, mixed $fallback = null): mixed
+    {
+        try {
+            return $query();
+        } catch (\Throwable $exception) {
+            report($exception);
+            if ($this->runtimeError === '') {
+                $this->runtimeError = "Outreach {$label} failed to load: ".$exception->getMessage();
+            }
+
+            return $fallback ?? collect();
+        }
     }
 }
