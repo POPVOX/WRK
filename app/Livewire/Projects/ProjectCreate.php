@@ -5,6 +5,7 @@ namespace App\Livewire\Projects;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\User;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Http;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\On;
@@ -529,89 +530,124 @@ PROMPT;
         return implode("\n", array_values(array_filter($parts)));
     }
 
+    protected function normalizeFieldsBeforeSave(): void
+    {
+        $this->name = trim($this->name);
+        $this->description = trim($this->description);
+        $this->goals = trim($this->goals);
+        $this->scope = trim($this->scope);
+        $this->url = trim($this->url);
+        $this->tagsInput = trim($this->tagsInput);
+        $this->status = trim($this->status);
+        $this->project_type = trim($this->project_type);
+
+        $this->lead_user_id = $this->lead_user_id ? (int) $this->lead_user_id : null;
+        $this->parent_project_id = $this->parent_project_id ? (int) $this->parent_project_id : null;
+
+        if ($this->lead_user_id === null && $this->lead !== '') {
+            $this->lead = trim($this->lead);
+        }
+
+        $this->selectedCollaboratorKeys = array_values(array_unique(array_filter(
+            $this->selectedCollaboratorKeys,
+            fn ($key) => is_string($key) && $key !== ''
+        )));
+    }
+
     public function save()
     {
-        $this->validate();
+        $this->normalizeFieldsBeforeSave();
 
-        if ($this->lead_user_id) {
-            $leadUser = User::query()->find($this->lead_user_id);
-            if ($leadUser) {
-                $this->lead = $leadUser->name;
+        try {
+            $this->validate();
+
+            if ($this->lead_user_id) {
+                $leadUser = User::query()->find($this->lead_user_id);
+                if ($leadUser) {
+                    $this->lead = $leadUser->name;
+                }
             }
-        }
 
-        // Parse tags from comma-separated string
-        $tags = [];
-        if (! empty($this->tagsInput)) {
-            $tags = array_map('trim', explode(',', $this->tagsInput));
-            $tags = array_filter($tags); // Remove empty values
-        }
+            // Parse tags from comma-separated string
+            $tags = [];
+            if (! empty($this->tagsInput)) {
+                $tags = array_map('trim', explode(',', $this->tagsInput));
+                $tags = array_filter($tags); // Remove empty values
+            }
 
-        $project = Project::create([
-            'name' => $this->name,
-            'description' => $this->description ?: null,
-            'goals' => $this->goals ?: null,
-            'start_date' => $this->start_date ?: null,
-            'target_end_date' => $this->target_end_date ?: null,
-            'status' => $this->status,
-            'scope' => $this->scope ?: null,
-            'lead' => $this->lead ?: null,
-            'url' => $this->url ?: null,
-            'tags' => ! empty($tags) ? $tags : null,
-            'created_by' => auth()->id(),
-            'parent_project_id' => $this->parent_project_id,
-            'project_type' => $this->project_type,
-        ]);
-
-        if ($this->lead_user_id) {
-            $project->staff()->syncWithoutDetaching([
-                $this->lead_user_id => [
-                    'role' => 'lead',
-                    'added_at' => now(),
-                ],
+            $project = Project::create([
+                'name' => $this->name,
+                'description' => $this->description ?: null,
+                'goals' => $this->goals ?: null,
+                'start_date' => $this->start_date ?: null,
+                'target_end_date' => $this->target_end_date ?: null,
+                'status' => $this->status,
+                'scope' => $this->scope ?: null,
+                'lead' => $this->lead ?: null,
+                'url' => $this->url ?: null,
+                'tags' => ! empty($tags) ? $tags : null,
+                'created_by' => auth()->id(),
+                'parent_project_id' => $this->parent_project_id,
+                'project_type' => $this->project_type,
             ]);
-        }
 
-        $collaboratorSelection = $this->splitCollaboratorSelection();
-        $staffCollaboratorIds = $collaboratorSelection['staff'];
-        $contactCollaboratorIds = $collaboratorSelection['people'];
-
-        if ($this->lead_user_id) {
-            $staffCollaboratorIds = array_values(array_diff($staffCollaboratorIds, [$this->lead_user_id]));
-        }
-
-        if (! empty($staffCollaboratorIds)) {
-            $staffData = [];
-            foreach ($staffCollaboratorIds as $staffId) {
-                $staffData[$staffId] = [
-                    'role' => 'contributor',
-                    'added_at' => now(),
-                ];
+            if ($this->lead_user_id) {
+                $project->staff()->syncWithoutDetaching([
+                    $this->lead_user_id => [
+                        'role' => 'lead',
+                        'added_at' => now(),
+                    ],
+                ]);
             }
-            $project->staff()->syncWithoutDetaching($staffData);
-        }
 
-        if (! empty($contactCollaboratorIds)) {
-            $personData = [];
-            foreach ($contactCollaboratorIds as $personId) {
-                $personData[$personId] = [
-                    'role' => 'collaborator',
-                    'notes' => null,
-                ];
+            $collaboratorSelection = $this->splitCollaboratorSelection();
+            $staffCollaboratorIds = $collaboratorSelection['staff'];
+            $contactCollaboratorIds = $collaboratorSelection['people'];
+
+            if ($this->lead_user_id) {
+                $staffCollaboratorIds = array_values(array_diff($staffCollaboratorIds, [$this->lead_user_id]));
             }
-            $project->people()->syncWithoutDetaching($personData);
+
+            if (! empty($staffCollaboratorIds)) {
+                $staffData = [];
+                foreach ($staffCollaboratorIds as $staffId) {
+                    $staffData[$staffId] = [
+                        'role' => 'contributor',
+                        'added_at' => now(),
+                    ];
+                }
+                $project->staff()->syncWithoutDetaching($staffData);
+            }
+
+            if (! empty($contactCollaboratorIds)) {
+                $personData = [];
+                foreach ($contactCollaboratorIds as $personId) {
+                    $personData[$personId] = [
+                        'role' => 'collaborator',
+                        'notes' => null,
+                    ];
+                }
+                $project->people()->syncWithoutDetaching($personData);
+            }
+
+            // Sync geographic tags
+            $project->syncGeographicTags(
+                $this->selectedRegions,
+                $this->selectedCountries,
+                $this->selectedUsStates
+            );
+
+            $this->dispatch('notify', type: 'success', message: 'Project created successfully!');
+
+            return $this->redirect(route('projects.show', $project), navigate: true);
+        } catch (ValidationException $exception) {
+            $this->dispatch('notify', type: 'error', message: 'Please review the highlighted fields and try again.');
+            throw $exception;
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->dispatch('notify', type: 'error', message: 'Could not create project. Please try again.');
+            return null;
         }
-
-        // Sync geographic tags
-        $project->syncGeographicTags(
-            $this->selectedRegions,
-            $this->selectedCountries,
-            $this->selectedUsStates
-        );
-
-        $this->dispatch('notify', type: 'success', message: 'Project created successfully!');
-
-        return $this->redirect(route('projects.show', $project), navigate: true);
     }
 
     public function render()

@@ -122,6 +122,9 @@
                                 AI suggested lead: {{ $lead }} (not matched to staff directory yet)
                             </p>
                         @endif
+                        @error('lead_user_id')
+                            <p class="mt-1 text-xs text-red-600 dark:text-red-300">{{ $message }}</p>
+                        @enderror
                     </div>
 
                     <div>
@@ -148,6 +151,12 @@
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                             Hold Cmd/Ctrl to select multiple collaborators.
                         </p>
+                        @error('selectedCollaboratorKeys')
+                            <p class="mt-1 text-xs text-red-600 dark:text-red-300">{{ $message }}</p>
+                        @enderror
+                        @error('selectedCollaboratorKeys.*')
+                            <p class="mt-1 text-xs text-red-600 dark:text-red-300">{{ $message }}</p>
+                        @enderror
                     </div>
                 </div>
 
@@ -217,6 +226,17 @@
                 @error('name')
                     <p class="text-sm text-red-600 dark:text-red-300">{{ $message }}</p>
                 @enderror
+
+                @if($errors->any())
+                    <div class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3">
+                        <p class="text-sm font-medium text-red-700 dark:text-red-300">Could not create project yet:</p>
+                        <ul class="mt-1 text-sm text-red-700 dark:text-red-300 list-disc pl-5 space-y-0.5">
+                            @foreach($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
             </div>
         </div>
     </div>
