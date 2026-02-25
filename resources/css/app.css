@@ -1,3 +1,115 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+    --font-size: 16px;
+    --background: #ffffff;
+    --foreground: oklch(0.145 0 0);
+    --card: #ffffff;
+    --card-foreground: oklch(0.145 0 0);
+    --primary: #030213;
+    --primary-foreground: #ffffff;
+    --secondary: oklch(0.95 0.006 264.53);
+    --secondary-foreground: #030213;
+    --muted: #ececf0;
+    --muted-foreground: #525468;
+    --accent: #e9ebef;
+    --accent-foreground: #030213;
+    --destructive: #d4183d;
+    --destructive-foreground: #ffffff;
+    --border: rgba(0, 0, 0, 0.14);
+    --input-background: #f3f3f5;
+    --ring: oklch(0.708 0 0);
+    --radius: 0.625rem;
+}
+
+.dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.145 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.985 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.396 0.141 25.723);
+    --destructive-foreground: oklch(0.985 0 0);
+    --border: oklch(0.269 0 0);
+    --input-background: oklch(0.21 0 0);
+    --ring: oklch(0.439 0 0);
+}
+
+@layer base {
+    * {
+        border-color: var(--border);
+    }
+
+    html {
+        font-size: var(--font-size);
+    }
+
+    body {
+        background-color: var(--background);
+        color: var(--foreground);
+    }
+
+    h1 {
+        font-size: 1.5rem;
+        font-weight: 500;
+        line-height: 1.5;
+    }
+
+    h2 {
+        font-size: 1.25rem;
+        font-weight: 500;
+        line-height: 1.5;
+    }
+
+    h3 {
+        font-size: 1.125rem;
+        font-weight: 500;
+        line-height: 1.5;
+    }
+
+    h4,
+    label,
+    button {
+        font-size: 1rem;
+        font-weight: 500;
+        line-height: 1.5;
+    }
+
+    input[type='text'],
+    input[type='email'],
+    input[type='url'],
+    input[type='search'],
+    input[type='password'],
+    input[type='date'],
+    input[type='datetime-local'],
+    input[type='number'],
+    textarea,
+    select {
+        font-size: 1rem;
+        font-weight: 400;
+        line-height: 1.5;
+        background-color: var(--input-background);
+        color: var(--foreground);
+        border-color: var(--border);
+        border-radius: var(--radius);
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+        color: var(--muted-foreground);
+    }
+
+    :focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--ring) 55%, transparent);
+        outline-offset: 1px;
+    }
+}

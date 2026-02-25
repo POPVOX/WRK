@@ -43,8 +43,9 @@ class GoogleGmailService
             return null;
         }
 
-        if ($user->google_token_expires_at && $user->google_token_expires_at->isPast()) {
+        if (! $user->google_token_expires_at || $user->google_token_expires_at->isPast()) {
             $this->refreshToken($user);
+            $user->refresh();
         }
 
         $this->client->setAccessToken($user->google_access_token);
@@ -90,12 +91,14 @@ class GoogleGmailService
                     break;
                 }
 
-                $response = $service->users_messages->listUsersMessages('me', array_filter([
-                    'maxResults' => min(100, $remaining),
-                    'q' => $query,
-                    'includeSpamTrash' => false,
-                    'pageToken' => $pageToken,
-                ]));
+                $response = $this->executeGmailCall($user, function (GoogleGmail $gmail) use ($remaining, $query, $pageToken) {
+                    return $gmail->users_messages->listUsersMessages('me', array_filter([
+                        'maxResults' => min(100, $remaining),
+                        'q' => $query,
+                        'includeSpamTrash' => false,
+                        'pageToken' => $pageToken,
+                    ]));
+                });
 
                 $messageRefs = $response->getMessages() ?? [];
                 foreach ($messageRefs as $messageRef) {
@@ -104,10 +107,12 @@ class GoogleGmailService
                     }
 
                     try {
-                        $message = $service->users_messages->get('me', $messageRef->getId(), [
-                            'format' => 'metadata',
-                            'metadataHeaders' => ['From', 'To', 'Cc', 'Bcc', 'Subject', 'Date'],
-                        ]);
+                        $message = $this->executeGmailCall($user, function (GoogleGmail $gmail) use ($messageRef) {
+                            return $gmail->users_messages->get('me', $messageRef->getId(), [
+                                'format' => 'metadata',
+                                'metadataHeaders' => ['From', 'To', 'Cc', 'Bcc', 'Subject', 'Date'],
+                            ]);
+                        });
 
                         $historyId = (string) ($message->getHistoryId() ?? '');
                         if ($historyId !== '' && ($latestHistoryId === null || (int) $historyId > (int) $latestHistoryId)) {
@@ -158,12 +163,10 @@ class GoogleGmailService
                 $pageToken = $response->getNextPageToken();
             } while ($pageToken && $processed < $maxMessages);
         } catch (Throwable $exception) {
-            $lower = strtolower($exception->getMessage());
-            if (str_contains($lower, 'insufficient') && str_contains($lower, 'scope')) {
-                throw new RuntimeException(
-                    'Google account needs Gmail permission. Disconnect and reconnect Google to grant Gmail access.',
-                    previous: $exception
-                );
+            $this->throwIfInsufficientGmailScope($exception);
+
+            if ($this->isAuthError($exception)) {
+                throw new RuntimeException($this->googleReconnectMessage(), previous: $exception);
             }
 
             throw $exception;
@@ -191,12 +194,7 @@ class GoogleGmailService
         string $body,
         array $options = []
     ): array {
-        $service = $this->getGmailService($user);
-        if (! $service) {
-            throw new RuntimeException('Google account is not connected.');
-        }
-
-        try {
+        return $this->executeGmailCall($user, function (GoogleGmail $gmail) use ($to, $subject, $body, $options) {
             $message = new GoogleMessage;
             $message->setRaw($this->buildRawMessage($to, $subject, $body, $options));
 
@@ -205,17 +203,13 @@ class GoogleGmailService
                 $message->setThreadId($threadId);
             }
 
-            $sent = $service->users_messages->send('me', $message);
+            $sent = $gmail->users_messages->send('me', $message);
 
             return [
                 'message_id' => (string) ($sent->getId() ?? ''),
                 'thread_id' => (string) ($sent->getThreadId() ?? ''),
             ];
-        } catch (Throwable $exception) {
-            $this->throwIfInsufficientGmailScope($exception);
-
-            throw $exception;
-        }
+        });
     }
 
     public function createDraft(
@@ -225,12 +219,7 @@ class GoogleGmailService
         string $body,
         array $options = []
     ): array {
-        $service = $this->getGmailService($user);
-        if (! $service) {
-            throw new RuntimeException('Google account is not connected.');
-        }
-
-        try {
+        return $this->executeGmailCall($user, function (GoogleGmail $gmail) use ($to, $subject, $body, $options) {
             $message = new GoogleMessage;
             $message->setRaw($this->buildRawMessage($to, $subject, $body, $options));
 
@@ -242,7 +231,7 @@ class GoogleGmailService
             $draft = new GoogleDraft;
             $draft->setMessage($message);
 
-            $created = $service->users_drafts->create('me', $draft);
+            $created = $gmail->users_drafts->create('me', $draft);
             $draftMessage = $created->getMessage();
 
             return [
@@ -250,30 +239,37 @@ class GoogleGmailService
                 'message_id' => (string) ($draftMessage?->getId() ?? ''),
                 'thread_id' => (string) ($draftMessage?->getThreadId() ?? ''),
             ];
-        } catch (Throwable $exception) {
-            $this->throwIfInsufficientGmailScope($exception);
-
-            throw $exception;
-        }
+        });
     }
 
-    protected function refreshToken(User $user): void
+    protected function refreshToken(User $user): bool
     {
         if (! $user->google_refresh_token) {
-            return;
+            return false;
         }
 
-        $this->client->fetchAccessTokenWithRefreshToken($user->google_refresh_token);
-        $token = $this->client->getAccessToken();
+        $token = $this->client->fetchAccessTokenWithRefreshToken($user->google_refresh_token);
+        if (! is_array($token)) {
+            $token = $this->client->getAccessToken();
+        }
 
-        if (empty($token['access_token'])) {
-            return;
+        if (! empty($token['error']) || empty($token['access_token'])) {
+            \Log::warning('Google token refresh failed for Gmail', [
+                'user_id' => $user->id,
+                'error' => $token['error'] ?? 'missing_access_token',
+                'error_description' => $token['error_description'] ?? null,
+            ]);
+
+            return false;
         }
 
         $user->update([
             'google_access_token' => $token['access_token'],
+            'google_refresh_token' => $token['refresh_token'] ?? $user->google_refresh_token,
             'google_token_expires_at' => now()->addSeconds((int) ($token['expires_in'] ?? 3600)),
         ]);
+
+        return true;
     }
 
     protected function mapMessageToRecord(User $user, GoogleMessage $message): array
@@ -410,6 +406,51 @@ class GoogleGmailService
                 previous: $exception
             );
         }
+    }
+
+    protected function executeGmailCall(User $user, callable $callback): mixed
+    {
+        $service = $this->getGmailService($user);
+        if (! $service) {
+            throw new RuntimeException('Google account is not connected.');
+        }
+
+        try {
+            return $callback($service);
+        } catch (Throwable $exception) {
+            $this->throwIfInsufficientGmailScope($exception);
+
+            if ($this->isAuthError($exception) && $this->refreshToken($user)) {
+                $user->refresh();
+                $retryService = $this->getGmailService($user);
+                if ($retryService) {
+                    return $callback($retryService);
+                }
+            }
+
+            if ($this->isAuthError($exception)) {
+                throw new RuntimeException($this->googleReconnectMessage(), previous: $exception);
+            }
+
+            throw $exception;
+        }
+    }
+
+    protected function isAuthError(Throwable $exception): bool
+    {
+        $code = (int) $exception->getCode();
+        $message = strtolower($exception->getMessage());
+
+        return in_array($code, [401, 403], true)
+            || str_contains($message, 'invalid credentials')
+            || str_contains($message, 'autherror')
+            || str_contains($message, 'unauthenticated')
+            || str_contains($message, 'login required');
+    }
+
+    protected function googleReconnectMessage(): string
+    {
+        return 'Google authentication expired or was revoked. Disconnect and reconnect Google Workspace, then run Gmail sync again.';
     }
 
     protected function extractHeaderMap(GoogleMessage $message): array

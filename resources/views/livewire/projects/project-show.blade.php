@@ -1,4 +1,119 @@
-<div x-on:open-project-edit-modal.window="$wire.startEditing()">
+@push('styles')
+    <style>
+        .wrk-project-page {
+            --wrk-page-bg-top: #f8f9fc;
+            --wrk-page-bg-bottom: #f3f5f8;
+            --wrk-card-bg: #ffffff;
+            --wrk-card-border: rgba(15, 23, 42, 0.14);
+            --wrk-text: #0f172a;
+            --wrk-muted: #475569;
+            --wrk-muted-soft: #64748b;
+            --wrk-input-bg: #f3f4f7;
+            --wrk-input-border: rgba(15, 23, 42, 0.2);
+            --wrk-focus: rgba(79, 70, 229, 0.22);
+            --wrk-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 24px -18px rgba(15, 23, 42, 0.4);
+            background: linear-gradient(180deg, var(--wrk-page-bg-top) 0%, var(--wrk-page-bg-bottom) 100%);
+            color: var(--wrk-text);
+        }
+
+        .wrk-project-page .wrk-card {
+            background-color: var(--wrk-card-bg);
+            border: 1px solid var(--wrk-card-border);
+            box-shadow: var(--wrk-card-shadow);
+        }
+
+        .wrk-project-page .text-gray-500 {
+            color: var(--wrk-muted-soft);
+        }
+
+        .wrk-project-page .text-gray-600 {
+            color: var(--wrk-muted);
+        }
+
+        .wrk-project-page .text-gray-700,
+        .wrk-project-page .text-gray-800,
+        .wrk-project-page .text-gray-900 {
+            color: var(--wrk-text);
+        }
+
+        .wrk-project-page .border-gray-200 {
+            border-color: var(--wrk-card-border);
+        }
+
+        .wrk-project-page .bg-gray-50 {
+            background-color: #f4f6fb;
+        }
+
+        .wrk-project-page input[type='text'],
+        .wrk-project-page input[type='url'],
+        .wrk-project-page input[type='date'],
+        .wrk-project-page textarea,
+        .wrk-project-page select {
+            background-color: var(--wrk-input-bg);
+            border-color: var(--wrk-input-border);
+            color: var(--wrk-text);
+        }
+
+        .wrk-project-page textarea::placeholder,
+        .wrk-project-page input::placeholder {
+            color: var(--wrk-muted-soft);
+        }
+
+        .wrk-project-page textarea:focus,
+        .wrk-project-page input[type='text']:focus,
+        .wrk-project-page input[type='url']:focus,
+        .wrk-project-page input[type='date']:focus,
+        .wrk-project-page select:focus {
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px var(--wrk-focus);
+        }
+
+        .wrk-project-page .bg-indigo-600 {
+            background-color: #4f46e5;
+        }
+
+        .wrk-project-page .hover\:bg-indigo-700:hover {
+            background-color: #4338ca;
+        }
+
+        .dark .wrk-project-page {
+            --wrk-page-bg-top: #10131a;
+            --wrk-page-bg-bottom: #0c1118;
+            --wrk-card-bg: #171c25;
+            --wrk-card-border: rgba(148, 163, 184, 0.24);
+            --wrk-text: #f8fafc;
+            --wrk-muted: #cbd5e1;
+            --wrk-muted-soft: #94a3b8;
+            --wrk-input-bg: #1d2430;
+            --wrk-input-border: rgba(148, 163, 184, 0.35);
+            --wrk-focus: rgba(129, 140, 248, 0.35);
+            --wrk-card-shadow: 0 1px 1px rgba(2, 6, 23, 0.6), 0 12px 28px -20px rgba(2, 6, 23, 0.95);
+        }
+
+        .dark .wrk-project-page .dark\:text-gray-400 {
+            color: var(--wrk-muted-soft);
+        }
+
+        .dark .wrk-project-page .dark\:text-gray-300,
+        .dark .wrk-project-page .dark\:text-gray-200,
+        .dark .wrk-project-page .dark\:text-white {
+            color: var(--wrk-text);
+        }
+
+        .dark .wrk-project-page .dark\:bg-gray-800,
+        .dark .wrk-project-page .dark\:bg-gray-700,
+        .dark .wrk-project-page .dark\:bg-gray-700\/40 {
+            background-color: var(--wrk-card-bg);
+        }
+
+        .dark .wrk-project-page .dark\:border-gray-700,
+        .dark .wrk-project-page .dark\:border-gray-600 {
+            border-color: var(--wrk-card-border);
+        }
+    </style>
+@endpush
+
+<div class="wrk-project-page" x-on:open-project-edit-modal.window="$wire.startEditing()">
     <x-slot name="header">
         <div class="flex items-center justify-between gap-4">
             <div class="flex items-center gap-4 min-w-0">
@@ -130,13 +245,13 @@
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 <div class="xl:col-span-2 space-y-6">
                     @if($project->description)
-                        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5">
+                        <div class="wrk-card bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5">
                             <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Summary</h3>
                             <p class="text-gray-800 dark:text-gray-200 whitespace-pre-line">{{ $project->description }}</p>
                         </div>
                     @endif
 
-                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5">
+                    <div class="wrk-card bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5">
                         <div class="flex items-center justify-between gap-3 mb-3">
                             <div>
                                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Project Brief (.md)</h3>
@@ -160,7 +275,7 @@
                 </div>
 
                 <div class="space-y-6">
-                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5" id="subprojects">
+                    <div class="wrk-card bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5" id="subprojects">
                         <div class="flex items-start justify-between gap-3 mb-4">
                             <div>
                                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Sub-Projects</h3>
@@ -209,7 +324,7 @@
                     </div>
 
                     @if($project->parent)
-                        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5">
+                        <div class="wrk-card bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5">
                             <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Parent Project</h3>
                             <a href="{{ route('projects.show', $project->parent) }}" wire:navigate
                                 class="text-indigo-600 dark:text-indigo-300 hover:underline font-medium">
@@ -220,7 +335,7 @@
                 </div>
             </div>
 
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5 space-y-5">
+            <div class="wrk-card bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5 space-y-5">
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div>
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Documents</h3>

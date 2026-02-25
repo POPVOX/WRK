@@ -69,6 +69,14 @@
                             </span>
                             <span class="ml-2" wire:loading wire:target="syncGmail">Syncing...</span>
                         </button>
+
+                        <form action="{{ route('google.disconnect') }}" method="POST" class="inline-flex">
+                            @csrf
+                            <button type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-rose-300 dark:border-rose-700 text-sm font-medium rounded-lg text-rose-700 dark:text-rose-300 bg-white dark:bg-gray-800 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors">
+                                Disconnect Google
+                            </button>
+                        </form>
                     @endif
                 </div>
             </div>

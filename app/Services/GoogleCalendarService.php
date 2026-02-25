@@ -123,8 +123,9 @@ class GoogleCalendarService
         }
 
         // Refresh token if expired
-        if ($user->google_token_expires_at && $user->google_token_expires_at->isPast()) {
+        if (! $user->google_token_expires_at || $user->google_token_expires_at->isPast()) {
             $this->refreshToken($user);
+            $user->refresh();
         }
 
         $this->client->setAccessToken($user->google_access_token);
@@ -135,19 +136,34 @@ class GoogleCalendarService
     /**
      * Refresh the access token.
      */
-    protected function refreshToken(User $user): void
+    protected function refreshToken(User $user): bool
     {
-        if (!$user->google_refresh_token) {
-            return;
+        if (! $user->google_refresh_token) {
+            return false;
         }
 
-        $this->client->fetchAccessTokenWithRefreshToken($user->google_refresh_token);
-        $token = $this->client->getAccessToken();
+        $token = $this->client->fetchAccessTokenWithRefreshToken($user->google_refresh_token);
+        if (! is_array($token)) {
+            $token = $this->client->getAccessToken();
+        }
+
+        if (! empty($token['error']) || empty($token['access_token'])) {
+            \Log::warning('Google token refresh failed for Calendar', [
+                'user_id' => $user->id,
+                'error' => $token['error'] ?? 'missing_access_token',
+                'error_description' => $token['error_description'] ?? null,
+            ]);
+
+            return false;
+        }
 
         $user->update([
             'google_access_token' => $token['access_token'],
-            'google_token_expires_at' => now()->addSeconds($token['expires_in']),
+            'google_refresh_token' => $token['refresh_token'] ?? $user->google_refresh_token,
+            'google_token_expires_at' => now()->addSeconds((int) ($token['expires_in'] ?? 3600)),
         ]);
+
+        return true;
     }
 
     /**
@@ -155,11 +171,6 @@ class GoogleCalendarService
      */
     public function getEvents(User $user, $startDate = null, $endDate = null): array
     {
-        $service = $this->getCalendarService($user);
-        if (!$service) {
-            return [];
-        }
-
         // Convert dates to Carbon if they aren't already
         // Default to 6 months back to 6 months ahead for wider coverage
         $start = $startDate instanceof \Carbon\Carbon
@@ -171,36 +182,61 @@ class GoogleCalendarService
             : ($endDate ? \Carbon\Carbon::parse($endDate) : now()->addMonths(6));
 
         $calendarId = 'primary';
-        $allEvents = [];
-        $pageToken = null;
+        $allowRetry = true;
 
-        try {
+        while (true) {
+            $service = $this->getCalendarService($user);
+            if (! $service) {
+                return [];
+            }
+
+            $allEvents = [];
+            $pageToken = null;
+
             // Paginate through all results
-            do {
-                $optParams = [
-                    'maxResults' => 250,
-                    'orderBy' => 'startTime',
-                    'singleEvents' => true,
-                    'timeMin' => $start->toRfc3339String(),
-                    'timeMax' => $end->toRfc3339String(),
-                ];
+            try {
+                do {
+                    $optParams = [
+                        'maxResults' => 250,
+                        'orderBy' => 'startTime',
+                        'singleEvents' => true,
+                        'timeMin' => $start->toRfc3339String(),
+                        'timeMax' => $end->toRfc3339String(),
+                    ];
 
-                if ($pageToken) {
-                    $optParams['pageToken'] = $pageToken;
+                    if ($pageToken) {
+                        $optParams['pageToken'] = $pageToken;
+                    }
+
+                    $results = $service->events->listEvents($calendarId, $optParams);
+                    $allEvents = array_merge($allEvents, $results->getItems());
+                    $pageToken = $results->getNextPageToken();
+                } while ($pageToken);
+
+                return $allEvents;
+            } catch (\Throwable $e) {
+                if ($allowRetry && $this->isAuthError($e) && $this->refreshToken($user)) {
+                    $allowRetry = false;
+                    continue;
                 }
 
-                $results = $service->events->listEvents($calendarId, $optParams);
-                $allEvents = array_merge($allEvents, $results->getItems());
-                $pageToken = $results->getNextPageToken();
+                \Log::error('Google Calendar Error: '.$e->getMessage());
 
-            } while ($pageToken);
-
-            return $allEvents;
-        } catch (\Exception $e) {
-            \Log::error('Google Calendar Error: ' . $e->getMessage());
-
-            return [];
+                return [];
+            }
         }
+    }
+
+    protected function isAuthError(\Throwable $exception): bool
+    {
+        $code = (int) $exception->getCode();
+        $message = strtolower($exception->getMessage());
+
+        return in_array($code, [401, 403], true)
+            || str_contains($message, 'invalid credentials')
+            || str_contains($message, 'autherror')
+            || str_contains($message, 'unauthenticated')
+            || str_contains($message, 'login required');
     }
 
     /**
