@@ -2,7 +2,9 @@
 
 namespace App\Livewire\Projects;
 
+use App\Models\Person;
 use App\Models\Project;
+use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\On;
@@ -29,6 +31,10 @@ class ProjectCreate extends Component
     public string $scope = '';
 
     public string $lead = '';
+
+    public ?int $lead_user_id = null;
+
+    public array $selectedCollaboratorKeys = [];
 
     public string $url = '';
 
@@ -60,9 +66,6 @@ class ProjectCreate extends Component
 
     public array $chatMessages = [];
 
-    // Lead options
-    public array $leadOptions = ['Anne', 'Aubrey', 'Caitlin', 'Chloe', 'Danielle', 'Marci'];
-
     public array $scopeOptions = ['US', 'Global', 'Comms'];
 
     // Duplicate tracking
@@ -92,6 +95,36 @@ class ProjectCreate extends Component
             $this->parent_project_id = $project->parent_project_id;
             $this->project_type = $project->project_type ?? 'initiative';
 
+            $leadStaffId = $project->staff()
+                ->wherePivot('role', 'lead')
+                ->value('users.id');
+
+            if ($leadStaffId) {
+                $this->lead_user_id = (int) $leadStaffId;
+                $leadUser = User::query()->find($this->lead_user_id);
+                if ($leadUser) {
+                    $this->lead = $leadUser->name;
+                }
+            } elseif ($this->lead !== '') {
+                $this->lead_user_id = $this->resolveStaffIdByName($this->lead);
+            }
+
+            $staffCollaboratorKeys = $project->staff()
+                ->where('users.id', '!=', (int) $this->lead_user_id)
+                ->pluck('users.id')
+                ->map(fn ($id) => 'staff:'.$id)
+                ->all();
+
+            $personCollaboratorKeys = $project->people()
+                ->pluck('people.id')
+                ->map(fn ($id) => 'person:'.$id)
+                ->all();
+
+            $this->selectedCollaboratorKeys = array_values(array_unique(array_merge(
+                $staffCollaboratorKeys,
+                $personCollaboratorKeys
+            )));
+
             // Convert tags array back to comma-separated string
             if ($project->tags && is_array($project->tags)) {
                 $this->tagsInput = implode(', ', $project->tags);
@@ -109,6 +142,10 @@ class ProjectCreate extends Component
         if ($parentId > 0 && Project::query()->whereKey($parentId)->exists()) {
             $this->parent_project_id = $parentId;
         }
+
+        if ($this->lead !== '' && ! $this->lead_user_id) {
+            $this->lead_user_id = $this->resolveStaffIdByName($this->lead);
+        }
     }
 
     protected $rules = [
@@ -120,6 +157,9 @@ class ProjectCreate extends Component
         'status' => 'required|in:planning,active,on_hold,completed,archived',
         'scope' => 'nullable|string|max:50',
         'lead' => 'nullable|string|max:100',
+        'lead_user_id' => 'nullable|exists:users,id',
+        'selectedCollaboratorKeys' => 'array',
+        'selectedCollaboratorKeys.*' => 'string',
         'url' => 'nullable|url|max:500',
         'tagsInput' => 'nullable|string',
         'parent_project_id' => 'nullable|exists:projects,id',
@@ -137,6 +177,42 @@ class ProjectCreate extends Component
     public function toggleAiExtract()
     {
         $this->showAiExtract = ! $this->showAiExtract;
+    }
+
+    public function updatedLeadUserId($value): void
+    {
+        if ($value) {
+            $leadUser = User::query()->find((int) $value);
+            if ($leadUser) {
+                $this->lead = $leadUser->name;
+            }
+
+            $leadKey = 'staff:'.(int) $value;
+            $this->selectedCollaboratorKeys = array_values(array_filter(
+                $this->selectedCollaboratorKeys,
+                fn ($key) => $key !== $leadKey
+            ));
+
+            return;
+        }
+
+        $this->lead = '';
+    }
+
+    public function updatedSelectedCollaboratorKeys($value): void
+    {
+        if (! is_array($value)) {
+            $this->selectedCollaboratorKeys = [];
+
+            return;
+        }
+
+        $keys = array_values(array_unique(array_filter($value, fn ($key) => is_string($key) && $key !== '')));
+        if ($this->lead_user_id) {
+            $leadKey = 'staff:'.$this->lead_user_id;
+            $keys = array_values(array_filter($keys, fn ($key) => $key !== $leadKey));
+        }
+        $this->selectedCollaboratorKeys = $keys;
     }
 
     public function sendChatMessage(): void
@@ -173,7 +249,16 @@ class ProjectCreate extends Component
 
     protected function getExtractionSystemPrompt(): string
     {
-        return <<<'PROMPT'
+        $staffNames = User::query()
+            ->where('is_visible', true)
+            ->orderBy('name')
+            ->pluck('name')
+            ->all();
+        $leadHint = ! empty($staffNames)
+            ? implode(', ', $staffNames)
+            : 'any POPVOX staff member';
+
+        return <<<PROMPT
 You are an assistant that extracts structured project information from free-form text.
 
 Extract the following fields from the provided text:
@@ -184,7 +269,7 @@ Extract the following fields from the provided text:
 5. **end_date**: Target end date or deadline if mentioned (format: YYYY-MM-DD)
 6. **status**: One of: planning, active, on_hold, completed, archived (default to "planning" if unclear)
 7. **scope**: One of: US, Global, Comms (based on whether it's US-focused, international/global, or communications)
-8. **lead**: The lead person's first name if mentioned (Anne, Aubrey, Caitlin, Chloe, Danielle, Marci)
+8. **lead**: The lead POPVOX staff member if mentioned (prefer one of: {$leadHint})
 9. **url**: Any URL/link mentioned
 10. **tags**: An array of relevant themes/tags (e.g., "Bridge-building", "Interbranch feedback loops")
 
@@ -198,7 +283,7 @@ Return your response in this exact JSON format:
     "end_date": "YYYY-MM-DD or null",
     "status": "planning",
     "scope": "US",
-    "lead": "Anne",
+    "lead": "full staff name or null",
     "url": "https://... or null",
     "tags": ["tag1", "tag2"]
 }
@@ -260,7 +345,8 @@ PROMPT;
                 $this->scope = $data['scope'];
             }
             if (! empty($data['lead'])) {
-                $this->lead = $data['lead'];
+                $this->lead = trim((string) $data['lead']);
+                $this->lead_user_id = $this->resolveStaffIdByName($this->lead);
             }
             if (! empty($data['url']) && $data['url'] !== 'null') {
                 $this->url = $data['url'];
@@ -336,6 +422,94 @@ PROMPT;
         }
     }
 
+    protected function resolveStaffIdByName(string $name): ?int
+    {
+        $needle = mb_strtolower(trim($name));
+        if ($needle === '') {
+            return null;
+        }
+
+        $staff = User::query()
+            ->where('is_visible', true)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $exact = $staff->first(
+            fn (User $user) => mb_strtolower(trim($user->name)) === $needle
+        );
+        if ($exact) {
+            return (int) $exact->id;
+        }
+
+        $byFirstName = $staff->first(function (User $user) use ($needle) {
+            $firstName = mb_strtolower(trim(strtok($user->name, ' ') ?: ''));
+
+            return $firstName !== '' && $firstName === $needle;
+        });
+
+        return $byFirstName ? (int) $byFirstName->id : null;
+    }
+
+    protected function splitCollaboratorSelection(): array
+    {
+        $staffIds = [];
+        $personIds = [];
+
+        foreach ($this->selectedCollaboratorKeys as $key) {
+            if (! is_string($key) || ! str_contains($key, ':')) {
+                continue;
+            }
+
+            [$type, $rawId] = explode(':', $key, 2);
+            $id = (int) $rawId;
+            if ($id <= 0) {
+                continue;
+            }
+
+            if ($type === 'staff') {
+                $staffIds[] = $id;
+            } elseif ($type === 'person') {
+                $personIds[] = $id;
+            }
+        }
+
+        return [
+            'staff' => array_values(array_unique($staffIds)),
+            'people' => array_values(array_unique($personIds)),
+        ];
+    }
+
+    protected function buildCollaboratorLabels($staffMembers, $contactCollaborators): array
+    {
+        $staffById = $staffMembers->keyBy('id');
+        $contactsById = $contactCollaborators->keyBy('id');
+        $labels = [];
+
+        foreach ($this->selectedCollaboratorKeys as $key) {
+            if (! is_string($key) || ! str_contains($key, ':')) {
+                continue;
+            }
+
+            [$type, $rawId] = explode(':', $key, 2);
+            $id = (int) $rawId;
+            if ($id <= 0) {
+                continue;
+            }
+
+            if ($type === 'staff' && isset($staffById[$id])) {
+                $labels[] = $staffById[$id]->name.' (Staff)';
+            }
+
+            if ($type === 'person' && isset($contactsById[$id])) {
+                $person = $contactsById[$id];
+                $orgName = $person->organization?->name;
+                $labels[] = $orgName ? "{$person->name} ({$orgName})" : $person->name;
+            }
+        }
+
+        return $labels;
+    }
+
     protected function buildAssistantSummary(): string
     {
         $parts = [];
@@ -358,6 +532,13 @@ PROMPT;
     public function save()
     {
         $this->validate();
+
+        if ($this->lead_user_id) {
+            $leadUser = User::query()->find($this->lead_user_id);
+            if ($leadUser) {
+                $this->lead = $leadUser->name;
+            }
+        }
 
         // Parse tags from comma-separated string
         $tags = [];
@@ -382,6 +563,45 @@ PROMPT;
             'project_type' => $this->project_type,
         ]);
 
+        if ($this->lead_user_id) {
+            $project->staff()->syncWithoutDetaching([
+                $this->lead_user_id => [
+                    'role' => 'lead',
+                    'added_at' => now(),
+                ],
+            ]);
+        }
+
+        $collaboratorSelection = $this->splitCollaboratorSelection();
+        $staffCollaboratorIds = $collaboratorSelection['staff'];
+        $contactCollaboratorIds = $collaboratorSelection['people'];
+
+        if ($this->lead_user_id) {
+            $staffCollaboratorIds = array_values(array_diff($staffCollaboratorIds, [$this->lead_user_id]));
+        }
+
+        if (! empty($staffCollaboratorIds)) {
+            $staffData = [];
+            foreach ($staffCollaboratorIds as $staffId) {
+                $staffData[$staffId] = [
+                    'role' => 'contributor',
+                    'added_at' => now(),
+                ];
+            }
+            $project->staff()->syncWithoutDetaching($staffData);
+        }
+
+        if (! empty($contactCollaboratorIds)) {
+            $personData = [];
+            foreach ($contactCollaboratorIds as $personId) {
+                $personData[$personId] = [
+                    'role' => 'collaborator',
+                    'notes' => null,
+                ];
+            }
+            $project->people()->syncWithoutDetaching($personData);
+        }
+
         // Sync geographic tags
         $project->syncGeographicTags(
             $this->selectedRegions,
@@ -396,9 +616,28 @@ PROMPT;
 
     public function render()
     {
+        $staffMembers = User::query()
+            ->where('is_visible', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'title']);
+
+        $contactCollaborators = Person::query()
+            ->with('organization:id,name')
+            ->orderBy('name')
+            ->get(['id', 'name', 'organization_id']);
+
+        $leadDisplay = $this->lead;
+        if ($this->lead_user_id) {
+            $leadDisplay = $staffMembers->firstWhere('id', $this->lead_user_id)?->name ?? $leadDisplay;
+        }
+
         return view('livewire.projects.project-create', [
             'statuses' => Project::STATUSES,
             'parentProjects' => Project::roots()->orderBy('name')->get(),
+            'staffMembers' => $staffMembers,
+            'contactCollaborators' => $contactCollaborators,
+            'leadDisplay' => $leadDisplay,
+            'selectedCollaboratorLabels' => $this->buildCollaboratorLabels($staffMembers, $contactCollaborators),
             'projectTypes' => [
                 'initiative' => 'Initiative',
                 'publication' => 'Publication',

@@ -105,6 +105,52 @@
                     @endif
                 </div>
 
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="lead_user_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Lead (POPVOX Staff)
+                        </label>
+                        <select id="lead_user_id" wire:model="lead_user_id"
+                            class="w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            <option value="">Not set</option>
+                            @foreach($staffMembers as $staffMember)
+                                <option value="{{ $staffMember->id }}">{{ $staffMember->name }}</option>
+                            @endforeach
+                        </select>
+                        @if($lead_user_id === null && $lead !== '')
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                AI suggested lead: {{ $lead }} (not matched to staff directory yet)
+                            </p>
+                        @endif
+                    </div>
+
+                    <div>
+                        <label for="collaborators" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Collaborators (Staff + Contacts)
+                        </label>
+                        <select id="collaborators" wire:model="selectedCollaboratorKeys" multiple size="6"
+                            class="w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            <optgroup label="POPVOX Staff">
+                                @foreach($staffMembers as $staffMember)
+                                    <option value="staff:{{ $staffMember->id }}" @disabled((int) $lead_user_id === (int) $staffMember->id)>
+                                        {{ $staffMember->name }}
+                                    </option>
+                                @endforeach
+                            </optgroup>
+                            <optgroup label="Contacts">
+                                @foreach($contactCollaborators as $contact)
+                                    <option value="person:{{ $contact->id }}">
+                                        {{ $contact->name }}@if($contact->organization) - {{ $contact->organization->name }}@endif
+                                    </option>
+                                @endforeach
+                            </optgroup>
+                        </select>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Hold Cmd/Ctrl to select multiple collaborators.
+                        </p>
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
                         <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Name</div>
@@ -120,7 +166,7 @@
                     </div>
                     <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
                         <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Lead</div>
-                        <div class="font-medium text-gray-900 dark:text-white">{{ $lead ?: 'Not set' }}</div>
+                        <div class="font-medium text-gray-900 dark:text-white">{{ $leadDisplay ?: 'Not set' }}</div>
                     </div>
                     <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
                         <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Parent Project</div>
@@ -131,6 +177,14 @@
                     <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
                         <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Status</div>
                         <div class="font-medium text-gray-900 dark:text-white">{{ $statuses[$status] ?? ucfirst(str_replace('_', ' ', $status)) }}</div>
+                    </div>
+                    <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3 md:col-span-2">
+                        <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Collaborators</div>
+                        @if(!empty($selectedCollaboratorLabels))
+                            <div class="font-medium text-gray-900 dark:text-white">{{ implode(', ', $selectedCollaboratorLabels) }}</div>
+                        @else
+                            <div class="font-medium text-gray-900 dark:text-white">Not set</div>
+                        @endif
                     </div>
                 </div>
 
