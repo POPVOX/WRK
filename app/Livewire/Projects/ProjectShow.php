@@ -272,7 +272,7 @@ class ProjectShow extends Component
             'goals' => 'nullable|string',
             'start_date' => 'nullable|date',
             'target_end_date' => 'nullable|date',
-            'status' => 'required|in:active,on_hold,completed,archived',
+            'status' => 'required|in:planning,active,on_hold,completed,archived',
         ]);
 
         $this->project->update([
@@ -294,6 +294,20 @@ class ProjectShow extends Component
         $this->project->refresh();
         $this->editing = false;
         $this->dispatch('notify', type: 'success', message: 'Project updated successfully!');
+    }
+
+    public function saveProjectBrief(): void
+    {
+        $this->validate([
+            'goals' => 'nullable|string',
+        ]);
+
+        $this->project->update([
+            'goals' => $this->goals !== '' ? $this->goals : null,
+        ]);
+
+        $this->project->refresh();
+        $this->dispatch('notify', type: 'success', message: 'Project brief saved.');
     }
 
     // --- Decisions ---
@@ -1620,7 +1634,7 @@ PROMPT;
 
         $boxItemResults = collect();
         $boxSearch = trim($this->boxItemSearch);
-        if ($this->activeTab === 'documents' && mb_strlen($boxSearch) >= 2) {
+        if ($this->showBoxLinkForm && mb_strlen($boxSearch) >= 2) {
             $boxItemResults = BoxItem::query()
                 ->files()
                 ->whereNull('trashed_at')

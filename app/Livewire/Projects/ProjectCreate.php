@@ -90,6 +90,13 @@ class ProjectCreate extends Component
             $this->selectedRegions = $project->geographicTags()->where('geographic_type', 'region')->pluck('geographic_id')->toArray();
             $this->selectedCountries = $project->geographicTags()->where('geographic_type', 'country')->pluck('geographic_id')->toArray();
             $this->selectedUsStates = $project->geographicTags()->where('geographic_type', 'us_state')->pluck('geographic_id')->toArray();
+
+            return;
+        }
+
+        $parentId = (int) request()->integer('parent');
+        if ($parentId > 0 && Project::query()->whereKey($parentId)->exists()) {
+            $this->parent_project_id = $parentId;
         }
     }
 
