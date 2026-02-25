@@ -77,6 +77,11 @@
                                 Disconnect Google
                             </button>
                         </form>
+                    @else
+                        <a href="{{ route('google.redirect') }}"
+                            class="inline-flex items-center px-3 py-2 border border-indigo-300 dark:border-indigo-700 text-sm font-medium rounded-lg text-indigo-700 dark:text-indigo-300 bg-white dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors">
+                            Connect Google Workspace
+                        </a>
                     @endif
                 </div>
             </div>

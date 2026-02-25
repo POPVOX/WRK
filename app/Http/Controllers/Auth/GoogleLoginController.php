@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SyncCalendarEvents;
+use App\Jobs\SyncGmailMessages;
 use App\Models\User;
 use Google\Client as GoogleClient;
 use Google\Service\Oauth2 as GoogleOauth2;
@@ -91,8 +93,22 @@ class GoogleLoginController extends Controller
             $user->forceFill(['email_verified_at' => now()])->save();
         }
 
+        // Persist Google workspace tokens during sign-in so calendar/gmail are connected automatically.
+        if (! empty($token['access_token'])) {
+            $user->forceFill([
+                'google_access_token' => $token['access_token'],
+                'google_refresh_token' => $token['refresh_token'] ?? $user->google_refresh_token,
+                'google_token_expires_at' => now()->addSeconds((int) ($token['expires_in'] ?? 3600)),
+            ])->save();
+        }
+
         Auth::login($user, true);
         $request->session()->regenerate();
+
+        // Trigger background sync automatically at login.
+        SyncCalendarEvents::dispatch($user);
+        $gmailQueue = (string) (config('queue.gmail_queue') ?: 'default');
+        SyncGmailMessages::dispatch($user, 90, 300)->onQueue($gmailQueue);
 
         return redirect()->intended(route('dashboard'));
     }
@@ -103,10 +119,19 @@ class GoogleLoginController extends Controller
         $client->setClientId((string) config('services.google.client_id'));
         $client->setClientSecret((string) config('services.google.client_secret'));
         $client->setRedirectUri((string) config('services.google.login_redirect_uri'));
+
+        foreach ((array) config('services.google.workspace_scopes', []) as $scope) {
+            if (is_string($scope) && trim($scope) !== '') {
+                $client->addScope($scope);
+            }
+        }
+
         $client->addScope('openid');
         $client->addScope('email');
         $client->addScope('profile');
-        $client->setAccessType('online');
+        $client->setAccessType('offline');
+        $client->setIncludeGrantedScopes(true);
+        $client->setPrompt('consent');
 
         return $client;
     }

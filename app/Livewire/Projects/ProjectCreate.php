@@ -55,6 +55,11 @@ class ProjectCreate extends Component
 
     public bool $hasExtracted = false;
 
+    // Chat-first project creation
+    public string $chatInput = '';
+
+    public array $chatMessages = [];
+
     // Lead options
     public array $leadOptions = ['Anne', 'Aubrey', 'Caitlin', 'Chloe', 'Danielle', 'Marci'];
 
@@ -67,6 +72,12 @@ class ProjectCreate extends Component
 
     public function mount(?Project $project = null): void
     {
+        $this->chatMessages[] = [
+            'role' => 'assistant',
+            'content' => 'Tell me about the project in plain language. I will populate the project profile for you.',
+            'timestamp' => now()->format('g:i A'),
+        ];
+
         if ($project && $project->exists) {
             // Pre-fill form with data from source project
             $this->isDuplicate = true;
@@ -128,49 +139,36 @@ class ProjectCreate extends Component
         $this->showAiExtract = ! $this->showAiExtract;
     }
 
-    public function extractFromText()
+    public function sendChatMessage(): void
     {
-        if (empty(trim($this->freeText))) {
-            $this->dispatch('notify', type: 'error', message: 'Please enter some text to extract from.');
-
+        $message = trim($this->chatInput);
+        if ($message === '') {
             return;
         }
 
-        $this->isExtracting = true;
+        $this->chatMessages[] = [
+            'role' => 'user',
+            'content' => $message,
+            'timestamp' => now()->format('g:i A'),
+        ];
 
-        try {
-            $response = Http::withHeaders([
-                'x-api-key' => config('services.anthropic.api_key'),
-                'anthropic-version' => '2023-06-01',
-                'Content-Type' => 'application/json',
-            ])->post('https://api.anthropic.com/v1/messages', [
-                'model' => 'claude-sonnet-4-20250514',
-                'max_tokens' => 1500,
-                'system' => $this->getExtractionSystemPrompt(),
-                'messages' => [
-                    [
-                        'role' => 'user',
-                        'content' => "Extract project details from this text:\n\n{$this->freeText}",
-                    ],
-                ],
-            ]);
+        $this->chatInput = '';
+        $this->freeText = trim($this->freeText."\n".$message);
 
-            $content = $response->json('content.0.text');
+        $success = $this->runExtraction($this->freeText, notify: false);
 
-            if ($content) {
-                $this->parseExtractedData($content);
-                $this->hasExtracted = true;
-                $this->showAiExtract = false;
-                $this->dispatch('notify', type: 'success', message: 'Project details extracted! Review and adjust as needed.');
-            } else {
-                $this->dispatch('notify', type: 'error', message: 'Could not extract project details. Please try again.');
-            }
-        } catch (\Exception $e) {
-            \Log::error('Project AI extraction error: '.$e->getMessage());
-            $this->dispatch('notify', type: 'error', message: 'Error during extraction. Please try again.');
-        }
+        $this->chatMessages[] = [
+            'role' => 'assistant',
+            'content' => $success
+                ? $this->buildAssistantSummary()
+                : 'I could not extract project details from that yet. Add a little more context and I will try again.',
+            'timestamp' => now()->format('g:i A'),
+        ];
+    }
 
-        $this->isExtracting = false;
+    public function extractFromText()
+    {
+        $this->runExtraction($this->freeText, notify: true);
     }
 
     protected function getExtractionSystemPrompt(): string
@@ -221,7 +219,7 @@ Be thorough but concise. The goals should be actionable and clear.
 PROMPT;
     }
 
-    protected function parseExtractedData(string $content): void
+    protected function parseExtractedData(string $content): bool
     {
         // Try to extract JSON from the response
         if (preg_match('/```json\s*(.*?)\s*```/s', $content, $matches)) {
@@ -229,14 +227,14 @@ PROMPT;
         } elseif (preg_match('/\{.*\}/s', $content, $matches)) {
             $jsonStr = $matches[0];
         } else {
-            return;
+            return false;
         }
 
         try {
             $data = json_decode($jsonStr, true);
 
             if (! $data) {
-                return;
+                return false;
             }
 
             // Populate form fields
@@ -255,7 +253,7 @@ PROMPT;
             if (! empty($data['end_date']) && $data['end_date'] !== 'null') {
                 $this->target_end_date = $data['end_date'];
             }
-            if (! empty($data['status'])) {
+            if (! empty($data['status']) && array_key_exists($data['status'], Project::STATUSES)) {
                 $this->status = $data['status'];
             }
             if (! empty($data['scope'])) {
@@ -270,9 +268,91 @@ PROMPT;
             if (! empty($data['tags']) && is_array($data['tags'])) {
                 $this->tagsInput = implode(', ', $data['tags']);
             }
+
+            return true;
         } catch (\Exception $e) {
             \Log::error('Error parsing extracted project data: '.$e->getMessage());
+
+            return false;
         }
+    }
+
+    protected function runExtraction(string $text, bool $notify = true): bool
+    {
+        if (empty(trim($text))) {
+            if ($notify) {
+                $this->dispatch('notify', type: 'error', message: 'Please enter some text to extract from.');
+            }
+
+            return false;
+        }
+
+        $this->isExtracting = true;
+
+        try {
+            $response = Http::withHeaders([
+                'x-api-key' => config('services.anthropic.api_key'),
+                'anthropic-version' => '2023-06-01',
+                'Content-Type' => 'application/json',
+            ])->post('https://api.anthropic.com/v1/messages', [
+                'model' => 'claude-sonnet-4-20250514',
+                'max_tokens' => 1500,
+                'system' => $this->getExtractionSystemPrompt(),
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => "Extract project details from this text:\n\n{$text}",
+                    ],
+                ],
+            ]);
+
+            $content = (string) ($response->json('content.0.text') ?? '');
+            $parsed = $content !== '' && $this->parseExtractedData($content);
+
+            if ($parsed) {
+                $this->hasExtracted = true;
+                $this->showAiExtract = false;
+                if ($notify) {
+                    $this->dispatch('notify', type: 'success', message: 'Project details extracted.');
+                }
+
+                return true;
+            }
+
+            if ($notify) {
+                $this->dispatch('notify', type: 'error', message: 'Could not extract project details. Please try again.');
+            }
+
+            return false;
+        } catch (\Exception $e) {
+            \Log::error('Project AI extraction error: '.$e->getMessage());
+            if ($notify) {
+                $this->dispatch('notify', type: 'error', message: 'Error during extraction. Please try again.');
+            }
+
+            return false;
+        } finally {
+            $this->isExtracting = false;
+        }
+    }
+
+    protected function buildAssistantSummary(): string
+    {
+        $parts = [];
+        $parts[] = 'Got it. I updated the project profile.';
+        $parts[] = $this->name !== '' ? "Name: {$this->name}" : 'Name: (still missing)';
+        $parts[] = $this->project_type !== '' ? 'Type: '.$this->project_type : null;
+        $parts[] = $this->scope !== '' ? 'Scope: '.$this->scope : null;
+        $parts[] = $this->lead !== '' ? 'Lead: '.$this->lead : null;
+        $parts[] = $this->status !== '' ? 'Status: '.str_replace('_', ' ', $this->status) : null;
+
+        if ($this->target_end_date) {
+            $parts[] = 'Target end: '.$this->target_end_date;
+        }
+
+        $parts[] = 'Review the preview below and click Create Project when ready.';
+
+        return implode("\n", array_values(array_filter($parts)));
     }
 
     public function save()

@@ -7,9 +7,6 @@ use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
 Route::middleware('guest')->group(function () {
-    Volt::route('register', 'pages.auth.register')
-        ->name('register');
-
     Volt::route('login', 'pages.auth.login')
         ->name('login');
 
@@ -18,10 +15,12 @@ Route::middleware('guest')->group(function () {
     Route::get('auth/google/callback', [GoogleLoginController::class, 'callback'])
         ->name('auth.google.callback');
 
-    Volt::route('forgot-password', 'pages.auth.forgot-password')
+    // Google-only auth: keep legacy routes but redirect to login with guidance.
+    Route::get('register', fn () => redirect()->route('login')->with('status', 'Use Google sign-in to access WRK.'))
+        ->name('register');
+    Route::get('forgot-password', fn () => redirect()->route('login')->with('status', 'Password reset is unavailable. Use Google sign-in.'))
         ->name('password.request');
-
-    Volt::route('reset-password/{token}', 'pages.auth.reset-password')
+    Route::get('reset-password/{token}', fn () => redirect()->route('login')->with('status', 'Password reset is unavailable. Use Google sign-in.'))
         ->name('password.reset');
 });
 

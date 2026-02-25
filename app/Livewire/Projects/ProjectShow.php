@@ -51,6 +51,17 @@ class ProjectShow extends Component
 
     public string $goals = '';
 
+    // Project brief GUI fields (saved as markdown in goals)
+    public string $briefObjective = '';
+
+    public string $briefCurrentStatus = '';
+
+    public array $briefOpenQuestions = [];
+
+    public array $briefNextSteps = [];
+
+    public string $briefNotes = '';
+
     public ?string $start_date = null;
 
     public ?string $target_end_date = null;
@@ -229,6 +240,7 @@ class ProjectShow extends Component
         $this->name = $this->project->name;
         $this->description = $this->project->description ?? '';
         $this->goals = $this->project->goals ?? '';
+        $this->hydrateBriefFieldsFromGoals();
         $this->start_date = $this->project->start_date?->format('Y-m-d');
         $this->target_end_date = $this->project->target_end_date?->format('Y-m-d');
         $this->status = $this->project->status;
@@ -299,15 +311,204 @@ class ProjectShow extends Component
     public function saveProjectBrief(): void
     {
         $this->validate([
-            'goals' => 'nullable|string',
+            'briefObjective' => 'nullable|string',
+            'briefCurrentStatus' => 'nullable|string',
+            'briefOpenQuestions' => 'array',
+            'briefOpenQuestions.*' => 'nullable|string|max:500',
+            'briefNextSteps' => 'array',
+            'briefNextSteps.*' => 'nullable|string|max:500',
+            'briefNotes' => 'nullable|string',
         ]);
+
+        $this->goals = $this->buildGoalsMarkdownFromBriefFields();
 
         $this->project->update([
             'goals' => $this->goals !== '' ? $this->goals : null,
         ]);
 
         $this->project->refresh();
+        $this->hydrateBriefFieldsFromGoals();
         $this->dispatch('notify', type: 'success', message: 'Project brief saved.');
+    }
+
+    public function addBriefQuestion(): void
+    {
+        $this->briefOpenQuestions[] = '';
+    }
+
+    public function removeBriefQuestion(int $index): void
+    {
+        if (isset($this->briefOpenQuestions[$index])) {
+            unset($this->briefOpenQuestions[$index]);
+            $this->briefOpenQuestions = array_values($this->briefOpenQuestions);
+        }
+    }
+
+    public function addBriefNextStep(): void
+    {
+        $this->briefNextSteps[] = '';
+    }
+
+    public function removeBriefNextStep(int $index): void
+    {
+        if (isset($this->briefNextSteps[$index])) {
+            unset($this->briefNextSteps[$index]);
+            $this->briefNextSteps = array_values($this->briefNextSteps);
+        }
+    }
+
+    protected function hydrateBriefFieldsFromGoals(): void
+    {
+        $parsed = $this->parseGoalsMarkdown($this->goals ?? '');
+
+        $this->briefObjective = $parsed['objective'];
+        $this->briefCurrentStatus = $parsed['current_status'];
+        $this->briefOpenQuestions = $parsed['open_questions'];
+        $this->briefNextSteps = $parsed['next_steps'];
+        $this->briefNotes = $parsed['notes'];
+    }
+
+    protected function parseGoalsMarkdown(string $markdown): array
+    {
+        $sections = [
+            'objective' => [],
+            'current_status' => [],
+            'open_questions' => [],
+            'next_steps' => [],
+            'notes' => [],
+        ];
+
+        $current = 'notes';
+        $lines = preg_split('/\r\n|\r|\n/', $markdown) ?: [];
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+
+            if ($trimmed === '# Project Brief') {
+                continue;
+            }
+
+            if (preg_match('/^##\s+(.+)$/', $trimmed, $matches)) {
+                $heading = strtolower(trim($matches[1]));
+                $current = match (true) {
+                    str_contains($heading, 'objective') => 'objective',
+                    str_contains($heading, 'current status'), str_contains($heading, 'status') => 'current_status',
+                    str_contains($heading, 'open question'), $heading === 'questions' => 'open_questions',
+                    str_contains($heading, 'next step'), str_contains($heading, 'action') => 'next_steps',
+                    str_contains($heading, 'note'), str_contains($heading, 'context') => 'notes',
+                    default => 'notes',
+                };
+                continue;
+            }
+
+            if (in_array($current, ['open_questions', 'next_steps'], true)) {
+                if ($trimmed === '') {
+                    continue;
+                }
+
+                if (preg_match('/^[-*]\s+(.*)$/', $trimmed, $bullet)) {
+                    $sections[$current][] = trim($bullet[1]);
+                    continue;
+                }
+
+                if (preg_match('/^\d+\.\s+(.*)$/', $trimmed, $numbered)) {
+                    $sections[$current][] = trim($numbered[1]);
+                    continue;
+                }
+
+                $sections[$current][] = $trimmed;
+                continue;
+            }
+
+            $sections[$current][] = $line;
+        }
+
+        $objective = trim(implode("\n", $sections['objective']));
+        $currentStatus = trim(implode("\n", $sections['current_status']));
+        $notes = trim(implode("\n", $sections['notes']));
+
+        // Handle older single-text briefs by mapping to notes.
+        if (
+            $objective === '' &&
+            $currentStatus === '' &&
+            empty($sections['open_questions']) &&
+            empty($sections['next_steps']) &&
+            $notes === '' &&
+            trim($markdown) !== ''
+        ) {
+            $notes = trim($markdown);
+        }
+
+        return [
+            'objective' => $objective,
+            'current_status' => $currentStatus,
+            'open_questions' => $this->normalizeBriefList($sections['open_questions']),
+            'next_steps' => $this->normalizeBriefList($sections['next_steps']),
+            'notes' => $notes,
+        ];
+    }
+
+    protected function normalizeBriefList(array $items): array
+    {
+        $cleaned = array_values(array_filter(array_map(
+            fn ($item) => trim((string) $item),
+            $items
+        ), fn ($item) => $item !== ''));
+
+        return $cleaned;
+    }
+
+    protected function buildGoalsMarkdownFromBriefFields(): string
+    {
+        $objective = trim($this->briefObjective);
+        $currentStatus = trim($this->briefCurrentStatus);
+        $notes = trim($this->briefNotes);
+        $openQuestions = $this->normalizeBriefList($this->briefOpenQuestions);
+        $nextSteps = $this->normalizeBriefList($this->briefNextSteps);
+
+        if (
+            $objective === '' &&
+            $currentStatus === '' &&
+            $notes === '' &&
+            empty($openQuestions) &&
+            empty($nextSteps)
+        ) {
+            return '';
+        }
+
+        $lines = ['# Project Brief', ''];
+
+        $lines[] = '## Objective';
+        $lines[] = $objective !== '' ? $objective : '-';
+        $lines[] = '';
+
+        $lines[] = '## Current Status';
+        $lines[] = $currentStatus !== '' ? $currentStatus : '-';
+        $lines[] = '';
+
+        $lines[] = '## Open Questions';
+        if (empty($openQuestions)) {
+            $lines[] = '-';
+        } else {
+            foreach ($openQuestions as $question) {
+                $lines[] = '- '.$question;
+            }
+        }
+        $lines[] = '';
+
+        $lines[] = '## Next Steps';
+        if (empty($nextSteps)) {
+            $lines[] = '-';
+        } else {
+            foreach ($nextSteps as $step) {
+                $lines[] = '- '.$step;
+            }
+        }
+        $lines[] = '';
+
+        $lines[] = '## Notes';
+        $lines[] = $notes !== '' ? $notes : '-';
+
+        return implode("\n", $lines);
     }
 
     // --- Decisions ---

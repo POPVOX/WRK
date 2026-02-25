@@ -254,9 +254,9 @@
                     <div class="wrk-card bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5">
                         <div class="flex items-center justify-between gap-3 mb-3">
                             <div>
-                                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Project Brief (.md)</h3>
+                                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Project Brief</h3>
                                 <p class="text-sm text-gray-500 dark:text-gray-400">
-                                    Keep one free-form markdown brief for the project, then attach supporting docs below.
+                                    Fill this in as a form. WRK stores it as markdown in the backend automatically.
                                 </p>
                             </div>
                             <button wire:click="saveProjectBrief"
@@ -265,12 +265,95 @@
                             </button>
                         </div>
 
-                        <textarea wire:model.defer="goals" rows="20"
-                            class="w-full rounded-md border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono text-sm"
-                            placeholder="# Project brief\n\n## Objective\n- \n\n## Current status\n- \n\n## Open questions\n- \n\n## Next steps\n- "></textarea>
-                        @error('goals')
-                            <p class="mt-2 text-xs text-red-500">{{ $message }}</p>
-                        @enderror
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Objective</label>
+                                <textarea wire:model.defer="briefObjective" rows="3"
+                                    class="w-full rounded-md border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                    placeholder="What is this project trying to achieve?"></textarea>
+                                @error('briefObjective')
+                                    <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Current Status</label>
+                                <textarea wire:model.defer="briefCurrentStatus" rows="3"
+                                    class="w-full rounded-md border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                    placeholder="Current progress, updates, or blockers"></textarea>
+                                @error('briefCurrentStatus')
+                                    <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Open Questions</label>
+                                        <button type="button" wire:click="addBriefQuestion"
+                                            class="text-xs font-semibold text-indigo-600 dark:text-indigo-300 hover:underline">
+                                            + Add
+                                        </button>
+                                    </div>
+                                    <div class="space-y-2">
+                                        @forelse($briefOpenQuestions as $index => $question)
+                                            <div class="flex items-center gap-2">
+                                                <input type="text" wire:model.defer="briefOpenQuestions.{{ $index }}"
+                                                    class="flex-1 rounded-md border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                                    placeholder="Question {{ $index + 1 }}">
+                                                <button type="button" wire:click="removeBriefQuestion({{ $index }})"
+                                                    class="px-2 py-1 text-xs text-red-600 dark:text-red-300 hover:underline">
+                                                    Remove
+                                                </button>
+                                            </div>
+                                            @error('briefOpenQuestions.'.$index)
+                                                <p class="text-xs text-red-500">{{ $message }}</p>
+                                            @enderror
+                                        @empty
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">No questions yet.</p>
+                                        @endforelse
+                                    </div>
+                                </div>
+
+                                <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Next Steps</label>
+                                        <button type="button" wire:click="addBriefNextStep"
+                                            class="text-xs font-semibold text-indigo-600 dark:text-indigo-300 hover:underline">
+                                            + Add
+                                        </button>
+                                    </div>
+                                    <div class="space-y-2">
+                                        @forelse($briefNextSteps as $index => $step)
+                                            <div class="flex items-center gap-2">
+                                                <input type="text" wire:model.defer="briefNextSteps.{{ $index }}"
+                                                    class="flex-1 rounded-md border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                                    placeholder="Step {{ $index + 1 }}">
+                                                <button type="button" wire:click="removeBriefNextStep({{ $index }})"
+                                                    class="px-2 py-1 text-xs text-red-600 dark:text-red-300 hover:underline">
+                                                    Remove
+                                                </button>
+                                            </div>
+                                            @error('briefNextSteps.'.$index)
+                                                <p class="text-xs text-red-500">{{ $message }}</p>
+                                            @enderror
+                                        @empty
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">No steps yet.</p>
+                                        @endforelse
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
+                                <textarea wire:model.defer="briefNotes" rows="4"
+                                    class="w-full rounded-md border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                    placeholder="Additional context, references, or comments"></textarea>
+                                @error('briefNotes')
+                                    <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        </div>
                     </div>
                 </div>
 
