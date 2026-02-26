@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 
 class PressClip extends Model
 {
@@ -31,6 +33,54 @@ class PressClip extends Model
     protected $casts = [
         'published_at' => 'date',
     ];
+
+    public static function createResilient(array $attributes): self
+    {
+        try {
+            /** @var self $pressClip */
+            $pressClip = static::query()->create($attributes);
+
+            return $pressClip;
+        } catch (QueryException $exception) {
+            if (! static::isPostgresIdSequenceCollision($exception)) {
+                throw $exception;
+            }
+
+            static::repairPostgresIdSequence();
+
+            /** @var self $pressClip */
+            $pressClip = static::query()->create($attributes);
+
+            return $pressClip;
+        }
+    }
+
+    protected static function isPostgresIdSequenceCollision(QueryException $exception): bool
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return false;
+        }
+
+        if ((string) $exception->getCode() !== '23505') {
+            return false;
+        }
+
+        $message = strtolower((string) $exception->getMessage());
+
+        return str_contains($message, 'press_clips_pkey')
+            && str_contains($message, '(id)=');
+    }
+
+    public static function repairPostgresIdSequence(): void
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return;
+        }
+
+        DB::statement(
+            "SELECT setval(pg_get_serial_sequence('press_clips', 'id'), COALESCE((SELECT MAX(id) FROM press_clips), 0) + 1, false)"
+        );
+    }
 
     // Relationships
 

@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 
 class Feedback extends Model
 {
@@ -94,6 +96,54 @@ class Feedback extends Model
         'high' => 'High',
         'critical' => 'Critical',
     ];
+
+    public static function createResilient(array $attributes): self
+    {
+        try {
+            /** @var self $feedback */
+            $feedback = static::query()->create($attributes);
+
+            return $feedback;
+        } catch (QueryException $exception) {
+            if (! static::isPostgresIdSequenceCollision($exception)) {
+                throw $exception;
+            }
+
+            static::repairPostgresIdSequence();
+
+            /** @var self $feedback */
+            $feedback = static::query()->create($attributes);
+
+            return $feedback;
+        }
+    }
+
+    protected static function isPostgresIdSequenceCollision(QueryException $exception): bool
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return false;
+        }
+
+        if ((string) $exception->getCode() !== '23505') {
+            return false;
+        }
+
+        $message = strtolower((string) $exception->getMessage());
+
+        return str_contains($message, 'feedback_pkey')
+            && str_contains($message, '(id)=');
+    }
+
+    public static function repairPostgresIdSequence(): void
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return;
+        }
+
+        DB::statement(
+            "SELECT setval(pg_get_serial_sequence('feedback', 'id'), COALESCE((SELECT MAX(id) FROM feedback), 0) + 1, false)"
+        );
+    }
 
     public function user(): BelongsTo
     {

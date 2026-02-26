@@ -10,8 +10,11 @@ use App\Models\Pitch;
 use App\Models\PressClip;
 use App\Models\Project;
 use App\Models\User;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -810,60 +813,108 @@ PROMPT;
     {
         $this->validate([
             'clipForm.title' => 'required|string|max:255',
-            'clipForm.url' => 'required|url',
+            'clipForm.url' => [
+                'required',
+                'url',
+                Rule::unique('press_clips', 'url')->ignore($this->editingId),
+            ],
             'clipForm.outlet_name' => 'required|string|max:255',
             'clipForm.published_at' => 'required|date',
         ]);
 
-        // Auto-create or find outlet organization
-        $outletId = $this->clipForm['outlet_id'];
-        if (!$outletId && $this->clipForm['outlet_name']) {
-            $outletId = $this->findOrCreateOutlet($this->clipForm['outlet_name']);
+        try {
+            DB::transaction(function (): void {
+                // Auto-create or find outlet organization
+                $outletId = $this->clipForm['outlet_id'];
+                if (!$outletId && $this->clipForm['outlet_name']) {
+                    $outletId = $this->findOrCreateOutlet($this->clipForm['outlet_name']);
+                }
+
+                // Auto-create or find journalist as Person record
+                $journalistId = $this->clipForm['journalist_id'];
+                if (!$journalistId && $this->clipForm['journalist_name']) {
+                    $journalistId = $this->findOrCreateJournalist(
+                        $this->clipForm['journalist_name'],
+                        null, // email not provided from clip
+                        $this->clipForm['outlet_name'],
+                        $outletId
+                    );
+                }
+
+                $data = [
+                    'title' => $this->clipForm['title'],
+                    'url' => $this->clipForm['url'],
+                    'outlet_name' => $this->clipForm['outlet_name'],
+                    'outlet_id' => $outletId,
+                    'journalist_id' => $journalistId,
+                    'journalist_name' => $this->clipForm['journalist_name'],
+                    'published_at' => $this->clipForm['published_at'],
+                    'clip_type' => $this->clipForm['clip_type'],
+                    'sentiment' => $this->clipForm['sentiment'],
+                    'summary' => $this->clipForm['summary'],
+                    'quotes' => $this->clipForm['quotes'],
+                    'notes' => $this->clipForm['notes'],
+                    'image_url' => $this->clipForm['image_url'] ?: null,
+                    'status' => 'approved',
+                    'source' => 'manual',
+                    'created_by' => auth()->id(),
+                ];
+
+                if ($this->editingId) {
+                    $clip = PressClip::find($this->editingId);
+
+                    if (!$clip) {
+                        throw new \RuntimeException('Clip not found for update');
+                    }
+
+                    $clip->update($data);
+                } else {
+                    $clip = PressClip::createResilient($data);
+                }
+
+                $clip->issues()->sync($this->clipForm['issue_ids'] ?? []);
+                $clip->projects()->sync($this->clipForm['project_ids'] ?? []);
+                $clip->staffMentioned()->sync($this->clipForm['staff_ids'] ?? []);
+            });
+        } catch (QueryException $exception) {
+            if ($this->isDuplicateClipUrlException($exception)) {
+                $this->dispatch('notify', type: 'error', message: 'That article URL is already logged as a press clip.');
+
+                return;
+            }
+
+            Log::error('Failed to save press clip', [
+                'editing_id' => $this->editingId,
+                'clip_url' => $this->clipForm['url'] ?? null,
+                'error' => $exception->getMessage(),
+            ]);
+
+            $this->dispatch('notify', type: 'error', message: 'Could not save the press clip right now. Please try again.');
+
+            return;
+        } catch (\Throwable $exception) {
+            Log::error('Unexpected error while saving press clip', [
+                'editing_id' => $this->editingId,
+                'clip_url' => $this->clipForm['url'] ?? null,
+                'error' => $exception->getMessage(),
+            ]);
+
+            $this->dispatch('notify', type: 'error', message: 'Could not save the press clip right now. Please try again.');
+
+            return;
         }
-
-        // Auto-create or find journalist as Person record
-        $journalistId = $this->clipForm['journalist_id'];
-        if (!$journalistId && $this->clipForm['journalist_name']) {
-            $journalistId = $this->findOrCreateJournalist(
-                $this->clipForm['journalist_name'],
-                null, // email not provided from clip
-                $this->clipForm['outlet_name'],
-                $outletId
-            );
-        }
-
-        $data = [
-            'title' => $this->clipForm['title'],
-            'url' => $this->clipForm['url'],
-            'outlet_name' => $this->clipForm['outlet_name'],
-            'outlet_id' => $outletId,
-            'journalist_id' => $journalistId,
-            'journalist_name' => $this->clipForm['journalist_name'],
-            'published_at' => $this->clipForm['published_at'],
-            'clip_type' => $this->clipForm['clip_type'],
-            'sentiment' => $this->clipForm['sentiment'],
-            'summary' => $this->clipForm['summary'],
-            'quotes' => $this->clipForm['quotes'],
-            'notes' => $this->clipForm['notes'],
-            'image_url' => $this->clipForm['image_url'] ?: null,
-            'status' => 'approved',
-            'source' => 'manual',
-            'created_by' => auth()->id(),
-        ];
-
-        if ($this->editingId) {
-            $clip = PressClip::find($this->editingId);
-            $clip->update($data);
-        } else {
-            $clip = PressClip::create($data);
-        }
-
-        $clip->issues()->sync($this->clipForm['issue_ids'] ?? []);
-        $clip->projects()->sync($this->clipForm['project_ids'] ?? []);
-        $clip->staffMentioned()->sync($this->clipForm['staff_ids'] ?? []);
 
         $this->showClipModal = false;
         $this->dispatch('notify', type: 'success', message: 'Press clip saved!');
+    }
+
+    protected function isDuplicateClipUrlException(QueryException $exception): bool
+    {
+        if ((string) $exception->getCode() !== '23505') {
+            return false;
+        }
+
+        return str_contains(strtolower($exception->getMessage()), 'press_clips_url_unique');
     }
 
     public function approveClip(int $id): void

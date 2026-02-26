@@ -5,6 +5,8 @@ namespace App\Livewire;
 use App\Jobs\AnalyzeFeedback;
 use App\Models\Feedback;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -86,35 +88,53 @@ class FeedbackWidget extends Component
         ]);
 
         $screenshotPath = null;
-        if ($this->screenshot) {
-            $screenshotPath = $this->screenshot->store('feedback-screenshots', 'public');
-        }
 
-        // Parse user agent
-        $browserInfo = $this->parseUserAgent($this->userAgent);
+        try {
+            if ($this->screenshot) {
+                $screenshotPath = $this->screenshot->store('feedback-screenshots', 'public');
+            }
 
-        $feedback = Feedback::create([
-            'user_id' => Auth::id(),
-            'page_url' => $this->pageUrl,
-            'page_title' => $this->pageTitle,
-            'page_route' => $this->pageRoute,
-            'feedback_type' => $this->feedbackType,
-            'category' => $this->category ?: null,
-            'message' => $this->message,
-            'screenshot_path' => $screenshotPath,
-            'user_agent' => $this->userAgent,
-            'browser' => $browserInfo['browser'],
-            'browser_version' => $browserInfo['version'],
-            'os' => $browserInfo['os'],
-            'device_type' => $browserInfo['device'],
-            'screen_resolution' => $this->screenResolution,
-            'viewport_size' => $this->viewportSize,
-            'status' => 'new',
-        ]);
+            // Parse user agent
+            $browserInfo = $this->parseUserAgent($this->userAgent);
 
-        // Queue AI analysis
-        if (config('ai.enabled')) {
-            AnalyzeFeedback::dispatch($feedback->id);
+            $feedback = Feedback::createResilient([
+                'user_id' => Auth::id(),
+                'page_url' => $this->pageUrl,
+                'page_title' => $this->pageTitle,
+                'page_route' => $this->pageRoute,
+                'feedback_type' => $this->feedbackType,
+                'category' => $this->category ?: null,
+                'message' => $this->message,
+                'screenshot_path' => $screenshotPath,
+                'user_agent' => $this->userAgent,
+                'browser' => $browserInfo['browser'],
+                'browser_version' => $browserInfo['version'],
+                'os' => $browserInfo['os'],
+                'device_type' => $browserInfo['device'],
+                'screen_resolution' => $this->screenResolution,
+                'viewport_size' => $this->viewportSize,
+                'status' => 'new',
+            ]);
+
+            // Queue AI analysis
+            if (config('ai.enabled')) {
+                AnalyzeFeedback::dispatch($feedback->id);
+            }
+        } catch (\Throwable $exception) {
+            if ($screenshotPath) {
+                Storage::disk('public')->delete($screenshotPath);
+            }
+
+            Log::error('Feedback submission failed', [
+                'user_id' => Auth::id(),
+                'page_url' => $this->pageUrl,
+                'feedback_type' => $this->feedbackType,
+                'error' => $exception->getMessage(),
+            ]);
+
+            $this->dispatch('notify', type: 'error', message: 'Could not submit feedback right now. Please try again.');
+
+            return;
         }
 
         $this->submitted = true;
@@ -180,5 +200,4 @@ class FeedbackWidget extends Component
         return view('livewire.feedback-widget');
     }
 }
-
 
