@@ -26,6 +26,7 @@ use App\Services\ChatService;
 use App\Services\DocumentSafety;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
@@ -1594,52 +1595,81 @@ PROMPT;
             'uploadTitle' => 'nullable|string|max:255',
         ]);
 
-        $ext = strtolower($this->uploadFile->getClientOriginalExtension());
-        if (! DocumentSafety::isAllowedExtension($ext)) {
-            $this->aiNotice = 'File type not allowed.';
+        $storedPath = null;
+
+        try {
+            $ext = strtolower($this->uploadFile->getClientOriginalExtension());
+            if (! DocumentSafety::isAllowedExtension($ext)) {
+                $this->dispatch('notify', type: 'error', message: 'File type not allowed.');
+
+                return;
+            }
+
+            $baseName = $this->uploadTitle !== ''
+                ? \Illuminate\Support\Str::slug($this->uploadTitle)
+                : pathinfo($this->uploadFile->getClientOriginalName(), PATHINFO_FILENAME);
+
+            $sanitizedBaseName = trim((string) preg_replace('/[^A-Za-z0-9\-_]+/', '-', $baseName), '-');
+            if ($sanitizedBaseName === '') {
+                $sanitizedBaseName = 'document-'.now()->format('Ymd-His');
+            }
+
+            $fileName = \Illuminate\Support\Str::limit($sanitizedBaseName, 120, '').'.'.$ext;
+            $dir = 'project_uploads/'.$this->project->id;
+            $storedPath = $this->uploadFile->storeAs($dir, $fileName, 'public');
+
+            if (! is_string($storedPath) || $storedPath === '') {
+                throw new \RuntimeException('Upload storage returned an empty path.');
+            }
+
+            $fullPath = Storage::disk('public')->path($storedPath);
+            $hash = DocumentSafety::hashFile($fullPath);
+            $size = @filesize($fullPath) ?: null;
+            $mime = @mime_content_type($fullPath) ?: null;
+
+            $doc = ProjectDocument::create([
+                'project_id' => $this->project->id,
+                'title' => $this->uploadTitle !== '' ? $this->uploadTitle : $fileName,
+                'type' => 'file',
+                'file_path' => $storedPath,
+                'file_type' => $ext,
+                'mime_type' => $mime,
+                'file_size' => $size,
+                'uploaded_by' => Auth::id(),
+                'ai_indexed' => false,
+                'content_hash' => $hash,
+                'last_seen_at' => now(),
+                'is_knowledge_base' => true,
+            ]);
+
+            if (in_array($ext, ['md', 'markdown', 'txt'], true)) {
+                IndexDocumentContent::dispatch($doc->id);
+                if (config('ai.enabled')) {
+                    SuggestDocumentTags::dispatch($doc->id);
+                }
+            }
+        } catch (\Throwable $exception) {
+            if ($storedPath) {
+                Storage::disk('public')->delete($storedPath);
+            }
+
+            Log::error('Project document upload failed', [
+                'project_id' => $this->project->id,
+                'user_id' => Auth::id(),
+                'filename' => $this->uploadFile?->getClientOriginalName(),
+                'error' => $exception->getMessage(),
+            ]);
+
+            $this->dispatch('notify', type: 'error', message: 'Could not upload document right now. Please try again.');
 
             return;
-        }
-
-        $baseName = $this->uploadTitle !== ''
-            ? \Illuminate\Support\Str::slug($this->uploadTitle)
-            : pathinfo($this->uploadFile->getClientOriginalName(), PATHINFO_FILENAME);
-
-        $fileName = \Illuminate\Support\Str::limit(preg_replace('/[^A-Za-z0-9\-_]+/', '-', $baseName), 120, '').'.'.$ext;
-        $dir = 'project_uploads/'.$this->project->id;
-        $path = $this->uploadFile->storeAs($dir, $fileName, 'public');
-
-        $fullPath = Storage::disk('public')->path($path);
-        $hash = DocumentSafety::hashFile($fullPath);
-        $size = @filesize($fullPath) ?: null;
-        $mime = @mime_content_type($fullPath) ?: null;
-
-        $doc = ProjectDocument::create([
-            'project_id' => $this->project->id,
-            'title' => $this->uploadTitle !== '' ? $this->uploadTitle : $fileName,
-            'type' => 'file',
-            'file_path' => $path,
-            'file_type' => $ext,
-            'mime_type' => $mime,
-            'file_size' => $size,
-            'uploaded_by' => Auth::id(),
-            'ai_indexed' => false,
-            'content_hash' => $hash,
-            'last_seen_at' => now(),
-            'is_knowledge_base' => true,
-        ]);
-
-        if (in_array($ext, ['md', 'markdown', 'txt'], true)) {
-            IndexDocumentContent::dispatch($doc->id);
-            if (config('ai.enabled')) {
-                SuggestDocumentTags::dispatch($doc->id);
-            }
         }
 
         $this->uploadFile = null;
         $this->uploadTitle = '';
         $this->project->refresh();
         $this->project->load('documents');
+        $this->dispatch('notify', type: 'success', message: 'Document uploaded.');
     }
 
     public function addDocumentLink(): void
@@ -1649,22 +1679,36 @@ PROMPT;
             'linkUrl' => 'required|url|max:2048',
         ]);
 
-        $doc = ProjectDocument::create([
-            'project_id' => $this->project->id,
-            'title' => $this->linkTitle,
-            'type' => 'link',
-            'url' => $this->linkUrl,
-            'uploaded_by' => Auth::id(),
-            'ai_indexed' => false,
-            'is_knowledge_base' => true,
-        ]);
+        try {
+            $doc = ProjectDocument::create([
+                'project_id' => $this->project->id,
+                'title' => $this->linkTitle,
+                'type' => 'link',
+                'url' => $this->linkUrl,
+                'uploaded_by' => Auth::id(),
+                'ai_indexed' => false,
+                'is_knowledge_base' => true,
+            ]);
 
-        FetchLinkContent::dispatch($doc->id);
+            FetchLinkContent::dispatch($doc->id);
+        } catch (\Throwable $exception) {
+            Log::error('Project link document create failed', [
+                'project_id' => $this->project->id,
+                'user_id' => Auth::id(),
+                'url' => $this->linkUrl,
+                'error' => $exception->getMessage(),
+            ]);
+
+            $this->dispatch('notify', type: 'error', message: 'Could not add link right now. Please try again.');
+
+            return;
+        }
 
         $this->linkTitle = '';
         $this->linkUrl = '';
         $this->project->refresh();
         $this->project->load('documents');
+        $this->dispatch('notify', type: 'success', message: 'Link added.');
     }
 
     // --- Document Sync Methods ---

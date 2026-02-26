@@ -474,18 +474,23 @@
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <form wire:submit="uploadDocument" class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
+                    <form wire:submit.prevent="uploadDocument" class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
                         <h4 class="font-medium text-gray-900 dark:text-white">Upload File</h4>
                         <input type="text" wire:model="uploadTitle" placeholder="Optional title"
                             class="w-full rounded-md border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                         <input type="file" wire:model="uploadFile"
                             class="w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-indigo-50 file:text-indigo-700">
+                        <p wire:loading wire:target="uploadFile" class="text-xs text-gray-500 dark:text-gray-400">Uploading file...</p>
                         @error('uploadFile')
                             <p class="text-xs text-red-500">{{ $message }}</p>
                         @enderror
                         <button type="submit"
-                            class="px-3 py-1.5 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
-                            Upload
+                            class="px-3 py-1.5 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-60"
+                            wire:loading.attr="disabled"
+                            wire:target="uploadFile,uploadDocument">
+                            <span wire:loading.remove wire:target="uploadFile,uploadDocument">Upload</span>
+                            <span wire:loading wire:target="uploadFile">Uploading...</span>
+                            <span wire:loading wire:target="uploadDocument">Saving...</span>
                         </button>
                     </form>
 
@@ -588,11 +593,12 @@
                     </div>
                 @endif
 
-                <div class="space-y-2">
-                    <h4 class="font-medium text-gray-900 dark:text-white">Project Documents</h4>
-                    @if($projectDocuments->isEmpty())
-                        <p class="text-sm text-gray-500 dark:text-gray-400">No documents yet.</p>
-                    @else
+                @if($projectDocuments->isNotEmpty() || $projectBoxLinks->isEmpty())
+                    <div class="space-y-2">
+                        <h4 class="font-medium text-gray-900 dark:text-white">Project Documents</h4>
+                        @if($projectDocuments->isEmpty())
+                            <p class="text-sm text-gray-500 dark:text-gray-400">No documents yet.</p>
+                        @else
                         @foreach($projectDocuments as $doc)
                             <div class="flex items-center justify-between gap-3 p-3 bg-gray-50 dark:bg-gray-700/40 border border-gray-200 dark:border-gray-700 rounded-md">
                                 <div class="min-w-0">
@@ -609,8 +615,9 @@
                                     class="text-red-600 hover:text-red-800 dark:text-red-400 text-sm">Delete</button>
                             </div>
                         @endforeach
-                    @endif
-                </div>
+                        @endif
+                    </div>
+                @endif
             </div>
         </div>
     </div>
