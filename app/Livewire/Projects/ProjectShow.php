@@ -308,6 +308,41 @@ class ProjectShow extends Component
         $this->dispatch('notify', type: 'success', message: 'Project updated successfully!');
     }
 
+    public function deleteProject()
+    {
+        try {
+            $filePaths = DB::transaction(function (): array {
+                $project = Project::query()
+                    ->with(['documents:id,project_id,file_path'])
+                    ->lockForUpdate()
+                    ->findOrFail($this->project->id);
+
+                $paths = $project->documents
+                    ->pluck('file_path')
+                    ->filter(fn ($path) => is_string($path) && $path !== '')
+                    ->values()
+                    ->all();
+
+                $project->delete();
+
+                return $paths;
+            });
+
+            foreach ($filePaths as $path) {
+                Storage::disk('public')->delete($path);
+            }
+
+            $this->dispatch('notify', type: 'success', message: 'Project deleted.');
+
+            return redirect()->route('projects.index');
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->dispatch('notify', type: 'error', message: 'Could not delete project. Please try again.');
+
+            return null;
+        }
+    }
+
     public function saveProjectBrief(): void
     {
         $this->validate([

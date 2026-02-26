@@ -85,7 +85,7 @@ class ProjectList extends Component
     {
         $query = Project::query()
             ->with(['parent', 'children'])
-            ->withCount(['meetings', 'decisions', 'milestones', 'questions', 'children'])
+            ->withCount(['meetings', 'milestones', 'questions', 'children'])
             ->when($this->search, function ($q) {
                 $q->where(function ($q) {
                     $q->where('name', 'like', '%'.$this->search.'%')

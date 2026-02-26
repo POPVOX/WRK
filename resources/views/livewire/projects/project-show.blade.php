@@ -196,6 +196,11 @@
                     </svg>
                     Duplicate
                 </a>
+                <button wire:click="deleteProject"
+                    wire:confirm="Delete this project? This removes its brief, docs, notes, and links. Any sub-projects will remain and move to top level."
+                    class="px-4 py-2 text-sm font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 rounded-md hover:bg-red-200 dark:hover:bg-red-900/50">
+                    Delete
+                </button>
             </div>
         </div>
     </x-slot>
@@ -251,21 +256,52 @@
                         </div>
                     @endif
 
-                    <div class="wrk-card bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5">
+                    <div class="wrk-card bg-white dark:bg-gray-800 rounded-lg shadow-sm p-5" x-data="{ briefOpen: false }">
                         <div class="flex items-center justify-between gap-3 mb-3">
                             <div>
                                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Project Brief</h3>
                                 <p class="text-sm text-gray-500 dark:text-gray-400">
-                                    Fill this in as a form. WRK stores it as markdown in the backend automatically.
+                                    Collapsed by default to reduce clutter. Expand when you want to edit details.
                                 </p>
                             </div>
-                            <button wire:click="saveProjectBrief"
-                                class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
-                                Save Brief
+                            <button type="button" @click="briefOpen = !briefOpen"
+                                class="px-3 py-1.5 text-sm font-semibold text-indigo-700 bg-indigo-100 rounded-md hover:bg-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-200 dark:hover:bg-indigo-900/60">
+                                <span x-show="!briefOpen">Expand Brief</span>
+                                <span x-show="briefOpen">Collapse Brief</span>
                             </button>
                         </div>
 
-                        <div class="space-y-4">
+                        <div x-show="!briefOpen" class="space-y-3">
+                            @php
+                                $openQuestionsCount = collect($briefOpenQuestions)->filter(fn ($value) => trim((string) $value) !== '')->count();
+                                $nextStepsCount = collect($briefNextSteps)->filter(fn ($value) => trim((string) $value) !== '')->count();
+                            @endphp
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                                    <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Current Status</div>
+                                    <p class="text-sm text-gray-800 dark:text-gray-200">
+                                        {{ trim($briefCurrentStatus) !== '' ? \Illuminate\Support\Str::limit($briefCurrentStatus, 220) : 'No current status update yet.' }}
+                                    </p>
+                                </div>
+                                <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                                    <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Objective</div>
+                                    <p class="text-sm text-gray-800 dark:text-gray-200">
+                                        {{ trim($briefObjective) !== '' ? \Illuminate\Support\Str::limit($briefObjective, 220) : 'No objective recorded yet.' }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-wrap gap-2 text-xs text-gray-600 dark:text-gray-300">
+                                <span class="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700">{{ $openQuestionsCount }} open questions</span>
+                                <span class="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700">{{ $nextStepsCount }} next steps</span>
+                                @if(trim($briefNotes) !== '')
+                                    <span class="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700">Has notes</span>
+                                @endif
+                            </div>
+                        </div>
+
+                        <div class="space-y-4" x-show="briefOpen">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Objective</label>
                                 <textarea wire:model.defer="briefObjective" rows="3"
@@ -352,6 +388,13 @@
                                 @error('briefNotes')
                                     <p class="mt-1 text-xs text-red-500">{{ $message }}</p>
                                 @enderror
+                            </div>
+
+                            <div class="flex justify-end">
+                                <button wire:click="saveProjectBrief"
+                                    class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                                    Save Brief
+                                </button>
                             </div>
                         </div>
                     </div>

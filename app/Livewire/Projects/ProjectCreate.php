@@ -5,6 +5,8 @@ namespace App\Livewire\Projects;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Http;
 use Livewire\Attributes\Layout;
@@ -586,6 +588,13 @@ PROMPT;
     {
         $this->normalizeFieldsBeforeSave();
 
+        $lock = Cache::lock('project-create:'.auth()->id(), 10);
+        if (! $lock->get()) {
+            $this->dispatch('notify', type: 'warning', message: 'A project is already being created. Please wait a second.');
+
+            return null;
+        }
+
         try {
             $this->validate();
 
@@ -596,36 +605,16 @@ PROMPT;
                 }
             }
 
+            $recentDuplicate = $this->findRecentlyCreatedDuplicateProject();
+            if ($recentDuplicate) {
+                return redirect()->route('projects.show', $recentDuplicate);
+            }
+
             // Parse tags from comma-separated string
             $tags = [];
             if (! empty($this->tagsInput)) {
                 $tags = array_map('trim', explode(',', $this->tagsInput));
                 $tags = array_filter($tags); // Remove empty values
-            }
-
-            $project = Project::create([
-                'name' => $this->name,
-                'description' => $this->description ?: null,
-                'goals' => $this->goals ?: null,
-                'start_date' => $this->start_date ?: null,
-                'target_end_date' => $this->target_end_date ?: null,
-                'status' => $this->status,
-                'scope' => $this->scope ?: null,
-                'lead' => $this->lead ?: null,
-                'url' => $this->url ?: null,
-                'tags' => ! empty($tags) ? $tags : null,
-                'created_by' => auth()->id(),
-                'parent_project_id' => $this->parent_project_id,
-                'project_type' => $this->project_type,
-            ]);
-
-            if ($this->lead_user_id) {
-                $project->staff()->syncWithoutDetaching([
-                    $this->lead_user_id => [
-                        'role' => 'lead',
-                        'added_at' => now(),
-                    ],
-                ]);
             }
 
             $staffCollaboratorIds = $this->selectedStaffCollaboratorIds;
@@ -635,38 +624,65 @@ PROMPT;
                 $staffCollaboratorIds = array_values(array_diff($staffCollaboratorIds, [$this->lead_user_id]));
             }
 
-            if (! empty($staffCollaboratorIds)) {
-                $staffData = [];
-                foreach ($staffCollaboratorIds as $staffId) {
-                    $staffData[$staffId] = [
-                        'role' => 'contributor',
-                        'added_at' => now(),
-                    ];
+            $project = DB::transaction(function () use ($tags, $staffCollaboratorIds, $contactCollaboratorIds): Project {
+                $project = Project::create([
+                    'name' => $this->name,
+                    'description' => $this->description ?: null,
+                    'goals' => $this->goals ?: null,
+                    'start_date' => $this->start_date ?: null,
+                    'target_end_date' => $this->target_end_date ?: null,
+                    'status' => $this->status,
+                    'scope' => $this->scope ?: null,
+                    'lead' => $this->lead ?: null,
+                    'url' => $this->url ?: null,
+                    'tags' => ! empty($tags) ? $tags : null,
+                    'created_by' => auth()->id(),
+                    'parent_project_id' => $this->parent_project_id,
+                    'project_type' => $this->project_type,
+                ]);
+
+                if ($this->lead_user_id) {
+                    $project->staff()->syncWithoutDetaching([
+                        $this->lead_user_id => [
+                            'role' => 'lead',
+                            'added_at' => now(),
+                        ],
+                    ]);
                 }
-                $project->staff()->syncWithoutDetaching($staffData);
-            }
 
-            if (! empty($contactCollaboratorIds)) {
-                $personData = [];
-                foreach ($contactCollaboratorIds as $personId) {
-                    $personData[$personId] = [
-                        'role' => 'collaborator',
-                        'notes' => null,
-                    ];
+                if (! empty($staffCollaboratorIds)) {
+                    $staffData = [];
+                    foreach ($staffCollaboratorIds as $staffId) {
+                        $staffData[$staffId] = [
+                            'role' => 'contributor',
+                            'added_at' => now(),
+                        ];
+                    }
+                    $project->staff()->syncWithoutDetaching($staffData);
                 }
-                $project->people()->syncWithoutDetaching($personData);
-            }
 
-            // Sync geographic tags
-            $project->syncGeographicTags(
-                $this->selectedRegions,
-                $this->selectedCountries,
-                $this->selectedUsStates
-            );
+                if (! empty($contactCollaboratorIds)) {
+                    $personData = [];
+                    foreach ($contactCollaboratorIds as $personId) {
+                        $personData[$personId] = [
+                            'role' => 'collaborator',
+                            'notes' => null,
+                        ];
+                    }
+                    $project->people()->syncWithoutDetaching($personData);
+                }
 
-            $this->dispatch('notify', type: 'success', message: 'Project created successfully!');
+                // Sync geographic tags
+                $project->syncGeographicTags(
+                    $this->selectedRegions,
+                    $this->selectedCountries,
+                    $this->selectedUsStates
+                );
 
-            return $this->redirect(route('projects.show', $project), navigate: true);
+                return $project;
+            });
+
+            return redirect()->route('projects.show', $project);
         } catch (ValidationException $exception) {
             $this->dispatch('notify', type: 'error', message: 'Please review the highlighted fields and try again.');
             throw $exception;
@@ -674,7 +690,26 @@ PROMPT;
             report($exception);
             $this->dispatch('notify', type: 'error', message: 'Could not create project. Please try again.');
             return null;
+        } finally {
+            $lock->release();
         }
+    }
+
+    protected function findRecentlyCreatedDuplicateProject(): ?Project
+    {
+        $normalizedName = mb_strtolower(trim($this->name));
+        if ($normalizedName === '') {
+            return null;
+        }
+
+        return Project::query()
+            ->where('created_by', auth()->id())
+            ->whereRaw('LOWER(name) = ?', [$normalizedName])
+            ->where('project_type', $this->project_type)
+            ->where('parent_project_id', $this->parent_project_id)
+            ->where('created_at', '>=', now()->subMinutes(2))
+            ->latest('id')
+            ->first();
     }
 
     public function render()
