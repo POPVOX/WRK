@@ -232,15 +232,25 @@ class ProjectCreate extends Component
         $this->chatInput = '';
         $this->freeText = trim($this->freeText."\n".$message);
 
-        $success = $this->runExtraction($this->freeText, notify: false);
+        try {
+            $success = $this->runExtraction($this->freeText, notify: false);
 
-        $this->chatMessages[] = [
-            'role' => 'assistant',
-            'content' => $success
-                ? $this->buildAssistantSummary()
-                : 'I could not extract project details from that yet. Add a little more context and I will try again.',
-            'timestamp' => now()->format('g:i A'),
-        ];
+            $this->chatMessages[] = [
+                'role' => 'assistant',
+                'content' => $success
+                    ? $this->buildAssistantSummary()
+                    : 'I could not extract project details from that yet. Add a little more context and I will try again.',
+                'timestamp' => now()->format('g:i A'),
+            ];
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->chatMessages[] = [
+                'role' => 'assistant',
+                'content' => 'I hit an error updating the profile. Please try again.',
+                'timestamp' => now()->format('g:i A'),
+            ];
+            $this->dispatch('notify', type: 'error', message: 'Could not process that message. Please try again.');
+        }
     }
 
     public function extractFromText()
@@ -319,45 +329,55 @@ PROMPT;
         try {
             $data = json_decode($jsonStr, true);
 
-            if (! $data) {
+            if (! is_array($data) || $data === []) {
                 return false;
             }
 
             // Populate form fields
-            if (! empty($data['title'])) {
-                $this->name = $data['title'];
+            if (isset($data['title']) && is_string($data['title']) && trim($data['title']) !== '') {
+                $this->name = trim($data['title']);
             }
-            if (! empty($data['description'])) {
-                $this->description = $data['description'];
+            if (isset($data['description']) && is_string($data['description']) && trim($data['description']) !== '') {
+                $this->description = trim($data['description']);
             }
-            if (! empty($data['goals'])) {
-                $this->goals = $data['goals'];
+            if (isset($data['goals']) && is_string($data['goals']) && trim($data['goals']) !== '') {
+                $this->goals = trim($data['goals']);
             }
-            if (! empty($data['start_date']) && $data['start_date'] !== 'null') {
-                $this->start_date = $data['start_date'];
+            if (isset($data['start_date']) && is_string($data['start_date']) && strtolower($data['start_date']) !== 'null' && trim($data['start_date']) !== '') {
+                $this->start_date = trim($data['start_date']);
             }
-            if (! empty($data['end_date']) && $data['end_date'] !== 'null') {
-                $this->target_end_date = $data['end_date'];
+            if (isset($data['end_date']) && is_string($data['end_date']) && strtolower($data['end_date']) !== 'null' && trim($data['end_date']) !== '') {
+                $this->target_end_date = trim($data['end_date']);
             }
-            if (! empty($data['status']) && array_key_exists($data['status'], Project::STATUSES)) {
+            if (isset($data['status']) && is_string($data['status']) && array_key_exists($data['status'], Project::STATUSES)) {
                 $this->status = $data['status'];
             }
-            if (! empty($data['scope'])) {
-                $this->scope = $data['scope'];
+            if (isset($data['scope']) && is_string($data['scope']) && trim($data['scope']) !== '') {
+                $this->scope = trim($data['scope']);
             }
-            if (! empty($data['lead'])) {
+            if (isset($data['lead']) && is_string($data['lead']) && trim($data['lead']) !== '') {
                 $this->lead = trim((string) $data['lead']);
                 $this->lead_user_id = $this->resolveStaffIdByName($this->lead);
             }
-            if (! empty($data['url']) && $data['url'] !== 'null') {
-                $this->url = $data['url'];
+            if (isset($data['url']) && is_string($data['url']) && strtolower($data['url']) !== 'null' && trim($data['url']) !== '') {
+                $this->url = trim($data['url']);
             }
             if (! empty($data['tags']) && is_array($data['tags'])) {
-                $this->tagsInput = implode(', ', $data['tags']);
+                $tags = array_values(array_filter(array_map(function ($tag) {
+                    if (! is_scalar($tag)) {
+                        return null;
+                    }
+
+                    return trim((string) $tag);
+                }, $data['tags']), fn ($tag) => is_string($tag) && $tag !== ''));
+
+                if (! empty($tags)) {
+                    $this->tagsInput = implode(', ', $tags);
+                }
             }
 
             return true;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Error parsing extracted project data: '.$e->getMessage());
 
             return false;
@@ -411,7 +431,7 @@ PROMPT;
             }
 
             return false;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Project AI extraction error: '.$e->getMessage());
             if ($notify) {
                 $this->dispatch('notify', type: 'error', message: 'Error during extraction. Please try again.');
