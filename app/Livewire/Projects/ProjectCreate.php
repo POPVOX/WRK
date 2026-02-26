@@ -35,7 +35,11 @@ class ProjectCreate extends Component
 
     public ?int $lead_user_id = null;
 
-    public array $selectedCollaboratorKeys = [];
+    public array $selectedStaffCollaboratorIds = [];
+
+    public array $selectedContactCollaboratorIds = [];
+
+    public string $contactCollaboratorSearch = '';
 
     public string $url = '';
 
@@ -110,21 +114,16 @@ class ProjectCreate extends Component
                 $this->lead_user_id = $this->resolveStaffIdByName($this->lead);
             }
 
-            $staffCollaboratorKeys = $project->staff()
+            $this->selectedStaffCollaboratorIds = $project->staff()
                 ->where('users.id', '!=', (int) $this->lead_user_id)
                 ->pluck('users.id')
-                ->map(fn ($id) => 'staff:'.$id)
+                ->map(fn ($id) => (int) $id)
                 ->all();
 
-            $personCollaboratorKeys = $project->people()
+            $this->selectedContactCollaboratorIds = $project->people()
                 ->pluck('people.id')
-                ->map(fn ($id) => 'person:'.$id)
+                ->map(fn ($id) => (int) $id)
                 ->all();
-
-            $this->selectedCollaboratorKeys = array_values(array_unique(array_merge(
-                $staffCollaboratorKeys,
-                $personCollaboratorKeys
-            )));
 
             // Convert tags array back to comma-separated string
             if ($project->tags && is_array($project->tags)) {
@@ -159,8 +158,10 @@ class ProjectCreate extends Component
         'scope' => 'nullable|string|max:50',
         'lead' => 'nullable|string|max:100',
         'lead_user_id' => 'nullable|exists:users,id',
-        'selectedCollaboratorKeys' => 'array',
-        'selectedCollaboratorKeys.*' => 'string',
+        'selectedStaffCollaboratorIds' => 'array',
+        'selectedStaffCollaboratorIds.*' => 'integer|exists:users,id',
+        'selectedContactCollaboratorIds' => 'array',
+        'selectedContactCollaboratorIds.*' => 'integer|exists:people,id',
         'url' => 'nullable|url|max:500',
         'tagsInput' => 'nullable|string',
         'parent_project_id' => 'nullable|exists:projects,id',
@@ -188,10 +189,9 @@ class ProjectCreate extends Component
                 $this->lead = $leadUser->name;
             }
 
-            $leadKey = 'staff:'.(int) $value;
-            $this->selectedCollaboratorKeys = array_values(array_filter(
-                $this->selectedCollaboratorKeys,
-                fn ($key) => $key !== $leadKey
+            $this->selectedStaffCollaboratorIds = array_values(array_filter(
+                $this->selectedStaffCollaboratorIds,
+                fn ($id) => (int) $id !== (int) $value
             ));
 
             return;
@@ -200,20 +200,19 @@ class ProjectCreate extends Component
         $this->lead = '';
     }
 
-    public function updatedSelectedCollaboratorKeys($value): void
+    public function updatedSelectedStaffCollaboratorIds($value): void
     {
         if (! is_array($value)) {
-            $this->selectedCollaboratorKeys = [];
+            $this->selectedStaffCollaboratorIds = [];
 
             return;
         }
 
-        $keys = array_values(array_unique(array_filter($value, fn ($key) => is_string($key) && $key !== '')));
+        $ids = $this->normalizeIdArray($value);
         if ($this->lead_user_id) {
-            $leadKey = 'staff:'.$this->lead_user_id;
-            $keys = array_values(array_filter($keys, fn ($key) => $key !== $leadKey));
+            $ids = array_values(array_filter($ids, fn ($id) => $id !== (int) $this->lead_user_id));
         }
-        $this->selectedCollaboratorKeys = $keys;
+        $this->selectedStaffCollaboratorIds = $ids;
     }
 
     public function sendChatMessage(): void
@@ -471,61 +470,48 @@ PROMPT;
         return $byFirstName ? (int) $byFirstName->id : null;
     }
 
-    protected function splitCollaboratorSelection(): array
+    protected function normalizeIdArray(array $ids): array
     {
-        $staffIds = [];
-        $personIds = [];
-
-        foreach ($this->selectedCollaboratorKeys as $key) {
-            if (! is_string($key) || ! str_contains($key, ':')) {
-                continue;
-            }
-
-            [$type, $rawId] = explode(':', $key, 2);
-            $id = (int) $rawId;
-            if ($id <= 0) {
-                continue;
-            }
-
-            if ($type === 'staff') {
-                $staffIds[] = $id;
-            } elseif ($type === 'person') {
-                $personIds[] = $id;
+        $normalized = [];
+        foreach ($ids as $id) {
+            $candidate = (int) $id;
+            if ($candidate > 0) {
+                $normalized[] = $candidate;
             }
         }
 
-        return [
-            'staff' => array_values(array_unique($staffIds)),
-            'people' => array_values(array_unique($personIds)),
-        ];
+        return array_values(array_unique($normalized));
     }
 
-    protected function buildCollaboratorLabels($staffMembers, $contactCollaborators): array
+    public function addContactCollaborator(int $personId): void
     {
-        $staffById = $staffMembers->keyBy('id');
-        $contactsById = $contactCollaborators->keyBy('id');
-        $labels = [];
+        if (! Person::query()->whereKey($personId)->exists()) {
+            return;
+        }
 
-        foreach ($this->selectedCollaboratorKeys as $key) {
-            if (! is_string($key) || ! str_contains($key, ':')) {
-                continue;
-            }
+        $ids = $this->normalizeIdArray([...$this->selectedContactCollaboratorIds, $personId]);
+        $this->selectedContactCollaboratorIds = $ids;
+        $this->contactCollaboratorSearch = '';
+    }
 
-            [$type, $rawId] = explode(':', $key, 2);
-            $id = (int) $rawId;
-            if ($id <= 0) {
-                continue;
-            }
+    public function removeContactCollaborator(int $personId): void
+    {
+        $this->selectedContactCollaboratorIds = array_values(array_filter(
+            $this->selectedContactCollaboratorIds,
+            fn ($id) => (int) $id !== $personId
+        ));
+    }
 
-            if ($type === 'staff' && isset($staffById[$id])) {
-                $labels[] = $staffById[$id]->name.' (Staff)';
-            }
+    protected function buildCollaboratorLabels($selectedStaffCollaborators, $selectedContactCollaborators): array
+    {
+        $labels = $selectedStaffCollaborators
+            ->map(fn (User $user) => $user->name.' (Staff)')
+            ->values()
+            ->all();
 
-            if ($type === 'person' && isset($contactsById[$id])) {
-                $person = $contactsById[$id];
-                $orgName = $person->organization?->name;
-                $labels[] = $orgName ? "{$person->name} ({$orgName})" : $person->name;
-            }
+        foreach ($selectedContactCollaborators as $person) {
+            $orgName = $person->organization?->name;
+            $labels[] = $orgName ? "{$person->name} ({$orgName})" : $person->name;
         }
 
         return $labels;
@@ -568,10 +554,17 @@ PROMPT;
             $this->lead = trim($this->lead);
         }
 
-        $this->selectedCollaboratorKeys = array_values(array_unique(array_filter(
-            $this->selectedCollaboratorKeys,
-            fn ($key) => is_string($key) && $key !== ''
-        )));
+        $this->selectedStaffCollaboratorIds = $this->normalizeIdArray($this->selectedStaffCollaboratorIds);
+        $this->selectedContactCollaboratorIds = $this->normalizeIdArray($this->selectedContactCollaboratorIds);
+
+        if ($this->lead_user_id) {
+            $this->selectedStaffCollaboratorIds = array_values(array_filter(
+                $this->selectedStaffCollaboratorIds,
+                fn ($id) => $id !== $this->lead_user_id
+            ));
+        }
+
+        $this->contactCollaboratorSearch = trim($this->contactCollaboratorSearch);
     }
 
     public function save()
@@ -620,9 +613,8 @@ PROMPT;
                 ]);
             }
 
-            $collaboratorSelection = $this->splitCollaboratorSelection();
-            $staffCollaboratorIds = $collaboratorSelection['staff'];
-            $contactCollaboratorIds = $collaboratorSelection['people'];
+            $staffCollaboratorIds = $this->selectedStaffCollaboratorIds;
+            $contactCollaboratorIds = $this->selectedContactCollaboratorIds;
 
             if ($this->lead_user_id) {
                 $staffCollaboratorIds = array_values(array_diff($staffCollaboratorIds, [$this->lead_user_id]));
@@ -677,10 +669,37 @@ PROMPT;
             ->orderBy('name')
             ->get(['id', 'name', 'title']);
 
-        $contactCollaborators = Person::query()
-            ->with('organization:id,name')
-            ->orderBy('name')
-            ->get(['id', 'name', 'organization_id']);
+        $selectedStaffCollaborators = $staffMembers
+            ->whereIn('id', $this->selectedStaffCollaboratorIds)
+            ->values();
+
+        $selectedContactCollaborators = empty($this->selectedContactCollaboratorIds)
+            ? collect()
+            : Person::query()
+                ->with('organization:id,name')
+                ->whereIn('id', $this->selectedContactCollaboratorIds)
+                ->orderBy('name')
+                ->get(['id', 'name', 'email', 'organization_id']);
+
+        $contactSearchResults = collect();
+        $search = mb_strtolower(trim($this->contactCollaboratorSearch));
+        if (mb_strlen($search) >= 2) {
+            $pattern = '%'.$search.'%';
+            $contactSearchResults = Person::query()
+                ->with('organization:id,name')
+                ->when(
+                    ! empty($this->selectedContactCollaboratorIds),
+                    fn ($query) => $query->whereNotIn('id', $this->selectedContactCollaboratorIds)
+                )
+                ->where(function ($query) use ($pattern) {
+                    $query->whereRaw('LOWER(name) LIKE ?', [$pattern])
+                        ->orWhereRaw('LOWER(email) LIKE ?', [$pattern])
+                        ->orWhereHas('organization', fn ($orgQuery) => $orgQuery->whereRaw('LOWER(name) LIKE ?', [$pattern]));
+                })
+                ->orderBy('name')
+                ->limit(8)
+                ->get(['id', 'name', 'email', 'organization_id']);
+        }
 
         $leadDisplay = $this->lead;
         if ($this->lead_user_id) {
@@ -691,9 +710,10 @@ PROMPT;
             'statuses' => Project::STATUSES,
             'parentProjects' => Project::roots()->orderBy('name')->get(),
             'staffMembers' => $staffMembers,
-            'contactCollaborators' => $contactCollaborators,
+            'selectedContactCollaborators' => $selectedContactCollaborators,
+            'contactSearchResults' => $contactSearchResults,
             'leadDisplay' => $leadDisplay,
-            'selectedCollaboratorLabels' => $this->buildCollaboratorLabels($staffMembers, $contactCollaborators),
+            'selectedCollaboratorLabels' => $this->buildCollaboratorLabels($selectedStaffCollaborators, $selectedContactCollaborators),
             'projectTypes' => [
                 'initiative' => 'Initiative',
                 'publication' => 'Publication',

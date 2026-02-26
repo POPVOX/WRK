@@ -56,37 +56,18 @@
                     @endforeach
                 </div>
 
-                <form wire:submit.prevent="sendChatMessage" class="mt-4 space-y-3">
-                    <textarea wire:model="chatInput" rows="4"
-                        class="w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                        placeholder="Example: We are launching a multi-paper academic project under ACADEMIC PAPERS. First paper on civic AI governance due in June, led by Marci, global scope. Main goals are literature review, expert interviews, and publication draft."></textarea>
-
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div class="flex flex-wrap gap-2">
-                            <button type="button"
-                                wire:click="$set('chatInput', 'Create a project for a new paper in our academic series.')"
-                                class="px-2.5 py-1.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
-                                Paper project
-                            </button>
-                            <button type="button"
-                                wire:click="$set('chatInput', 'Global initiative led by Marci, starts next month, targets policy report by end of year.')"
-                                class="px-2.5 py-1.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
-                                Initiative
-                            </button>
-                        </div>
-
-                        <div class="flex items-center gap-2">
-                            <button type="button" wire:click="extractFromText"
-                                class="px-3 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
-                                @disabled($isExtracting)>
-                                Re-analyze
-                            </button>
-                            <button type="submit"
-                                class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
-                                @disabled($isExtracting)>
-                                Update Profile
-                            </button>
-                        </div>
+                <form wire:submit.prevent="sendChatMessage" class="mt-4">
+                    <div class="flex items-end gap-2">
+                        <textarea wire:model="chatInput" rows="3"
+                            class="w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white"></textarea>
+                        <button type="submit" aria-label="Send"
+                            class="h-11 w-11 shrink-0 inline-flex items-center justify-center text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-60"
+                            @disabled($isExtracting)>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 12h14m-7-7l7 7-7 7" />
+                            </svg>
+                        </button>
                     </div>
                 </form>
             </div>
@@ -128,33 +109,81 @@
                     </div>
 
                     <div>
-                        <label for="collaborators" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Collaborators (Staff + Contacts)
+                        <label for="staff_collaborators" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Collaborating Staff (POPVOX)
                         </label>
-                        <select id="collaborators" wire:model="selectedCollaboratorKeys" multiple size="6"
+                        <select id="staff_collaborators" wire:model="selectedStaffCollaboratorIds" multiple size="5"
                             class="w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                            <optgroup label="POPVOX Staff">
-                                @foreach($staffMembers as $staffMember)
-                                    <option value="staff:{{ $staffMember->id }}" @disabled((int) $lead_user_id === (int) $staffMember->id)>
-                                        {{ $staffMember->name }}
-                                    </option>
-                                @endforeach
-                            </optgroup>
-                            <optgroup label="Contacts">
-                                @foreach($contactCollaborators as $contact)
-                                    <option value="person:{{ $contact->id }}">
-                                        {{ $contact->name }}@if($contact->organization) - {{ $contact->organization->name }}@endif
-                                    </option>
-                                @endforeach
-                            </optgroup>
+                            @foreach($staffMembers as $staffMember)
+                                <option value="{{ $staffMember->id }}" @disabled((int) $lead_user_id === (int) $staffMember->id)>
+                                    {{ $staffMember->name }}
+                                </option>
+                            @endforeach
                         </select>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            Hold Cmd/Ctrl to select multiple collaborators.
+                            Hold Cmd/Ctrl to select multiple staff collaborators.
                         </p>
-                        @error('selectedCollaboratorKeys')
+                        @error('selectedStaffCollaboratorIds')
                             <p class="mt-1 text-xs text-red-600 dark:text-red-300">{{ $message }}</p>
                         @enderror
-                        @error('selectedCollaboratorKeys.*')
+                        @error('selectedStaffCollaboratorIds.*')
+                            <p class="mt-1 text-xs text-red-600 dark:text-red-300">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="contact_collaborators_search" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            External Collaborators (Contacts)
+                        </label>
+                        <input id="contact_collaborators_search" type="text" wire:model.live.debounce.300ms="contactCollaboratorSearch"
+                            class="w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            placeholder="Type contact name or organization...">
+
+                        @if(mb_strlen(trim($contactCollaboratorSearch)) >= 2)
+                            <div class="mt-2 rounded-lg border border-gray-200 dark:border-gray-700 max-h-44 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
+                                @forelse($contactSearchResults as $contactResult)
+                                    <button type="button" wire:click="addContactCollaborator({{ $contactResult->id }})"
+                                        class="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700">
+                                        <div class="text-sm font-medium text-gray-900 dark:text-white">{{ $contactResult->name }}</div>
+                                        <div class="text-xs text-gray-500 dark:text-gray-400">
+                                            @if($contactResult->organization)
+                                                {{ $contactResult->organization->name }}
+                                            @elseif($contactResult->email)
+                                                {{ $contactResult->email }}
+                                            @else
+                                                Contact
+                                            @endif
+                                        </div>
+                                    </button>
+                                @empty
+                                    <div class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                                        No matching contacts.
+                                    </div>
+                                @endforelse
+                            </div>
+                        @endif
+
+                        @if($selectedContactCollaborators->isNotEmpty())
+                            <div class="mt-2 flex flex-wrap gap-2">
+                                @foreach($selectedContactCollaborators as $selectedContact)
+                                    <span
+                                        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+                                        <span>{{ $selectedContact->name }}</span>
+                                        <button type="button" wire:click="removeContactCollaborator({{ $selectedContact->id }})"
+                                            class="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
+                                            aria-label="Remove collaborator">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </span>
+                                @endforeach
+                            </div>
+                        @endif
+                        @error('selectedContactCollaboratorIds')
+                            <p class="mt-1 text-xs text-red-600 dark:text-red-300">{{ $message }}</p>
+                        @enderror
+                        @error('selectedContactCollaboratorIds.*')
                             <p class="mt-1 text-xs text-red-600 dark:text-red-300">{{ $message }}</p>
                         @enderror
                     </div>
@@ -218,8 +247,11 @@
                     </a>
                     <button type="button" wire:click="save"
                         class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-60"
-                        @disabled($name === '' || $isExtracting)>
-                        Create Project
+                        @disabled($name === '' || $isExtracting)
+                        wire:loading.attr="disabled"
+                        wire:target="save">
+                        <span wire:loading.remove wire:target="save">Create Project</span>
+                        <span wire:loading wire:target="save">Creating...</span>
                     </button>
                 </div>
 
