@@ -162,7 +162,7 @@ class ProjectCreate extends Component
         'selectedStaffCollaboratorIds.*' => 'integer|exists:users,id',
         'selectedContactCollaboratorIds' => 'array',
         'selectedContactCollaboratorIds.*' => 'integer|exists:people,id',
-        'url' => 'nullable|url|max:500',
+        'url' => 'nullable|string|max:500',
         'tagsInput' => 'nullable|string',
         'parent_project_id' => 'nullable|exists:projects,id',
         'project_type' => 'required|string|in:initiative,publication,event,chapter,newsletter,tool,research,outreach,component',
@@ -536,13 +536,28 @@ PROMPT;
         return implode("\n", array_values(array_filter($parts)));
     }
 
+    protected function normalizeUrlValue(?string $value): ?string
+    {
+        $url = trim((string) ($value ?? ''));
+        if ($url === '' || strtolower($url) === 'null') {
+            return null;
+        }
+
+        // Best-effort normalization for AI output like "example.com/path".
+        if (! str_contains($url, '://') && preg_match('/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i', $url)) {
+            $url = 'https://'.$url;
+        }
+
+        return filter_var($url, FILTER_VALIDATE_URL) ? $url : null;
+    }
+
     protected function normalizeFieldsBeforeSave(): void
     {
         $this->name = trim($this->name);
         $this->description = trim($this->description);
         $this->goals = trim($this->goals);
         $this->scope = trim($this->scope);
-        $this->url = trim($this->url);
+        $this->url = $this->normalizeUrlValue($this->url) ?? '';
         $this->tagsInput = trim($this->tagsInput);
         $this->status = trim($this->status);
         $this->project_type = trim($this->project_type);
