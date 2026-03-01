@@ -67,6 +67,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Contacts (CRM-friendly alias)
     Route::get('/contacts', \App\Livewire\People\PersonIndex::class)->name('contacts.index');
+    Route::get('/contacts/lists', \App\Livewire\People\ContactListsIndex::class)->name('contacts.lists');
     Route::get('/contacts/{person}', \App\Livewire\People\PersonShow::class)->name('contacts.show');
 
     // Google Calendar OAuth

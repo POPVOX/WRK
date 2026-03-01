@@ -5,7 +5,11 @@ namespace App\Livewire\Communications;
 use App\Jobs\SyncGmailMessages;
 use App\Models\Action;
 use App\Models\GmailMessage;
+use App\Models\Grant;
 use App\Models\InboxActionLog;
+use App\Models\InboxThreadContextLink;
+use App\Models\Meeting;
+use App\Models\Organization;
 use App\Models\Person;
 use App\Models\PersonInteraction;
 use App\Models\Project;
@@ -35,6 +39,18 @@ class InboxIndex extends Component
     public ?string $selectedThreadKey = null;
 
     public string $selectedProjectId = '';
+
+    public string $selectedGrantId = '';
+
+    public string $selectedContextPersonId = '';
+
+    public string $selectedContextOrganizationId = '';
+
+    public string $selectedContextMeetingId = '';
+
+    public string $selectedContextMediaContactId = '';
+
+    public string $selectedContextMediaOutletId = '';
 
     public string $replyDraft = '';
 
@@ -82,6 +98,12 @@ class InboxIndex extends Component
         $this->normalizeFolder();
         $this->selectedThreadKey = null;
         $this->selectedProjectId = '';
+        $this->selectedGrantId = '';
+        $this->selectedContextPersonId = '';
+        $this->selectedContextOrganizationId = '';
+        $this->selectedContextMeetingId = '';
+        $this->selectedContextMediaContactId = '';
+        $this->selectedContextMediaOutletId = '';
         $this->replyDraft = '';
     }
 
@@ -89,6 +111,12 @@ class InboxIndex extends Component
     {
         $this->selectedThreadKey = null;
         $this->selectedProjectId = '';
+        $this->selectedGrantId = '';
+        $this->selectedContextPersonId = '';
+        $this->selectedContextOrganizationId = '';
+        $this->selectedContextMeetingId = '';
+        $this->selectedContextMediaContactId = '';
+        $this->selectedContextMediaOutletId = '';
         $this->replyDraft = '';
     }
 
@@ -96,6 +124,12 @@ class InboxIndex extends Component
     {
         $this->selectedThreadKey = $threadKey;
         $this->selectedProjectId = '';
+        $this->selectedGrantId = '';
+        $this->selectedContextPersonId = '';
+        $this->selectedContextOrganizationId = '';
+        $this->selectedContextMeetingId = '';
+        $this->selectedContextMediaContactId = '';
+        $this->selectedContextMediaOutletId = '';
         $this->replyDraft = '';
     }
 
@@ -140,6 +174,108 @@ class InboxIndex extends Component
         $this->composeBody = $this->replyDraft !== '' ? $this->replyDraft : '';
     }
 
+    public function openComposerForReplyAll(): void
+    {
+        $this->clearComposeStatus();
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        $latest = $this->selectedLatestMessageModel();
+        if (! $latest || ! $user) {
+            $this->dispatch('notify', type: 'error', message: 'Thread details are unavailable for reply-all.');
+
+            return;
+        }
+
+        $userEmail = Str::lower(trim((string) $user->email));
+        $toRecipients = collect(array_merge(
+            [trim((string) $latest->from_email)],
+            (array) $latest->to_emails
+        ))
+            ->map(fn ($email) => Str::lower(trim((string) $email)))
+            ->filter(fn ($email) => $email !== '' && $email !== $userEmail)
+            ->unique()
+            ->values();
+
+        $ccRecipients = collect((array) $latest->cc_emails)
+            ->map(fn ($email) => Str::lower(trim((string) $email)))
+            ->filter(fn ($email) => $email !== '' && $email !== $userEmail && ! $toRecipients->contains($email))
+            ->unique()
+            ->values();
+
+        if ($toRecipients->isEmpty()) {
+            $counterpart = trim((string) ($snapshot['counterpart_email'] ?? ''));
+            if ($counterpart !== '' && Str::lower($counterpart) !== $userEmail) {
+                $toRecipients = collect([$counterpart]);
+            }
+        }
+
+        if ($toRecipients->isEmpty()) {
+            $this->dispatch('notify', type: 'error', message: 'No valid recipients found for reply-all.');
+
+            return;
+        }
+
+        $subject = (string) ($snapshot['subject'] ?? 'Reply');
+        if (! str_starts_with(Str::lower($subject), 're:')) {
+            $subject = 'Re: '.$subject;
+        }
+
+        $this->showComposer = true;
+        $this->composeTo = $toRecipients->implode(', ');
+        $this->composeCc = $ccRecipients->implode(', ');
+        $this->composeBcc = '';
+        $this->composeSubject = $subject;
+        $this->composeBody = $this->replyDraft !== '' ? $this->replyDraft : '';
+    }
+
+    public function openComposerForForward(): void
+    {
+        $this->clearComposeStatus();
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $latest = $this->selectedLatestMessageModel();
+        if (! $latest) {
+            $this->dispatch('notify', type: 'error', message: 'Thread details are unavailable for forwarding.');
+
+            return;
+        }
+
+        $subject = (string) ($snapshot['subject'] ?? 'Forward');
+        if (! str_starts_with(Str::lower($subject), 'fwd:') && ! str_starts_with(Str::lower($subject), 'fw:')) {
+            $subject = 'Fwd: '.$subject;
+        }
+
+        $quotedBlock = implode("\n", array_filter([
+            '',
+            '---------- Forwarded message ----------',
+            'From: '.trim((string) ($latest->from_name ?: $latest->from_email)),
+            'Date: '.$this->formatMessageDateTime($latest->sent_at),
+            'Subject: '.((string) ($latest->subject ?: '(No subject)')),
+            'To: '.implode(', ', (array) $latest->to_emails),
+            ! empty($latest->cc_emails) ? 'Cc: '.implode(', ', (array) $latest->cc_emails) : null,
+            '',
+            trim((string) ($latest->snippet ?: '')),
+        ]));
+
+        $this->showComposer = true;
+        $this->composeTo = '';
+        $this->composeCc = '';
+        $this->composeBcc = '';
+        $this->composeSubject = $subject;
+        $this->composeBody = trim($this->replyDraft) !== '' ? trim($this->replyDraft)."\n\n".$quotedBlock : $quotedBlock;
+    }
+
     public function closeComposer(): void
     {
         $this->clearComposeStatus();
@@ -177,19 +313,43 @@ class InboxIndex extends Component
                     details: ['reason' => 'google_not_connected']
                 );
             } else {
-                $queueName = (string) (config('queue.gmail_queue') ?: env('GMAIL_SYNC_QUEUE', 'default'));
-                SyncGmailMessages::dispatch($user, 90, 300)->onQueue($queueName);
+                // Perform a fast inline sync first so the Inbox updates immediately for the user.
+                $inlineSummary = $gmailService->syncRecentMessages($user, 30, 120);
 
-                $this->dispatch('notify', type: 'success', message: 'Gmail sync started. It will finish in the background.');
+                $queueName = (string) (config('queue.gmail_queue') ?: env('GMAIL_SYNC_QUEUE', 'default'));
+                try {
+                    // Keep deeper backfill queued so history continues to catch up when workers are healthy.
+                    SyncGmailMessages::dispatch($user, 90, 300)->onQueue($queueName);
+                } catch (\Throwable $queueException) {
+                    \Log::warning('Failed to enqueue background Gmail sync after inline sync', [
+                        'user_id' => $user->id,
+                        'queue' => $queueName,
+                        'error' => $queueException->getMessage(),
+                    ]);
+                }
+
+                $imported = (int) ($inlineSummary['imported'] ?? 0);
+                $updated = (int) ($inlineSummary['updated'] ?? 0);
+                $processed = (int) ($inlineSummary['processed'] ?? 0);
+                $errors = (int) ($inlineSummary['errors'] ?? 0);
+
+                $this->dispatch(
+                    'notify',
+                    type: 'success',
+                    message: "Gmail sync complete (processed {$processed}, imported {$imported}, updated {$updated}, errors {$errors})."
+                );
                 $this->recordInboxAction(
                     suggestionKey: 'sync_gmail',
                     actionLabel: 'Sync Gmail',
-                    actionStatus: 'queued',
+                    actionStatus: 'applied',
                     snapshot: null,
                     details: [
                         'queue' => $queueName,
-                        'days_back' => 90,
-                        'max_messages' => 300,
+                        'inline_days_back' => 30,
+                        'inline_max_messages' => 120,
+                        'queued_days_back' => 90,
+                        'queued_max_messages' => 300,
+                        'inline_summary' => $inlineSummary,
                     ]
                 );
             }
@@ -419,6 +579,668 @@ class InboxIndex extends Component
         }
     }
 
+    public function deleteSelectedThread(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $threadId = trim((string) ($snapshot['gmail_thread_id'] ?? ''));
+        if ($threadId === '') {
+            $this->dispatch('notify', type: 'error', message: 'No Gmail thread id found for this conversation.');
+
+            return;
+        }
+
+        try {
+            app(GoogleGmailService::class)->trashThread($user, $threadId);
+            $this->applyThreadLabelMutation($threadId, ['TRASH'], ['INBOX', 'SPAM']);
+            $this->recordInboxAction(
+                suggestionKey: 'delete_thread',
+                actionLabel: 'Delete thread',
+                actionStatus: 'applied',
+                snapshot: $snapshot,
+                details: ['gmail_thread_id' => $threadId]
+            );
+            $this->dispatch('notify', type: 'success', message: 'Thread moved to trash.');
+        } catch (\Throwable $exception) {
+            $this->recordInboxAction(
+                suggestionKey: 'delete_thread',
+                actionLabel: 'Delete thread',
+                actionStatus: 'failed',
+                snapshot: $snapshot,
+                details: ['gmail_thread_id' => $threadId, 'error' => $exception->getMessage()]
+            );
+            $this->dispatch('notify', type: 'error', message: 'Delete failed: '.$exception->getMessage());
+        }
+    }
+
+    public function markSelectedThreadAsSpam(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $threadId = trim((string) ($snapshot['gmail_thread_id'] ?? ''));
+        if ($threadId === '') {
+            $this->dispatch('notify', type: 'error', message: 'No Gmail thread id found for this conversation.');
+
+            return;
+        }
+
+        try {
+            app(GoogleGmailService::class)->markThreadAsSpam($user, $threadId);
+            $this->applyThreadLabelMutation($threadId, ['SPAM'], ['INBOX', 'UNREAD']);
+            $this->recordInboxAction(
+                suggestionKey: 'mark_spam',
+                actionLabel: 'Mark thread as spam',
+                actionStatus: 'applied',
+                snapshot: $snapshot,
+                details: ['gmail_thread_id' => $threadId]
+            );
+            $this->dispatch('notify', type: 'success', message: 'Thread marked as spam.');
+        } catch (\Throwable $exception) {
+            $this->recordInboxAction(
+                suggestionKey: 'mark_spam',
+                actionLabel: 'Mark thread as spam',
+                actionStatus: 'failed',
+                snapshot: $snapshot,
+                details: ['gmail_thread_id' => $threadId, 'error' => $exception->getMessage()]
+            );
+            $this->dispatch('notify', type: 'error', message: 'Spam action failed: '.$exception->getMessage());
+        }
+    }
+
+    public function saveThreadToProject(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $projectId = (int) $this->selectedProjectId;
+        if ($projectId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Choose a project first.');
+
+            return;
+        }
+
+        $project = Project::query()->find($projectId);
+        if (! $project) {
+            $this->dispatch('notify', type: 'error', message: 'Selected project was not found.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $subject = trim((string) ($snapshot['subject'] ?? 'Email thread'));
+        $counterpart = trim((string) ($snapshot['counterpart_name'] ?? 'Unknown sender'));
+        $counterpartEmail = trim((string) ($snapshot['counterpart_email'] ?? ''));
+        $snippet = trim((string) ($snapshot['latest_snippet'] ?? ''));
+        $sentAt = $snapshot['latest_sent_at'] instanceof Carbon ? $snapshot['latest_sent_at']->format('M j, Y g:i A') : 'Unknown';
+
+        $content = implode("\n", array_filter([
+            'Saved from Inbox thread.',
+            'Subject: '.$subject,
+            'Counterpart: '.$counterpart.($counterpartEmail !== '' ? ' <'.$counterpartEmail.'>' : ''),
+            'Latest message: '.$sentAt,
+            $snippet !== '' ? 'Snippet: '.$snippet : null,
+        ]));
+
+        $project->notes()->create([
+            'user_id' => $user->id,
+            'content' => $content,
+            'note_type' => 'update',
+        ]);
+
+        $person = $snapshot['person'] ?? null;
+        if ($person instanceof Person) {
+            $project->people()->syncWithoutDetaching([
+                $person->id => [
+                    'role' => 'email counterpart',
+                    'notes' => 'Linked from Inbox save-to-project action.',
+                ],
+            ]);
+        }
+
+        $organization = $snapshot['organization'] ?? null;
+        if ($organization instanceof Organization) {
+            $project->organizations()->syncWithoutDetaching([
+                $organization->id => [
+                    'role' => 'external counterpart',
+                    'notes' => 'Linked from Inbox save-to-project action.',
+                ],
+            ]);
+        }
+
+        $this->saveContextLink(
+            $snapshot,
+            InboxThreadContextLink::TYPE_PROJECT,
+            $project->id,
+            ['source' => 'save_to_project']
+        );
+
+        $this->recordInboxAction(
+            suggestionKey: 'save_to_project',
+            actionLabel: 'Save thread to project',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: ['project_id' => $project->id, 'project_name' => $project->name]
+        );
+
+        $this->dispatch('notify', type: 'success', message: 'Email context saved to project.');
+    }
+
+    public function linkThreadToSelectedContact(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $personId = (int) $this->selectedContextPersonId;
+        if ($personId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Choose a contact first.');
+
+            return;
+        }
+
+        $person = Person::query()->find($personId);
+        if (! $person) {
+            $this->dispatch('notify', type: 'error', message: 'Selected contact was not found.');
+
+            return;
+        }
+
+        $query = $this->threadMessagesQuery($snapshot);
+        $query->update(['person_id' => $person->id]);
+
+        $organizationId = (int) $this->selectedContextOrganizationId;
+        if ($organizationId > 0 && ! $person->organization_id) {
+            $person->organization_id = $organizationId;
+            $person->save();
+        }
+
+        $this->saveContextLink(
+            $snapshot,
+            InboxThreadContextLink::TYPE_PERSON,
+            $person->id,
+            ['source' => 'manual_link']
+        );
+
+        $this->recordInboxAction(
+            suggestionKey: 'link_thread_contact',
+            actionLabel: 'Link thread to contact',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: ['person_id' => $person->id]
+        );
+
+        $this->dispatch('notify', type: 'success', message: 'Thread linked to contact.');
+    }
+
+    public function createContactFromThread(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $counterpartName = trim((string) ($snapshot['counterpart_name'] ?? ''));
+        $counterpartEmail = Str::lower(trim((string) ($snapshot['counterpart_email'] ?? '')));
+        $organizationId = (int) $this->selectedContextOrganizationId;
+
+        $person = null;
+        if ($counterpartEmail !== '') {
+            $person = Person::query()
+                ->whereRaw('LOWER(email) = ?', [$counterpartEmail])
+                ->first();
+        }
+
+        if (! $person) {
+            $person = Person::query()->create([
+                'name' => $counterpartName !== '' ? $counterpartName : Str::before($counterpartEmail, '@'),
+                'email' => $counterpartEmail !== '' ? $counterpartEmail : null,
+                'organization_id' => $organizationId > 0 ? $organizationId : null,
+            ]);
+        } elseif ($organizationId > 0 && ! $person->organization_id) {
+            $person->organization_id = $organizationId;
+            $person->save();
+        }
+
+        $this->selectedContextPersonId = (string) $person->id;
+        $this->threadMessagesQuery($snapshot)->update(['person_id' => $person->id]);
+
+        $this->saveContextLink(
+            $snapshot,
+            InboxThreadContextLink::TYPE_PERSON,
+            $person->id,
+            ['source' => 'created_from_thread']
+        );
+
+        $this->recordInboxAction(
+            suggestionKey: 'create_contact_from_thread',
+            actionLabel: 'Create contact from thread',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: ['person_id' => $person->id, 'email' => $person->email]
+        );
+
+        $this->dispatch('notify', type: 'success', message: 'Contact created and linked.');
+    }
+
+    public function linkThreadToSelectedOrganization(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $organizationId = (int) $this->selectedContextOrganizationId;
+        if ($organizationId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Choose an organization first.');
+
+            return;
+        }
+
+        $organization = Organization::query()->find($organizationId);
+        if (! $organization) {
+            $this->dispatch('notify', type: 'error', message: 'Selected organization was not found.');
+
+            return;
+        }
+
+        $person = $this->selectedLatestMessageModel()?->person;
+        if ($person && ! $person->organization_id) {
+            $person->organization_id = $organization->id;
+            $person->save();
+        }
+
+        $this->saveContextLink(
+            $snapshot,
+            InboxThreadContextLink::TYPE_ORGANIZATION,
+            $organization->id,
+            ['source' => 'manual_link']
+        );
+
+        $this->recordInboxAction(
+            suggestionKey: 'link_thread_organization',
+            actionLabel: 'Link thread to organization',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: ['organization_id' => $organization->id]
+        );
+
+        $this->dispatch('notify', type: 'success', message: 'Thread linked to organization.');
+    }
+
+    public function createOrganizationFromThread(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $counterpartEmail = Str::lower(trim((string) ($snapshot['counterpart_email'] ?? '')));
+        $counterpartName = trim((string) ($snapshot['counterpart_name'] ?? ''));
+        $domain = $counterpartEmail !== '' ? trim((string) Str::after($counterpartEmail, '@')) : '';
+        $name = $counterpartName !== '' ? $counterpartName : 'Inbox Organization';
+        if ($domain !== '' && Str::contains($domain, '.')) {
+            $name = Str::headline((string) Str::before($domain, '.'));
+        }
+
+        $organization = Organization::query()->firstOrCreate(
+            ['name' => $name],
+            [
+                'website' => $domain !== '' ? 'https://'.$domain : null,
+            ]
+        );
+
+        $this->selectedContextOrganizationId = (string) $organization->id;
+
+        $person = $this->selectedLatestMessageModel()?->person;
+        if ($person && ! $person->organization_id) {
+            $person->organization_id = $organization->id;
+            $person->save();
+        }
+
+        $this->saveContextLink(
+            $snapshot,
+            InboxThreadContextLink::TYPE_ORGANIZATION,
+            $organization->id,
+            ['source' => 'created_from_thread']
+        );
+
+        $this->recordInboxAction(
+            suggestionKey: 'create_org_from_thread',
+            actionLabel: 'Create organization from thread',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: ['organization_id' => $organization->id, 'organization_name' => $organization->name]
+        );
+
+        $this->dispatch('notify', type: 'success', message: 'Organization created and linked.');
+    }
+
+    public function linkThreadToSelectedMeeting(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $meetingId = (int) $this->selectedContextMeetingId;
+        if ($meetingId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Choose a meeting first.');
+
+            return;
+        }
+
+        $meeting = Meeting::query()->find($meetingId);
+        if (! $meeting) {
+            $this->dispatch('notify', type: 'error', message: 'Selected meeting was not found.');
+
+            return;
+        }
+
+        $person = $this->selectedLatestMessageModel()?->person;
+        if ($person instanceof Person) {
+            $meeting->people()->syncWithoutDetaching([$person->id]);
+        }
+
+        $organization = $person?->organization;
+        if ($organization instanceof Organization) {
+            $meeting->organizations()->syncWithoutDetaching([$organization->id]);
+        }
+
+        $projectId = (int) $this->selectedProjectId;
+        if ($projectId > 0) {
+            $meeting->projects()->syncWithoutDetaching([
+                $projectId => ['relevance_note' => 'Linked from Inbox thread'],
+            ]);
+        }
+
+        $this->saveContextLink(
+            $snapshot,
+            InboxThreadContextLink::TYPE_MEETING,
+            $meeting->id,
+            ['source' => 'manual_link']
+        );
+
+        $this->recordInboxAction(
+            suggestionKey: 'link_thread_meeting',
+            actionLabel: 'Link thread to meeting',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: ['meeting_id' => $meeting->id]
+        );
+
+        $this->dispatch('notify', type: 'success', message: 'Thread linked to meeting.');
+    }
+
+    public function createMeetingFromThread(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $meetingDate = $snapshot['latest_sent_at'] instanceof Carbon
+            ? $snapshot['latest_sent_at']->toDateString()
+            : now()->toDateString();
+
+        $meeting = Meeting::query()->create([
+            'user_id' => $user->id,
+            'title' => Str::limit((string) ($snapshot['subject'] ?? 'Inbox follow-up'), 180),
+            'meeting_date' => $meetingDate,
+            'status' => Meeting::STATUS_PENDING,
+            'prep_notes' => 'Created from Inbox thread with '.trim((string) ($snapshot['counterpart_name'] ?? 'counterpart')).'.',
+        ]);
+
+        $person = $this->selectedLatestMessageModel()?->person;
+        if ($person instanceof Person) {
+            $meeting->people()->syncWithoutDetaching([$person->id]);
+            if ($person->organization_id) {
+                $meeting->organizations()->syncWithoutDetaching([$person->organization_id]);
+            }
+        }
+
+        $projectId = (int) $this->selectedProjectId;
+        if ($projectId > 0) {
+            $meeting->projects()->syncWithoutDetaching([
+                $projectId => ['relevance_note' => 'Created from Inbox thread'],
+            ]);
+        }
+
+        $this->selectedContextMeetingId = (string) $meeting->id;
+
+        $this->saveContextLink(
+            $snapshot,
+            InboxThreadContextLink::TYPE_MEETING,
+            $meeting->id,
+            ['source' => 'created_from_thread']
+        );
+
+        $this->recordInboxAction(
+            suggestionKey: 'create_meeting_from_thread',
+            actionLabel: 'Create meeting from thread',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: ['meeting_id' => $meeting->id, 'meeting_date' => $meetingDate]
+        );
+
+        $this->dispatch('notify', type: 'success', message: 'Meeting created and linked.');
+    }
+
+    public function linkThreadToSelectedGrant(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user || ! $user->isManagement()) {
+            $this->dispatch('notify', type: 'error', message: 'Funding context is limited to management/admin users.');
+
+            return;
+        }
+
+        $grantId = (int) $this->selectedGrantId;
+        if ($grantId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Choose a grant first.');
+
+            return;
+        }
+
+        $grant = Grant::query()
+            ->visibleTo($user)
+            ->whereKey($grantId)
+            ->first();
+
+        if (! $grant) {
+            $this->dispatch('notify', type: 'error', message: 'Selected grant was not found or is not visible.');
+
+            return;
+        }
+
+        $this->saveContextLink(
+            $snapshot,
+            InboxThreadContextLink::TYPE_GRANT,
+            $grant->id,
+            ['source' => 'manual_link']
+        );
+
+        $this->recordInboxAction(
+            suggestionKey: 'link_thread_grant',
+            actionLabel: 'Link thread to grant',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: ['grant_id' => $grant->id]
+        );
+
+        $this->dispatch('notify', type: 'success', message: 'Thread linked to funder/grant context.');
+    }
+
+    public function linkThreadToSelectedMediaContact(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $personId = (int) $this->selectedContextMediaContactId;
+        if ($personId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Choose a media contact first.');
+
+            return;
+        }
+
+        $person = Person::query()->find($personId);
+        if (! $person) {
+            $this->dispatch('notify', type: 'error', message: 'Selected media contact was not found.');
+
+            return;
+        }
+
+        if (! $person->is_journalist) {
+            $person->is_journalist = true;
+            $person->save();
+        }
+
+        $this->saveContextLink(
+            $snapshot,
+            InboxThreadContextLink::TYPE_MEDIA_CONTACT,
+            $person->id,
+            ['source' => 'manual_link']
+        );
+
+        $this->recordInboxAction(
+            suggestionKey: 'link_thread_media_contact',
+            actionLabel: 'Link thread to media contact',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: ['person_id' => $person->id]
+        );
+
+        $this->dispatch('notify', type: 'success', message: 'Thread linked to media contact.');
+    }
+
+    public function linkThreadToSelectedMediaOutlet(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $organizationId = (int) $this->selectedContextMediaOutletId;
+        if ($organizationId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Choose a media outlet first.');
+
+            return;
+        }
+
+        $organization = Organization::query()->find($organizationId);
+        if (! $organization) {
+            $this->dispatch('notify', type: 'error', message: 'Selected media outlet was not found.');
+
+            return;
+        }
+
+        if (! $organization->type) {
+            $organization->type = 'Media';
+            $organization->save();
+        }
+
+        $this->saveContextLink(
+            $snapshot,
+            InboxThreadContextLink::TYPE_MEDIA_OUTLET,
+            $organization->id,
+            ['source' => 'manual_link']
+        );
+
+        $this->recordInboxAction(
+            suggestionKey: 'link_thread_media_outlet',
+            actionLabel: 'Link thread to media outlet',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: ['organization_id' => $organization->id]
+        );
+
+        $this->dispatch('notify', type: 'success', message: 'Thread linked to media outlet.');
+    }
+
+    public function removeThreadContextLink(int $linkId): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $link = InboxThreadContextLink::query()
+            ->where('user_id', $user->id)
+            ->where('thread_key', (string) ($snapshot['thread_key'] ?? ''))
+            ->whereKey($linkId)
+            ->first();
+
+        if (! $link) {
+            return;
+        }
+
+        $link->delete();
+        $this->dispatch('notify', type: 'success', message: 'Context link removed.');
+    }
+
     public function createFollowUpTask(): void
     {
         $snapshot = $this->selectedThreadSnapshot();
@@ -553,6 +1375,146 @@ class InboxIndex extends Component
         );
 
         $this->dispatch('notify', type: 'success', message: 'Contact linked to project.');
+    }
+
+    public function linkSelectedProjectToGrant(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user || ! $user->isManagement()) {
+            $this->dispatch('notify', type: 'error', message: 'Funding links are available to management/admin users only.');
+
+            return;
+        }
+
+        $projectId = (int) $this->selectedProjectId;
+        if ($projectId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Choose a project first.');
+
+            return;
+        }
+
+        $grantId = (int) $this->selectedGrantId;
+        if ($grantId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Choose a grant first.');
+
+            return;
+        }
+
+        $project = Project::query()->find($projectId);
+        if (! $project) {
+            $this->dispatch('notify', type: 'error', message: 'Selected project was not found.');
+
+            return;
+        }
+
+        $grant = Grant::query()
+            ->visibleTo($user)
+            ->whereKey($grantId)
+            ->first();
+
+        if (! $grant) {
+            $this->dispatch('notify', type: 'error', message: 'Selected grant was not found or is not visible to you.');
+
+            return;
+        }
+
+        $grant->projects()->syncWithoutDetaching([
+            $project->id => [
+                'notes' => 'Linked from Inbox thread: '.Str::limit((string) ($snapshot['subject'] ?? ''), 180),
+            ],
+        ]);
+
+        $this->recordInboxAction(
+            suggestionKey: 'link_project_grant',
+            actionLabel: 'Link project to grant',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: [
+                'project_id' => $project->id,
+                'grant_id' => $grant->id,
+            ]
+        );
+
+        $this->dispatch('notify', type: 'success', message: 'Project linked to grant.');
+    }
+
+    public function openMatchedFunder(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $organization = $snapshot['organization'] ?? null;
+        if (! $organization || empty($organization->id)) {
+            $this->dispatch('notify', type: 'error', message: 'No funder organization found for this thread.');
+
+            return;
+        }
+
+        $this->recordInboxAction(
+            suggestionKey: 'open_funder_record',
+            actionLabel: 'Open funder record',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: [
+                'organization_id' => (int) $organization->id,
+            ]
+        );
+
+        $this->redirectRoute('organizations.show', ['organization' => (int) $organization->id], navigate: true);
+    }
+
+    public function openSelectedGrantRecord(): void
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            $this->dispatch('notify', type: 'error', message: 'Select a thread first.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user || ! $user->isAdmin()) {
+            $this->dispatch('notify', type: 'error', message: 'Grant records are currently admin-only.');
+
+            return;
+        }
+
+        $grantId = (int) $this->selectedGrantId;
+        if ($grantId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Choose a grant first.');
+
+            return;
+        }
+
+        $grant = Grant::query()->whereKey($grantId)->first();
+        if (! $grant) {
+            $this->dispatch('notify', type: 'error', message: 'Selected grant was not found.');
+
+            return;
+        }
+
+        $this->recordInboxAction(
+            suggestionKey: 'open_grant_record',
+            actionLabel: 'Open grant record',
+            actionStatus: 'applied',
+            snapshot: $snapshot,
+            details: [
+                'grant_id' => $grant->id,
+            ]
+        );
+
+        $this->redirectRoute('grants.show', ['grant' => $grant->id], navigate: true);
     }
 
     public function createProjectFromThread(): void
@@ -800,6 +1762,7 @@ class InboxIndex extends Component
         if (! $this->selectedThreadKey || ! $groups->has($this->selectedThreadKey)) {
             $this->selectedThreadKey = (string) $groups->keys()->first();
             $this->selectedProjectId = '';
+            $this->selectedGrantId = '';
             $this->replyDraft = '';
         }
 
@@ -821,6 +1784,7 @@ class InboxIndex extends Component
         $person = $latest->person;
         $organization = $person?->organization;
         $projectCandidates = $this->projectCandidates($messages, $person)->values();
+        $grantCandidates = $this->grantCandidates($messages, $person, $organization)->values();
 
         if ($projectCandidates->isNotEmpty()) {
             $candidateIds = $projectCandidates->pluck('id')->map(fn ($id) => (string) $id)->all();
@@ -831,6 +1795,15 @@ class InboxIndex extends Component
             $this->selectedProjectId = '';
         }
 
+        if ($grantCandidates->isNotEmpty()) {
+            $candidateIds = $grantCandidates->pluck('id')->map(fn ($id) => (string) $id)->all();
+            if ($this->selectedGrantId === '' || ! in_array((string) $this->selectedGrantId, $candidateIds, true)) {
+                $this->selectedGrantId = (string) $grantCandidates->first()['id'];
+            }
+        } else {
+            $this->selectedGrantId = '';
+        }
+
         $isPersonLinkedToSelectedProject = false;
         if ($person && $this->selectedProjectId !== '') {
             $isPersonLinkedToSelectedProject = $person->projects()
@@ -838,16 +1811,27 @@ class InboxIndex extends Component
                 ->exists();
         }
 
+        $isProjectLinkedToSelectedGrant = false;
+        if ($this->selectedProjectId !== '' && $this->selectedGrantId !== '' && $this->canUseFundingContext()) {
+            $isProjectLinkedToSelectedGrant = Grant::query()
+                ->visibleTo(Auth::user())
+                ->whereKey((int) $this->selectedGrantId)
+                ->whereHas('projects', fn ($query) => $query->where('projects.id', (int) $this->selectedProjectId))
+                ->exists();
+        }
+
         $counterpart = $this->counterpartForMessage($latest);
-        $analysis = $this->agentAnalysis($messages, $latest, $projectCandidates, $person, $organization);
+        $analysis = $this->agentAnalysis($messages, $latest, $projectCandidates, $grantCandidates, $person, $organization);
 
         $suggestions = $this->threadSuggestions(
             $messages,
             $latest,
             $projectCandidates,
+            $grantCandidates,
             $person,
             $organization,
-            $isPersonLinkedToSelectedProject
+            $isPersonLinkedToSelectedProject,
+            $isProjectLinkedToSelectedGrant
         );
 
         return [
@@ -874,7 +1858,9 @@ class InboxIndex extends Component
             'latest_snippet' => $latest->snippet,
             'sentiment' => $this->threadSentiment($messages),
             'project_candidates' => $projectCandidates->all(),
+            'grant_candidates' => $grantCandidates->all(),
             'is_person_linked_to_selected_project' => $isPersonLinkedToSelectedProject,
+            'is_project_linked_to_selected_grant' => $isProjectLinkedToSelectedGrant,
             'agent_analysis' => $analysis,
             'suggestions' => $suggestions,
             'latest_sent_at' => $latest->sent_at,
@@ -885,9 +1871,11 @@ class InboxIndex extends Component
         Collection $messages,
         GmailMessage $latest,
         Collection $projectCandidates,
+        Collection $grantCandidates,
         ?Person $person,
         $organization,
-        bool $isPersonLinkedToSelectedProject
+        bool $isPersonLinkedToSelectedProject,
+        bool $isProjectLinkedToSelectedGrant
     ): array {
         $suggestions = [
             [
@@ -925,6 +1913,40 @@ class InboxIndex extends Component
                 'action' => 'createProjectFromThread',
                 'button' => 'Create project',
             ];
+        }
+
+        if ($this->canUseFundingContext()) {
+            if ($organization && ($organization->is_funder || $grantCandidates->isNotEmpty())) {
+                $suggestions[] = [
+                    'key' => 'open_funder_record',
+                    'title' => 'Open funder record',
+                    'body' => ($organization->name ?? 'This organization').' appears funder-linked. Open the organization record for context.',
+                    'action' => 'openMatchedFunder',
+                    'button' => 'Open funder',
+                ];
+            }
+
+            if ($grantCandidates->isNotEmpty() && $this->selectedProjectId !== '' && ! $isProjectLinkedToSelectedGrant) {
+                $grantName = (string) ($grantCandidates->first()['name'] ?? 'selected grant');
+                $suggestions[] = [
+                    'key' => 'link_project_grant',
+                    'title' => 'Link selected project to grant',
+                    'body' => 'Associate this thread workflow with '.$grantName.' for funding visibility.',
+                    'action' => 'linkSelectedProjectToGrant',
+                    'button' => 'Link grant',
+                ];
+            }
+
+            $actor = Auth::user();
+            if ($grantCandidates->isNotEmpty() && $actor && $actor->isAdmin()) {
+                $suggestions[] = [
+                    'key' => 'open_grant_record',
+                    'title' => 'Open grant record',
+                    'body' => 'Review the matched grant details and reporting context.',
+                    'action' => 'openSelectedGrantRecord',
+                    'button' => 'Open grant',
+                ];
+            }
         }
 
         return $suggestions;
@@ -975,6 +1997,62 @@ class InboxIndex extends Component
             ->values();
     }
 
+    protected function grantCandidates(Collection $messages, ?Person $person, $organization): Collection
+    {
+        if (! $this->canUseFundingContext()) {
+            return collect();
+        }
+
+        $actor = Auth::user();
+        if (! $actor) {
+            return collect();
+        }
+
+        $visibleGrants = Grant::query()
+            ->visibleTo($actor)
+            ->with('funder:id,name')
+            ->whereIn('status', ['prospective', 'pending', 'active', 'completed'])
+            ->orderByDesc('updated_at')
+            ->limit(250)
+            ->get(['id', 'organization_id', 'name', 'status', 'visibility']);
+
+        $organizationId = (int) ($organization?->id ?? $person?->organization_id ?? 0);
+
+        $matchedByOrganization = $visibleGrants
+            ->filter(fn (Grant $grant) => $organizationId > 0 && (int) $grant->organization_id === $organizationId)
+            ->map(fn (Grant $grant) => [
+                'id' => $grant->id,
+                'name' => $grant->name,
+                'status' => $grant->status,
+                'visibility' => $grant->visibility,
+                'funder_name' => (string) ($grant->funder?->name ?? ''),
+                'source' => 'funder_match',
+            ]);
+
+        $messageText = Str::lower(
+            $messages
+                ->take(-8)
+                ->map(fn (GmailMessage $message) => trim((string) ($message->subject.' '.$message->snippet)))
+                ->implode(' ')
+        );
+
+        $matchedByText = $visibleGrants
+            ->filter(fn (Grant $grant) => $this->grantMentionedInText($grant->name, $messageText))
+            ->map(fn (Grant $grant) => [
+                'id' => $grant->id,
+                'name' => $grant->name,
+                'status' => $grant->status,
+                'visibility' => $grant->visibility,
+                'funder_name' => (string) ($grant->funder?->name ?? ''),
+                'source' => 'thread_match',
+            ]);
+
+        return $matchedByOrganization
+            ->concat($matchedByText)
+            ->unique('id')
+            ->values();
+    }
+
     protected function projectMentionedInText(string $projectName, string $messageText): bool
     {
         $name = Str::of(Str::lower($projectName))
@@ -1001,6 +2079,41 @@ class InboxIndex extends Component
         $matches = $parts->filter(fn (string $part) => Str::contains($messageText, $part))->count();
 
         return $matches >= 2;
+    }
+
+    protected function grantMentionedInText(string $grantName, string $messageText): bool
+    {
+        $name = Str::of(Str::lower($grantName))
+            ->replaceMatches('/[^a-z0-9\s]/', ' ')
+            ->squish()
+            ->value();
+
+        if ($name === '' || mb_strlen($name) < 4) {
+            return false;
+        }
+
+        if (Str::contains($messageText, $name)) {
+            return true;
+        }
+
+        $parts = collect(explode(' ', $name))
+            ->filter(fn (string $part) => mb_strlen($part) >= 4)
+            ->values();
+
+        if ($parts->count() < 2) {
+            return false;
+        }
+
+        $matches = $parts->filter(fn (string $part) => Str::contains($messageText, $part))->count();
+
+        return $matches >= 2;
+    }
+
+    protected function canUseFundingContext(): bool
+    {
+        $actor = Auth::user();
+
+        return (bool) ($actor && $actor->isManagement());
     }
 
     protected function looksLikeProjectThread(Collection $messages, GmailMessage $latest, $organization): bool
@@ -1036,6 +2149,7 @@ class InboxIndex extends Component
         Collection $messages,
         GmailMessage $latest,
         Collection $projectCandidates,
+        Collection $grantCandidates,
         ?Person $person,
         $organization
     ): string {
@@ -1054,6 +2168,19 @@ class InboxIndex extends Component
             $parts[] = 'Likely linked project: '.$projectCandidates->first()['name'].'.';
         } else {
             $parts[] = 'No strong project match found yet.';
+        }
+
+        if ($this->canUseFundingContext()) {
+            if ($grantCandidates->isNotEmpty()) {
+                $grant = $grantCandidates->first();
+                $funder = trim((string) ($grant['funder_name'] ?? ''));
+                $grantLabel = (string) ($grant['name'] ?? 'matched grant');
+                $parts[] = $funder !== ''
+                    ? 'Potential grant/funder context: '.$grantLabel.' ('.$funder.').'
+                    : 'Potential grant context: '.$grantLabel.'.';
+            } else {
+                $parts[] = 'No clear grant/funder match found yet.';
+            }
         }
 
         if ($person) {

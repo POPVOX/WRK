@@ -133,6 +133,16 @@ class Person extends Model
             ->withTimestamps();
     }
 
+    /**
+     * Saved contact lists this person belongs to.
+     */
+    public function contactLists(): BelongsToMany
+    {
+        return $this->belongsToMany(ContactList::class, 'contact_list_person')
+            ->withPivot(['added_by'])
+            ->withTimestamps();
+    }
+
     // ===== Media/Journalist Relationships =====
 
     /**

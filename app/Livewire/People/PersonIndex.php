@@ -3,12 +3,15 @@
 namespace App\Livewire\People;
 
 use App\Models\ContactView;
+use App\Models\ContactList;
 use App\Models\Organization;
 use App\Models\Person;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -49,6 +52,8 @@ class PersonIndex extends Component
     public ?int $bulkOrgId = null;
 
     public string $bulkTag = '';
+
+    public string $bulkListName = '';
 
     public bool $confirmingBulkDelete = false;
 
@@ -252,6 +257,7 @@ class PersonIndex extends Component
         $this->bulkOwnerId = null;
         $this->bulkOrgId = null;
         $this->bulkTag = '';
+        $this->bulkListName = '';
     }
 
     public function applyBulkOwner(): void
@@ -291,6 +297,118 @@ class PersonIndex extends Component
             $p->save();
         }
         $this->clearSelection();
+    }
+
+    public function createListFromSelection(): void
+    {
+        $listName = trim($this->bulkListName);
+        if ($listName === '' || empty($this->selected)) {
+            $this->dispatch('notify', type: 'error', message: 'Enter a list name and select at least one contact.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        if (! $user) {
+            return;
+        }
+
+        $selectedIds = collect($this->selected)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($selectedIds === []) {
+            $this->dispatch('notify', type: 'error', message: 'Select at least one valid contact.');
+
+            return;
+        }
+
+        $normalized = Str::lower($listName);
+        $list = ContactList::query()
+            ->where('user_id', $user->id)
+            ->whereRaw('LOWER(name) = ?', [$normalized])
+            ->first();
+
+        $wasCreated = false;
+        if (! $list) {
+            $list = ContactList::query()->create([
+                'user_id' => $user->id,
+                'name' => Str::limit($listName, 120, ''),
+            ]);
+            $wasCreated = true;
+        }
+
+        $alreadyInList = $list->people()
+            ->whereIn('people.id', $selectedIds)
+            ->pluck('people.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $toAttach = array_values(array_diff($selectedIds, $alreadyInList));
+
+        if ($toAttach !== []) {
+            $now = now();
+            $payload = [];
+            foreach ($toAttach as $personId) {
+                $payload[$personId] = [
+                    'added_by' => $user->id,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+            $list->people()->attach($payload);
+        }
+
+        $addedCount = count($toAttach);
+        $existingCount = count($alreadyInList);
+
+        $this->dispatch(
+            'notify',
+            type: 'success',
+            message: ($wasCreated ? 'Created list "' : 'Updated list "').$list->name.'" (added '.$addedCount.', already in list '.$existingCount.').'
+        );
+        $this->clearSelection();
+    }
+
+    public function emailSelected(): ?RedirectResponse
+    {
+        if (empty($this->selected)) {
+            $this->dispatch('notify', type: 'error', message: 'Select contacts first.');
+
+            return null;
+        }
+
+        $emails = Person::query()
+            ->whereIn('id', $this->selected)
+            ->whereNotNull('email')
+            ->pluck('email')
+            ->map(fn ($email) => trim((string) $email))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($emails === []) {
+            $this->dispatch('notify', type: 'error', message: 'No email addresses found on selected contacts.');
+
+            return null;
+        }
+
+        $to = array_shift($emails);
+        $query = [];
+        if ($emails !== []) {
+            $query['bcc'] = implode(',', $emails);
+        }
+
+        $mailto = 'mailto:'.$to;
+        if ($query !== []) {
+            $mailto .= '?'.http_build_query($query);
+        }
+
+        return redirect()->away($mailto);
     }
 
     public function deletePerson(int $id): void

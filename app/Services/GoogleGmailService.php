@@ -12,6 +12,7 @@ use Google\Client as GoogleClient;
 use Google\Service\Gmail as GoogleGmail;
 use Google\Service\Gmail\Draft as GoogleDraft;
 use Google\Service\Gmail\Message as GoogleMessage;
+use Google\Service\Gmail\ModifyThreadRequest;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use Throwable;
@@ -248,6 +249,43 @@ class GoogleGmailService
                 'draft_id' => (string) ($created->getId() ?? ''),
                 'message_id' => (string) ($draftMessage?->getId() ?? ''),
                 'thread_id' => (string) ($draftMessage?->getThreadId() ?? ''),
+            ];
+        });
+    }
+
+    public function trashThread(User $user, string $threadId, ?Agent $agent = null): array
+    {
+        $threadId = trim($threadId);
+        if ($threadId === '') {
+            throw new RuntimeException('No Gmail thread selected.');
+        }
+
+        return $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($threadId) {
+            $trashed = $gmail->users_threads->trash('me', $threadId);
+
+            return [
+                'thread_id' => (string) ($trashed->getId() ?? $threadId),
+            ];
+        });
+    }
+
+    public function markThreadAsSpam(User $user, string $threadId, ?Agent $agent = null): array
+    {
+        $threadId = trim($threadId);
+        if ($threadId === '') {
+            throw new RuntimeException('No Gmail thread selected.');
+        }
+
+        return $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($threadId) {
+            $request = new ModifyThreadRequest;
+            $request->setAddLabelIds(['SPAM']);
+            $request->setRemoveLabelIds(['INBOX', 'UNREAD']);
+
+            $modified = $gmail->users_threads->modify('me', $threadId, $request);
+
+            return [
+                'thread_id' => (string) ($modified->getId() ?? $threadId),
+                'labels' => array_values(array_filter((array) ($modified->getLabelIds() ?? []))),
             ];
         });
     }

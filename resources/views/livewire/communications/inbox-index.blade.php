@@ -224,6 +224,41 @@
                                 @endif
                             </div>
 
+                            @if(!empty($selectedThread['grant_candidates']))
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Funding context</label>
+                                    <select
+                                        wire:model.live="selectedGrantId"
+                                        class="min-w-[280px] rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                    >
+                                        <option value="">No grant selected</option>
+                                        @foreach($selectedThread['grant_candidates'] as $candidate)
+                                            <option value="{{ $candidate['id'] }}">
+                                                {{ $candidate['name'] }} @if(!empty($candidate['funder_name'])) · {{ $candidate['funder_name'] }} @endif
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    @if($selectedProjectId !== '' && $selectedGrantId !== '' && !($selectedThread['is_project_linked_to_selected_grant'] ?? false))
+                                        <button
+                                            type="button"
+                                            wire:click="linkSelectedProjectToGrant"
+                                            class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                        >
+                                            Link Project to Grant
+                                        </button>
+                                    @endif
+                                    @if(auth()->user()?->isAdmin() && $selectedGrantId !== '')
+                                        <button
+                                            type="button"
+                                            wire:click="openSelectedGrantRecord"
+                                            class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                        >
+                                            Open Grant
+                                        </button>
+                                    @endif
+                                </div>
+                            @endif
+
                             <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40">
                                 <div class="flex items-center justify-between gap-2 mb-2">
                                     <h4 class="text-sm font-medium text-gray-900 dark:text-white">Reply Draft</h4>

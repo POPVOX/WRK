@@ -13,6 +13,10 @@ new class extends Component
      */
     public function deleteUser(Logout $logout): void
     {
+        if (! Auth::user()?->isManagement()) {
+            abort(403, 'Only management can delete accounts.');
+        }
+
         $this->validate([
             'password' => ['required', 'string', 'current_password'],
         ]);

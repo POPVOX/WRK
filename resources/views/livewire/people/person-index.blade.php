@@ -5,7 +5,11 @@
             <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Contacts</h1>
             <p class="mt-1 text-gray-500 dark:text-gray-400">Manage relationships like a CRM: assign owners and focus your outreach</p>
         </div>
-        <div class="mt-4 sm:mt-0">
+        <div class="mt-4 sm:mt-0 flex items-center gap-2">
+            <a href="{{ route('contacts.lists') }}" wire:navigate
+                class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                Lists
+            </a>
             <button wire:click="toggleAddPersonForm"
                 class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -617,11 +621,62 @@
             @endforelse
         </div>
     @else
+        @if(count($selected) > 0)
+            <div class="mb-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 flex flex-wrap items-center gap-3 text-sm">
+                <div class="text-gray-700 dark:text-gray-300 font-medium">{{ count($selected) }} selected</div>
+
+                @if($showTrashed)
+                    <button wire:click="bulkRestore"
+                        class="px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors flex items-center gap-1">
+                        Restore
+                    </button>
+                    <button wire:click="confirmBulkDelete"
+                        class="px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors flex items-center gap-1">
+                        Delete Forever
+                    </button>
+                @else
+                    <button wire:click="emailSelected"
+                        class="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 transition-colors">
+                        Email Selected
+                    </button>
+
+                    <div class="flex items-center gap-2">
+                        <input
+                            type="text"
+                            wire:model.defer="bulkListName"
+                            placeholder="List name"
+                            class="rounded-md border-gray-300 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        >
+                        <button wire:click="createListFromSelection"
+                            class="px-3 py-1.5 bg-indigo-100 text-indigo-700 text-sm font-medium rounded hover:bg-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-300 dark:hover:bg-indigo-900/60">
+                            Create/Add List
+                        </button>
+                    </div>
+
+                    <button wire:click="confirmBulkDelete"
+                        class="px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors">
+                        Delete Selected
+                    </button>
+                @endif
+
+                <button wire:click="clearSelection" class="ml-auto text-xs text-gray-500 hover:text-gray-700">Clear</button>
+            </div>
+        @endif
+
         <!-- People Table View with Inline Editing -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-50 dark:bg-gray-700">
                     <tr>
+                        <th class="px-4 py-3 w-10">
+                            <input
+                                type="checkbox"
+                                wire:model.live="selectAll"
+                                wire:change="toggleSelectAll"
+                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                title="Select all filtered contacts"
+                            >
+                        </th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Name</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Title</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Organization</th>
@@ -636,6 +691,10 @@
                         @if($editingPersonId === $person->id)
                             {{-- Editing Row --}}
                             <tr class="bg-indigo-50 dark:bg-indigo-900/20">
+                                <td class="px-4 py-2 align-top">
+                                    <input type="checkbox" wire:model="selected" value="{{ $person->id }}"
+                                        class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                </td>
                                 <td class="px-4 py-2">
                                     <input type="text" wire:model="editName"
                                         class="w-full text-sm rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-indigo-500 focus:border-indigo-500"
@@ -695,6 +754,10 @@
                                 x-data="{ hover: false }"
                                 @mouseenter="hover = true"
                                 @mouseleave="hover = false">
+                                <td class="px-4 py-3 align-top">
+                                    <input type="checkbox" wire:model="selected" value="{{ $person->id }}"
+                                        class="mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                </td>
                                 <td class="px-4 py-3">
                                     <a href="{{ route('people.show', $person) }}" wire:navigate class="flex items-center gap-3 hover:text-indigo-600">
                                         @if($person->photo_url)
@@ -795,7 +858,7 @@
                         @endif
                     @empty
                         <tr>
-                            <td colspan="7" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                            <td colspan="8" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                                 No contacts found.
                             </td>
                         </tr>

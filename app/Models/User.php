@@ -212,6 +212,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Thread-level inbox context associations created by this user.
+     */
+    public function inboxThreadContextLinks(): HasMany
+    {
+        return $this->hasMany(InboxThreadContextLink::class);
+    }
+
+    /**
      * Newsletters managed by this user.
      */
     public function outreachNewsletters(): HasMany
@@ -249,6 +257,14 @@ class User extends Authenticatable
     public function outreachActivityLogs(): HasMany
     {
         return $this->hasMany(OutreachActivityLog::class);
+    }
+
+    /**
+     * Contact lists created/owned by this user.
+     */
+    public function contactLists(): HasMany
+    {
+        return $this->hasMany(ContactList::class);
     }
 
     /**

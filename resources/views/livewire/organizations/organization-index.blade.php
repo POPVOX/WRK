@@ -228,7 +228,26 @@
                         </div>
                     </div>
                     {{-- Card actions --}}
-                    <div class="px-6 pb-4 flex justify-end gap-1">
+                    <div class="px-6 pb-4 flex items-center justify-between gap-2">
+                        @if(!$showTrashed)
+                            <div>
+                                <label class="sr-only" for="org-type-card-{{ $org->id }}">Organization type</label>
+                                <select
+                                    id="org-type-card-{{ $org->id }}"
+                                    class="min-w-[10.5rem] rounded-md border-gray-300 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                    wire:change="updateOrganizationType({{ $org->id }}, $event.target.value)"
+                                >
+                                    <option value="">No type</option>
+                                    @foreach($types as $type)
+                                        <option value="{{ $type }}" @selected($org->type === $type)>{{ $type }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @else
+                            <div></div>
+                        @endif
+
+                        <div class="flex justify-end gap-1">
                         @if($showTrashed)
                             <button wire:click="restoreOrganization({{ $org->id }})"
                                 class="inline-flex items-center gap-1 px-2 py-1 text-xs text-green-600 hover:text-green-800 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors">
@@ -255,6 +274,7 @@
                                 Delete
                             </button>
                         @endif
+                        </div>
                     </div>
                 </div>
             @empty
@@ -348,15 +368,19 @@
                                     </div>
                                 @endif
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                @if($org->type)
-                                    <span
-                                        class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300">
-                                        {{ $org->type }}
-                                    </span>
-                                @else
-                                    <span class="text-gray-400">-</span>
-                                @endif
+                            <td class="px-6 py-4 whitespace-nowrap" wire:click.stop>
+                                <select
+                                    class="min-w-[11rem] rounded-md border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                    wire:change="updateOrganizationType({{ $org->id }}, $event.target.value)"
+                                    @disabled($showTrashed)
+                                >
+                                    <option value="">No type</option>
+                                    @foreach($types as $type)
+                                        <option value="{{ $type }}" @selected($org->type === $type)>
+                                            {{ $type }}
+                                        </option>
+                                    @endforeach
+                                </select>
                             </td>
                             <td
                                 class="px-6 py-4 whitespace-nowrap text-sm text-indigo-600 dark:text-indigo-400 truncate max-w-xs">

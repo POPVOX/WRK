@@ -110,6 +110,25 @@ class OrganizationIndex extends Component
         $this->editingName = '';
     }
 
+    public function updateOrganizationType(int $orgId, string $type): void
+    {
+        $org = Organization::find($orgId);
+        if (! $org) {
+            return;
+        }
+
+        $type = trim($type);
+        if ($type !== '' && ! in_array($type, Organization::TYPES, true)) {
+            $this->dispatch('notify', type: 'error', message: 'Invalid organization type selected.');
+
+            return;
+        }
+
+        $org->update([
+            'type' => $type !== '' ? $type : null,
+        ]);
+    }
+
     public function applySuggestedName(int $orgId): void
     {
         $org = Organization::find($orgId);
