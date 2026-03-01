@@ -91,6 +91,41 @@
                 <h2 class="text-base font-semibold text-gray-900 dark:text-white">Workspace Conversation</h2>
                 <span class="text-xs text-gray-500 dark:text-gray-400">Your companion proposes, you approve</span>
             </div>
+            <div class="mb-4 rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/70 dark:bg-emerald-900/20 p-3">
+                <p class="text-sm font-semibold text-emerald-900 dark:text-emerald-200">{{ $winsPrompt['headline'] ?? 'Wins Reflection' }}</p>
+                <p class="mt-1 text-sm text-emerald-800 dark:text-emerald-100">{{ $winsPrompt['message'] ?? '' }}</p>
+                <p class="mt-1 text-xs text-emerald-700/90 dark:text-emerald-200/80">{{ $winsPrompt['support_nudge'] ?? '' }}</p>
+                <div class="mt-2 flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        wire:click="useSmartAction('capture_win')"
+                        class="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white/90 dark:bg-gray-800 border border-emerald-200 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 hover:bg-white dark:hover:bg-gray-700 transition-colors"
+                    >
+                        Add a win
+                    </button>
+                    <button
+                        type="button"
+                        wire:click="useSmartAction('share_reflection')"
+                        class="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white/90 dark:bg-gray-800 border border-emerald-200 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 hover:bg-white dark:hover:bg-gray-700 transition-colors"
+                    >
+                        Share reflection
+                    </button>
+                    <button
+                        type="button"
+                        wire:click="useSmartAction('private_reflection')"
+                        class="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white/90 dark:bg-gray-800 border border-emerald-200 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 hover:bg-white dark:hover:bg-gray-700 transition-colors"
+                    >
+                        Keep private
+                    </button>
+                    <button
+                        type="button"
+                        wire:click="useSmartAction('request_support')"
+                        class="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white/90 dark:bg-gray-800 border border-emerald-200 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 hover:bg-white dark:hover:bg-gray-700 transition-colors"
+                    >
+                        Ask for support
+                    </button>
+                </div>
+            </div>
             @php
                 $hasConversation = !empty($conversationMessages);
             @endphp
@@ -151,7 +186,7 @@
                         <textarea
                             wire:model="omniInput"
                             rows="{{ $hasConversation ? 3 : 2 }}"
-                            placeholder="Dump your notes, ask a question, or capture a reminder..."
+                            placeholder="{{ $winsPrompt['input_placeholder'] ?? 'Dump your notes, ask a question, or capture a reminder...' }}"
                             class="flex-1 text-base sm:text-lg rounded-xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-indigo-500 focus:border-indigo-500 resize-y min-h-[76px]"
                         ></textarea>
 
@@ -180,21 +215,21 @@
 
                     <p class="text-xs text-gray-500 dark:text-gray-400">
                         Shortcuts: <span class="font-mono">/task</span>, <span class="font-mono">/remind</span>,
-                        <span class="font-mono">/sync gmail</span>, <span class="font-mono">/help</span>. Free-form notes create suggested actions only until you approve.
+                        <span class="font-mono">/sync gmail</span>, <span class="font-mono">/help</span>. Share wins or reflections in plain language and I will queue suggestions before creating anything.
                     </p>
                 </form>
             </div>
         </section>
 
-        <section class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
-            <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
-                <div>
-                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Suggested Actions</h2>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Your companion infers tasks from notes. Nothing is created until you click an action button.
-                    </p>
-                </div>
-                @if(!empty($companionSuggestions))
+        @if(!empty($companionSuggestions))
+            <section class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+                    <div>
+                        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Suggested Actions</h2>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Your companion infers tasks from notes. Nothing is created until you click an action button.
+                        </p>
+                    </div>
                     <button
                         type="button"
                         wire:click="clearCompanionSuggestions"
@@ -202,10 +237,8 @@
                     >
                         Clear all
                     </button>
-                @endif
-            </div>
+                </div>
 
-            @if(!empty($companionSuggestions))
                 <div class="space-y-3">
                     @foreach($companionSuggestions as $suggestion)
                         @php
@@ -216,6 +249,9 @@
                                 'draft_email' => 'Draft email',
                                 'create_project' => 'Create project',
                                 'create_subproject' => 'Create subproject',
+                                'capture_win' => 'Add to wins',
+                                'capture_reflection' => 'Save reflection',
+                                'support_check_in' => !empty($suggestion['notify_management']) ? 'Notify management' : 'Save support note',
                                 default => 'Apply',
                             };
                             $loadingLabel = match ($type) {
@@ -224,12 +260,18 @@
                                 'draft_email' => 'Drafting...',
                                 'create_project' => 'Creating...',
                                 'create_subproject' => 'Creating...',
+                                'capture_win' => 'Saving...',
+                                'capture_reflection' => 'Saving...',
+                                'support_check_in' => !empty($suggestion['notify_management']) ? 'Sending...' : 'Saving...',
                                 default => 'Working...',
                             };
                             $typeLabel = match ($type) {
                                 'draft_email' => 'Email',
                                 'create_project' => 'Project',
                                 'create_subproject' => 'Subproject',
+                                'capture_win' => 'Win',
+                                'capture_reflection' => 'Reflection',
+                                'support_check_in' => 'Support',
                                 default => ucfirst($type),
                             };
                             $confidenceClass = match ($suggestion['confidence'] ?? 'medium') {
@@ -251,6 +293,16 @@
                                         @if(!empty($suggestion['due_label']))
                                             <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200">
                                                 Due {{ $suggestion['due_label'] }}
+                                            </span>
+                                        @endif
+                                        @if(in_array($type, ['capture_win', 'capture_reflection'], true) && !empty($suggestion['visibility']))
+                                            <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                                {{ ucfirst($suggestion['visibility']) }}
+                                            </span>
+                                        @endif
+                                        @if($type === 'support_check_in')
+                                            <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
+                                                {{ !empty($suggestion['notify_management']) ? 'Confidential escalation' : 'Private draft' }}
                                             </span>
                                         @endif
                                     </div>
@@ -308,12 +360,8 @@
                         </div>
                     @endforeach
                 </div>
-            @else
-                <div class="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 p-4 text-sm text-gray-500 dark:text-gray-400">
-                    Drop your stream-of-consciousness notes and I will propose tasks, reminders, email drafts, and project ideas for approval.
-                </div>
-            @endif
-        </section>
+            </section>
+        @endif
 
         <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-8 space-y-6">

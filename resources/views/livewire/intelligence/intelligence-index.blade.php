@@ -170,6 +170,255 @@
             </section>
         @endif
 
+        @if(auth()->user()?->isManagement())
+            <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Management Support Digest</h2>
+                        <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                            Escalated support signals only. Raw journaling stays hidden unless the staff member consented.
+                        </p>
+                    </div>
+                    <span class="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                        {{ count($supportSignalDigest) }} escalated
+                    </span>
+                </div>
+
+                @if(empty($supportSignalDigest))
+                    <div class="mt-4 rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                        No escalated support signals right now.
+                    </div>
+                @else
+                    <div class="mt-5 space-y-3">
+                        @foreach($supportSignalDigest as $signal)
+                            <article class="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">
+                                        Escalated
+                                    </span>
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                                        {{ $signal['staff_name'] }}
+                                    </span>
+                                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ $signal['escalated_at'] }}</span>
+                                </div>
+
+                                <p class="mt-2 text-sm text-gray-800 dark:text-gray-200">{{ $signal['summary'] }}</p>
+
+                                <div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                                    @if(!empty($signal['escalation_reason']))
+                                        <span class="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                            {{ str_replace('_', ' ', $signal['escalation_reason']) }}
+                                        </span>
+                                    @endif
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                                        {{ $signal['window_signal_count'] }} in recent window
+                                    </span>
+                                    @if(!empty($signal['raw_context_shared']))
+                                        <span class="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                            Raw context shared
+                                        </span>
+                                    @endif
+                                </div>
+
+                                @if(!empty($signal['raw_context']) && !empty($signal['raw_context_shared']))
+                                    <div class="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
+                                        {{ $signal['raw_context'] }}
+                                    </div>
+                                @endif
+                            </article>
+                        @endforeach
+                    </div>
+                @endif
+            </section>
+        @endif
+
+        <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Meetings Intel (Slack)</h2>
+                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                        Ingest notes from the Meetings Intel Slack channel, then tag people, organizations, funders, grants, and meetings.
+                    </p>
+                </div>
+                <div class="text-right">
+                    <span class="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                        {{ count($meetingsIntelNotes) }} notes
+                    </span>
+                    <div class="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+                        @if($meetingsIntelSlackConfigured)
+                            Slack ingest configured
+                            @if($meetingsIntelChannelHint !== '')
+                                · {{ $meetingsIntelChannelHint }}
+                            @endif
+                        @else
+                            Configure `SLACK_BOT_USER_OAUTH_TOKEN` + `SLACK_MEETINGS_INTEL_CHANNEL_IDS`
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            @if(empty($meetingsIntelNotes))
+                <div class="mt-4 rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                    No Meetings Intel notes captured yet.
+                </div>
+            @else
+                <div class="mt-5 space-y-4">
+                    @foreach($meetingsIntelNotes as $note)
+                        <article class="rounded-xl border border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-900/30" wire:key="meetings-intel-note-{{ $note['id'] }}">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                                    {{ str_replace('_', ' ', $note['source']) }}
+                                </span>
+                                @if(!empty($note['slack_channel_id']))
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                                        {{ $note['slack_channel_id'] }}
+                                    </span>
+                                @endif
+                                <span class="text-xs text-gray-500 dark:text-gray-400">
+                                    {{ $note['author'] }} · {{ $note['captured_at'] }}
+                                </span>
+                            </div>
+
+                            <p class="mt-2 whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">{{ $note['content'] }}</p>
+
+                            <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                                @if(!empty($note['meeting_label']))
+                                    <a href="{{ $note['meeting_url'] }}" wire:navigate class="rounded-full bg-blue-100 px-2 py-0.5 font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                        Meeting: {{ $note['meeting_label'] }}
+                                    </a>
+                                @endif
+                                @if(!empty($note['project_label']))
+                                    <a href="{{ $note['project_url'] }}" wire:navigate class="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                        Project: {{ $note['project_label'] }}
+                                    </a>
+                                @endif
+                                @if(!empty($note['grant_label']))
+                                    <a href="{{ $note['grant_url'] }}" wire:navigate class="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                        Grant: {{ $note['grant_label'] }}
+                                    </a>
+                                @endif
+                            </div>
+
+                            <div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                                @foreach($note['person_tags'] as $tag)
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700 dark:bg-gray-700 dark:text-gray-300">Person: {{ $tag }}</span>
+                                @endforeach
+                                @foreach($note['organization_tags'] as $tag)
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700 dark:bg-gray-700 dark:text-gray-300">Org: {{ $tag }}</span>
+                                @endforeach
+                                @foreach($note['funder_tags'] as $tag)
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700 dark:bg-gray-700 dark:text-gray-300">Funder: {{ $tag }}</span>
+                                @endforeach
+                                @foreach($note['project_tags'] as $tag)
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700 dark:bg-gray-700 dark:text-gray-300">Project tag: {{ $tag }}</span>
+                                @endforeach
+                                @foreach($note['grant_tags'] as $tag)
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700 dark:bg-gray-700 dark:text-gray-300">Grant tag: {{ $tag }}</span>
+                                @endforeach
+                            </div>
+
+                            <div class="mt-4 grid gap-3 md:grid-cols-2">
+                                <div>
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Link to meeting</label>
+                                    <select wire:model.defer="meetingIntelTagDrafts.{{ $note['id'] }}.meeting_id"
+                                        class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        <option value="">No meeting link</option>
+                                        @foreach(($meetingsIntelOptions['meetings'] ?? []) as $option)
+                                            <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Primary project</label>
+                                    <select wire:model.defer="meetingIntelTagDrafts.{{ $note['id'] }}.project_id"
+                                        class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        <option value="">No primary project</option>
+                                        @foreach(($meetingsIntelOptions['projects'] ?? []) as $option)
+                                            <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Primary grant</label>
+                                    <select wire:model.defer="meetingIntelTagDrafts.{{ $note['id'] }}.grant_id"
+                                        class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        <option value="">No primary grant</option>
+                                        @foreach(($meetingsIntelOptions['grants'] ?? []) as $option)
+                                            <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">People tags</label>
+                                    <select wire:model.defer="meetingIntelTagDrafts.{{ $note['id'] }}.person_ids"
+                                        multiple
+                                        class="mt-1 h-28 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        @foreach(($meetingsIntelOptions['people'] ?? []) as $option)
+                                            <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Organization tags</label>
+                                    <select wire:model.defer="meetingIntelTagDrafts.{{ $note['id'] }}.organization_ids"
+                                        multiple
+                                        class="mt-1 h-28 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        @foreach(($meetingsIntelOptions['organizations'] ?? []) as $option)
+                                            <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Funder tags</label>
+                                    <select wire:model.defer="meetingIntelTagDrafts.{{ $note['id'] }}.funder_organization_ids"
+                                        multiple
+                                        class="mt-1 h-28 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        @foreach(($meetingsIntelOptions['funders'] ?? []) as $option)
+                                            <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Project tags</label>
+                                    <select wire:model.defer="meetingIntelTagDrafts.{{ $note['id'] }}.project_ids"
+                                        multiple
+                                        class="mt-1 h-28 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        @foreach(($meetingsIntelOptions['projects'] ?? []) as $option)
+                                            <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Grant tags</label>
+                                    <select wire:model.defer="meetingIntelTagDrafts.{{ $note['id'] }}.grant_ids"
+                                        multiple
+                                        class="mt-1 h-28 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        @foreach(($meetingsIntelOptions['grants'] ?? []) as $option)
+                                            <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mt-3">
+                                <button wire:click="saveMeetingIntelTags({{ $note['id'] }})"
+                                    class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700">
+                                    Save context
+                                </button>
+                            </div>
+                        </article>
+                    @endforeach
+                </div>
+            @endif
+        </section>
+
         <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>

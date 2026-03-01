@@ -349,6 +349,8 @@ class GoogleCalendarService
                 'status' => Meeting::STATUS_NEW,
             ]);
 
+            $meeting->teamMembers()->syncWithoutDetaching([$user->id]);
+
             // Set meeting title/summary from event
             if ($summary) {
                 $meeting->update(['raw_notes' => "**{$summary}**\n\n" . ($event->getDescription() ?? '')]);

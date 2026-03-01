@@ -14,6 +14,7 @@ use App\Models\Trip;
 use App\Services\ChatService;
 use App\Services\GoogleCalendarService;
 use App\Services\GoogleGmailService;
+use App\Services\Support\SupportSignalPolicyService;
 use App\Support\AI\AnthropicClient;
 use App\Support\AI\PromptProfile;
 use Carbon\Carbon;
@@ -147,6 +148,69 @@ class Dashboard extends Component
     public function getWorkspaceDateLabelProperty(): string
     {
         return now()->format('l, F j');
+    }
+
+    /**
+     * Conversational wins/reflection prompt shown in WRKspace.
+     *
+     * @return array{headline:string,message:string,support_nudge:string,input_placeholder:string}
+     */
+    public function getWinsPromptProperty(): array
+    {
+        $firstName = $this->firstName;
+        $day = now()->dayOfWeekIso;
+
+        $byDay = match ($day) {
+            1 => [
+                'headline' => 'Happy Monday',
+                'message' => "It was a busy week last week. What are you proud of, and what should we celebrate? I can add it to your wins and keep it personal or share it with the team.",
+                'support_nudge' => 'If anything felt heavy, tell me. I can create a confidential support check-in for management.',
+                'input_placeholder' => 'What are you proud of from last week?',
+            ],
+            2 => [
+                'headline' => 'Tuesday Reflection',
+                'message' => 'Quick check-in: what progress from yesterday is worth capturing as a win?',
+                'support_nudge' => 'If you are blocked or overloaded, I can flag a private support check-in.',
+                'input_placeholder' => 'A win I want to capture from today is...',
+            ],
+            3 => [
+                'headline' => 'Midweek Momentum',
+                'message' => 'What has moved forward that deserves recognition? I can log it as a win in one click.',
+                'support_nudge' => 'Need backup? I can draft a confidential support alert to your manager.',
+                'input_placeholder' => 'One thing I am proud of this week is...',
+            ],
+            4 => [
+                'headline' => 'Thursday Debrief',
+                'message' => 'What is going well, and what should we document before the week wraps?',
+                'support_nudge' => 'If priorities feel unmanageable, I can create a manager check-in request.',
+                'input_placeholder' => 'A reflection I want to share is...',
+            ],
+            5 => [
+                'headline' => 'Friday Wins',
+                'message' => 'Before the weekend, what should we celebrate? I can log wins for your record and the team feed.',
+                'support_nudge' => 'If you want extra support next week, I can flag it privately now.',
+                'input_placeholder' => 'This week I am proud that...',
+            ],
+            6, 7 => [
+                'headline' => 'Weekend Reflection',
+                'message' => 'Capture one meaningful win or lesson while it is fresh. I can keep it private or share it with the team.',
+                'support_nudge' => 'If you want support queued for Monday, I can create a confidential check-in.',
+                'input_placeholder' => 'A win or lesson I do not want to forget is...',
+            ],
+            default => [
+                'headline' => 'Reflection',
+                'message' => 'What is worth celebrating right now?',
+                'support_nudge' => 'If you need support, I can help route it privately.',
+                'input_placeholder' => 'What are you proud of?',
+            ],
+        };
+
+        return [
+            'headline' => $byDay['headline'],
+            'message' => "Hi {$firstName}. ".$byDay['message'],
+            'support_nudge' => $byDay['support_nudge'],
+            'input_placeholder' => $byDay['input_placeholder'],
+        ];
     }
 
     public function getWorkspaceStatsProperty(): array
@@ -453,6 +517,30 @@ class Dashboard extends Component
                 'auto_submit' => false,
             ],
             [
+                'key' => 'capture_win',
+                'label' => 'Log a win',
+                'command' => 'A win I want to capture: ',
+                'auto_submit' => false,
+            ],
+            [
+                'key' => 'share_reflection',
+                'label' => 'Share reflection',
+                'command' => 'Reflection for team: ',
+                'auto_submit' => false,
+            ],
+            [
+                'key' => 'private_reflection',
+                'label' => 'Private reflection',
+                'command' => 'Private reflection (keep personal): ',
+                'auto_submit' => false,
+            ],
+            [
+                'key' => 'request_support',
+                'label' => 'Request support',
+                'command' => 'I need support with: ',
+                'auto_submit' => false,
+            ],
+            [
                 'key' => 'task',
                 'label' => 'Capture a task',
                 'command' => '/task ',
@@ -609,6 +697,9 @@ class Dashboard extends Component
                 'draft_email' => $this->applyDraftEmailSuggestion($suggestion),
                 'create_project' => $this->applyProjectSuggestion($suggestion, false),
                 'create_subproject' => $this->applyProjectSuggestion($suggestion, true),
+                'capture_win' => $this->applyCaptureWinSuggestion($suggestion),
+                'capture_reflection' => $this->applyCaptureReflectionSuggestion($suggestion),
+                'support_check_in' => $this->applySupportCheckInSuggestion($suggestion),
                 default => 'I could not apply that suggestion because its type is not supported yet.',
             };
 
@@ -679,7 +770,7 @@ class Dashboard extends Component
     protected function buildCompanionSuggestionResponse(string $command): array
     {
         $looksLikeQuestion = Str::contains($command, '?');
-        $hasActionCue = (bool) preg_match('/\b(task|remind|todo|to do|need to|follow up|email|create|project|subproject|send|draft|schedule|review|prepare|submit|update)\b/i', $command);
+        $hasActionCue = (bool) preg_match('/\b(task|remind|todo|to do|need to|follow up|email|create|project|subproject|send|draft|schedule|review|prepare|submit|update|proud|celebrate|win|reflection|reflect|lesson|need support|need help|overwhelmed|stressed|burned out|burnout)\b/i', $command);
         if ($looksLikeQuestion && ! $hasActionCue) {
             return [
                 'assistant_message' => '',
@@ -740,7 +831,17 @@ Rules:
   3) draft_email
   4) create_project
   5) create_subproject
+  6) capture_win
+  7) capture_reflection
+  8) support_check_in
 - For tasks/reminders/emails, include project_name when the note clearly maps to an existing or intended project.
+- For capture_win/capture_reflection:
+  - Include visibility as one of personal|team|organizational.
+  - Use accomplishment_type from: recognition|award|feedback|milestone|speaking|media|learning|other.
+- For support_check_in:
+  - Use this only when user explicitly signals struggle, overload, burnout, or asks for support.
+  - Set notify_management=true only when user intent is clear.
+  - Set share_raw_context=true only when user clearly consents to sharing journaling details.
 - For due dates:
   - Convert to YYYY-MM-DD.
   - If user says "Monday" (or other weekday), use the next upcoming weekday from the provided current date.
@@ -752,13 +853,17 @@ Output JSON shape:
   "assistant_message": "Short summary for the user. Include that nothing has been created yet.",
   "suggestions": [
     {
-      "type": "task|reminder|draft_email|create_project|create_subproject",
+      "type": "task|reminder|draft_email|create_project|create_subproject|capture_win|capture_reflection|support_check_in",
       "title": "short action title",
       "description": "optional details",
       "due_date": "YYYY-MM-DD or null",
       "recipient": "email recipient name if relevant, else null",
       "project_name": "project name if relevant, else null",
       "parent_project_name": "parent project if create_subproject, else null",
+      "visibility": "personal|team|organizational for wins/reflections, else null",
+      "accomplishment_type": "milestone|learning|feedback|other... for wins/reflections, else null",
+      "notify_management": "boolean for support_check_in, else false",
+      "share_raw_context": "boolean for support_check_in only when user consents, else false",
       "reason": "why this suggestion was inferred",
       "confidence": "high|medium|low"
     }
@@ -854,6 +959,64 @@ PROMPT;
             $lower = Str::lower($chunk);
             $dueDate = $this->parseDueDateFromFreeText($chunk);
 
+            if (preg_match('/\b(overwhelmed|burn(?:ed)?\s*out|burnout|stressed|struggling|need support|need help|can\'t keep up|cannot keep up|too much|underwater|exhausted|anxious)\b/i', $chunk)) {
+                $notifyManagement = (bool) preg_match('/\b(notify management|tell management|loop in management|escalate|manager(?:ial)? support|manager help)\b/i', $chunk);
+                $shareRawContext = (bool) preg_match('/\b(share details|share full context|you can share this|consent to share|ok to share details)\b/i', $chunk);
+                $suggestions[] = $this->normalizeCompanionSuggestion([
+                    'type' => 'support_check_in',
+                    'title' => $notifyManagement
+                        ? 'Request confidential support check-in'
+                        : 'Capture private support signal',
+                    'description' => $chunk,
+                    'notify_management' => $notifyManagement,
+                    'share_raw_context' => $shareRawContext,
+                    'reason' => $notifyManagement
+                        ? 'This sounds like you need support. I can notify management confidentially.'
+                        : 'This sounds like you may need support. I can save a private support signal, then escalate if you choose.',
+                    'confidence' => 'high',
+                ]);
+
+                continue;
+            }
+
+            if (preg_match('/\b(proud|celebrate|celebrat(?:e|ing|ed)|big deal|win\b|wins\b|accomplish(?:ed|ment)?|milestone|we delivered|i delivered|finished|completed|launched|published|secured|shipped)\b/i', $chunk)) {
+                $visibility = $this->inferCompanionVisibility($chunk, 'personal');
+                $title = $this->extractWinOrReflectionTitle($chunk, 'capture_win');
+
+                $suggestions[] = $this->normalizeCompanionSuggestion([
+                    'type' => 'capture_win',
+                    'title' => $title,
+                    'description' => $chunk,
+                    'visibility' => $visibility,
+                    'accomplishment_type' => 'milestone',
+                    'reason' => $visibility === 'team'
+                        ? 'That sounds like a strong win worth sharing with the team.'
+                        : 'That sounds like a strong win worth logging in your personal wins.',
+                    'confidence' => 'medium',
+                ]);
+
+                continue;
+            }
+
+            if (preg_match('/\b(reflect|reflection|lesson learned|what i learned|debrief|retrospective|grat(?:e|i)tude|grateful|takeaway)\b/i', $chunk)) {
+                $visibility = $this->inferCompanionVisibility($chunk, 'personal');
+                $title = $this->extractWinOrReflectionTitle($chunk, 'capture_reflection');
+
+                $suggestions[] = $this->normalizeCompanionSuggestion([
+                    'type' => 'capture_reflection',
+                    'title' => $title,
+                    'description' => $chunk,
+                    'visibility' => $visibility,
+                    'accomplishment_type' => 'learning',
+                    'reason' => $visibility === 'team'
+                        ? 'This sounds like a reflection that could help the team.'
+                        : 'This sounds like a personal reflection worth keeping in your wins log.',
+                    'confidence' => 'medium',
+                ]);
+
+                continue;
+            }
+
             if (preg_match('/\b(remind me|please remind me|set a reminder|reminder)\b/i', $chunk)) {
                 $title = preg_replace('/^.*\b(remind me(?: to)?|please remind me(?: to)?|set a reminder(?: to)?|reminder:?)\b/i', '', $chunk, 1);
                 $title = trim((string) $title, " \t\n\r\0\x0B.:");
@@ -948,7 +1111,7 @@ PROMPT;
     protected function normalizeCompanionSuggestion(array $suggestion): ?array
     {
         $type = Str::lower(trim((string) ($suggestion['type'] ?? '')));
-        if (! in_array($type, ['task', 'reminder', 'draft_email', 'create_project', 'create_subproject'], true)) {
+        if (! in_array($type, ['task', 'reminder', 'draft_email', 'create_project', 'create_subproject', 'capture_win', 'capture_reflection', 'support_check_in'], true)) {
             return null;
         }
 
@@ -974,6 +1137,25 @@ PROMPT;
             $dueDate = $this->parseDueDateFromFreeText((string) ($suggestion['due_text'] ?? ''));
         }
 
+        $visibility = Str::lower(trim((string) ($suggestion['visibility'] ?? '')));
+        if (! in_array($visibility, ['personal', 'team', 'organizational'], true)) {
+            $visibility = null;
+        }
+        if ($visibility === null && in_array($type, ['capture_win', 'capture_reflection'], true)) {
+            $visibility = 'personal';
+        }
+
+        $accomplishmentType = Str::lower(trim((string) ($suggestion['accomplishment_type'] ?? '')));
+        if (! array_key_exists($accomplishmentType, Accomplishment::TYPES)) {
+            $accomplishmentType = null;
+        }
+        if ($accomplishmentType === null && $type === 'capture_reflection') {
+            $accomplishmentType = 'learning';
+        }
+        if ($accomplishmentType === null && $type === 'capture_win') {
+            $accomplishmentType = 'milestone';
+        }
+
         $normalized = [
             'id' => (string) Str::uuid(),
             'type' => $type,
@@ -984,6 +1166,12 @@ PROMPT;
             'recipient' => trim((string) ($suggestion['recipient'] ?? '')) ?: null,
             'project_name' => trim((string) ($suggestion['project_name'] ?? '')) ?: null,
             'parent_project_name' => trim((string) ($suggestion['parent_project_name'] ?? '')) ?: null,
+            'visibility' => $visibility,
+            'accomplishment_type' => $accomplishmentType,
+            'notify_management' => $this->normalizeBoolean($suggestion['notify_management'] ?? false),
+            'share_raw_with_management' => $this->normalizeBoolean(
+                $suggestion['share_raw_with_management'] ?? $suggestion['share_raw_context'] ?? false
+            ),
             'reason' => Str::limit($reason, 200, ''),
             'confidence' => in_array(($suggestion['confidence'] ?? ''), ['high', 'medium', 'low'], true)
                 ? (string) $suggestion['confidence']
@@ -1268,6 +1456,67 @@ PROMPT;
         return trim($value);
     }
 
+    protected function inferCompanionVisibility(string $text, string $default = 'personal'): string
+    {
+        $value = Str::lower($text);
+
+        if (Str::contains($value, ['keep private', 'just for me', 'only me', 'private', 'personal'])) {
+            return 'personal';
+        }
+
+        if (Str::contains($value, ['share with team', 'team update', 'share this', 'share with everyone', 'tell the team'])) {
+            return 'team';
+        }
+
+        if (Str::contains($value, ['organization-wide', 'org-wide', 'company-wide', 'public'])) {
+            return 'organizational';
+        }
+
+        return $default;
+    }
+
+    protected function normalizeCompanionVisibility(string $visibility, string $default = 'personal'): string
+    {
+        $normalized = Str::lower(trim($visibility));
+
+        return in_array($normalized, ['personal', 'team', 'organizational'], true)
+            ? $normalized
+            : $default;
+    }
+
+    protected function extractWinOrReflectionTitle(string $chunk, string $type): string
+    {
+        $cleaned = $chunk;
+
+        if ($type === 'capture_win') {
+            $cleaned = preg_replace('/\b(i\'?m proud of|i am proud of|proud of|we are proud of|celebrate|win:?)\b/i', '', $cleaned) ?: $cleaned;
+        } else {
+            $cleaned = preg_replace('/\b(reflection:?|lesson learned:?|what i learned:?)\b/i', '', $cleaned) ?: $cleaned;
+        }
+
+        $cleaned = trim($cleaned, " \t\n\r\0\x0B.-:");
+        if ($cleaned === '') {
+            $cleaned = $type === 'capture_reflection' ? 'Reflection note' : 'Team win';
+        }
+
+        return Str::limit($cleaned, 140, '');
+    }
+
+    protected function normalizeBoolean(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return ((int) $value) === 1;
+        }
+
+        $normalized = Str::lower(trim((string) $value));
+
+        return in_array($normalized, ['1', 'true', 'yes', 'y', 'on'], true);
+    }
+
     protected function composeCompanionAssistantMessage(array $suggestions): string
     {
         $count = count($suggestions);
@@ -1319,6 +1568,27 @@ PROMPT;
 
             if ($type === 'create_subproject') {
                 $lines[] = "• Sounds like \"{$title}\" might be a subproject. Should I create it under an existing project?";
+                continue;
+            }
+
+            if ($type === 'capture_win') {
+                $visibility = (string) ($suggestion['visibility'] ?? 'personal');
+                $lines[] = "• That is a pretty big deal. Should I add \"{$title}\" to your wins (".($visibility === 'team' ? 'team-visible' : 'personal').')?';
+                continue;
+            }
+
+            if ($type === 'capture_reflection') {
+                $visibility = (string) ($suggestion['visibility'] ?? 'personal');
+                $lines[] = "• Should I save this reflection as ".($visibility === 'team' ? 'a team reflection' : 'a private reflection').": \"{$title}\"?";
+                continue;
+            }
+
+            if ($type === 'support_check_in') {
+                if ($this->normalizeBoolean($suggestion['notify_management'] ?? false)) {
+                    $lines[] = '• This sounds like a support signal. Should I send a confidential check-in request to management?';
+                } else {
+                    $lines[] = '• This sounds like a support signal. Should I save it privately for you now?';
+                }
             }
         }
 
@@ -1524,6 +1794,102 @@ PROMPT;
         return $isSubproject
             ? "Done. I created subproject \"{$project->name}\"."
             : "Done. I created project \"{$project->name}\".";
+    }
+
+    protected function applyCaptureWinSuggestion(array $suggestion): string
+    {
+        $title = trim((string) ($suggestion['title'] ?? ''));
+        if ($title === '') {
+            throw new \RuntimeException('Win title is missing.');
+        }
+
+        $visibility = $this->normalizeCompanionVisibility((string) ($suggestion['visibility'] ?? ''), 'personal');
+        $type = Str::lower(trim((string) ($suggestion['accomplishment_type'] ?? 'milestone')));
+        if (! array_key_exists($type, Accomplishment::TYPES)) {
+            $type = 'milestone';
+        }
+
+        $projectId = (int) ($suggestion['linked_project_id'] ?? 0);
+
+        $accomplishment = Accomplishment::create([
+            'user_id' => $this->user->id,
+            'title' => $title,
+            'description' => trim((string) ($suggestion['description'] ?? '')) ?: null,
+            'type' => $type,
+            'visibility' => $visibility,
+            'date' => now()->toDateString(),
+            'source' => 'Captured from WRKspace conversation',
+            'added_by' => $this->user->id,
+            'is_recognition' => false,
+            'project_id' => $projectId > 0 ? $projectId : null,
+        ]);
+
+        return 'Done. I added this win: "'.$accomplishment->title.'" ('.($visibility === 'team' ? 'shared with team' : 'personal').').';
+    }
+
+    protected function applyCaptureReflectionSuggestion(array $suggestion): string
+    {
+        $title = trim((string) ($suggestion['title'] ?? ''));
+        if ($title === '') {
+            throw new \RuntimeException('Reflection title is missing.');
+        }
+
+        $visibility = $this->normalizeCompanionVisibility((string) ($suggestion['visibility'] ?? ''), 'personal');
+        $projectId = (int) ($suggestion['linked_project_id'] ?? 0);
+
+        $accomplishment = Accomplishment::create([
+            'user_id' => $this->user->id,
+            'title' => $title,
+            'description' => trim((string) ($suggestion['description'] ?? '')) ?: null,
+            'type' => 'learning',
+            'visibility' => $visibility,
+            'date' => now()->toDateString(),
+            'source' => 'Captured from WRKspace reflection',
+            'added_by' => $this->user->id,
+            'is_recognition' => false,
+            'project_id' => $projectId > 0 ? $projectId : null,
+        ]);
+
+        return 'Saved. Your reflection is now in wins as '.($visibility === 'team' ? 'team-visible' : 'personal').': "'.$accomplishment->title.'".';
+    }
+
+    protected function applySupportCheckInSuggestion(array $suggestion): string
+    {
+        $notifyManagement = $this->normalizeBoolean($suggestion['notify_management'] ?? false);
+        $shareRawContext = $this->normalizeBoolean($suggestion['share_raw_with_management'] ?? false);
+
+        $title = trim((string) ($suggestion['title'] ?? 'Support check-in request'));
+        $description = trim((string) ($suggestion['description'] ?? ''));
+        $summary = trim((string) ($suggestion['reason'] ?? 'Support signal captured from WRKspace.'));
+        $projectId = (int) ($suggestion['linked_project_id'] ?? 0);
+
+        $capture = app(SupportSignalPolicyService::class)->captureFromWorkspace(
+            $this->user,
+            $title !== '' ? $title : 'Support check-in requested',
+            $description !== '' ? $description : $summary,
+            $notifyManagement,
+            $shareRawContext,
+            [
+                'from' => 'dashboard_companion',
+                'linked_project_id' => $projectId > 0 ? $projectId : null,
+                'suggestion_reason' => $summary,
+                'suggestion_title' => $title,
+            ]
+        );
+
+        /** @var \App\Models\SupportSignal $signal */
+        $signal = $capture['signal'];
+        $manager = $capture['manager'] ?? null;
+
+        if ($signal->status === \App\Models\SupportSignal::STATUS_ESCALATED && $manager) {
+            if (! empty($capture['auto_escalated'])) {
+                return 'Saved and escalated. I logged your support signal and notified '.$manager->name.' because this pattern crossed the support threshold.';
+            }
+
+            return 'Saved and escalated. I logged your support signal and notified '.$manager->name.' confidentially.';
+        }
+
+        return 'Saved privately. I recorded this as a draft support signal visible only to you until you choose to escalate.';
     }
 
     protected function generateEmailDraft(array $suggestion): string
@@ -1858,6 +2224,7 @@ PROMPT;
             'laterTasks' => $this->laterTasks,
             'dailyPulse' => $this->dailyPulse,
             'smartActions' => $this->smartActions,
+            'winsPrompt' => $this->winsPrompt,
             'conversationMessages' => $this->omniConversation,
             'companionSuggestions' => $this->companionSuggestions,
         ]);

@@ -133,6 +133,14 @@ class Meeting extends Model
     }
 
     /**
+     * Intelligence notes linked to this meeting (Slack meetings intel + manual notes).
+     */
+    public function intelNotes(): HasMany
+    {
+        return $this->hasMany(MeetingIntelNote::class);
+    }
+
+    /**
      * Get the POPVOX team members who attended this meeting.
      */
     public function teamMembers(): BelongsToMany

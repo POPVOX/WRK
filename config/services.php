@@ -31,6 +31,10 @@ return [
     'slack' => [
         'api_base' => env('SLACK_API_BASE', 'https://slack.com/api'),
         'bot_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
+        'meetings_intel_channel_ids' => array_values(array_filter(array_map(
+            static fn ($channelId) => trim((string) $channelId),
+            explode(',', (string) env('SLACK_MEETINGS_INTEL_CHANNEL_IDS', env('SLACK_MEETINGS_INTEL_CHANNEL_ID', '')))
+        ))),
         'webhook' => [
             'enforce_signature' => filter_var(env('SLACK_WEBHOOK_ENFORCE_SIGNATURE', true), FILTER_VALIDATE_BOOL),
             'signing_secret' => env('SLACK_SIGNING_SECRET'),

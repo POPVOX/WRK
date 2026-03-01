@@ -263,9 +263,15 @@
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="px-2 py-1 text-xs font-medium rounded-full {{ \App\Models\Trip::getStatusColors()[$trip->status] ?? 'bg-gray-100 text-gray-800' }}">
-                                    {{ \App\Models\Trip::getStatusOptions()[$trip->status] ?? $trip->status }}
-                                </span>
+                                <select
+                                    class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                                    aria-label="Update status for {{ $trip->name }}"
+                                    wire:change="updateTripStatus({{ $trip->id }}, $event.target.value)"
+                                >
+                                    @foreach($statusOptions as $value => $label)
+                                        <option value="{{ $value }}" @selected($trip->status === $value)>{{ $label }}</option>
+                                    @endforeach
+                                </select>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right">
                                 <a href="{{ route('travel.show', $trip) }}" class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">

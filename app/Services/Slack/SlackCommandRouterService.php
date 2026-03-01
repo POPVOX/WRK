@@ -4,6 +4,7 @@ namespace App\Services\Slack;
 
 use App\Models\User;
 use App\Services\ChatService;
+use App\Services\Intelligence\MeetingsIntelIngestService;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
@@ -11,7 +12,8 @@ class SlackCommandRouterService
 {
     public function __construct(
         protected ChatService $chatService,
-        protected SlackWebhookService $slackWebhookService
+        protected SlackWebhookService $slackWebhookService,
+        protected MeetingsIntelIngestService $meetingsIntelIngestService
     ) {}
 
     /**
@@ -20,6 +22,9 @@ class SlackCommandRouterService
      */
     public function route(array $payload): ?array
     {
+        // Persist Meetings Intel channel messages into WRK intelligence notes.
+        $this->meetingsIntelIngestService->ingest($payload);
+
         if ($this->slackWebhookService->isSlashCommandPayload($payload)) {
             return $this->routeSlashCommand($payload);
         }

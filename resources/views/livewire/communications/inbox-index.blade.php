@@ -13,10 +13,6 @@
                     <span class="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
                         Gmail connected in read-only scope. Reconnect Google to enable send/compose.
                     </span>
-                @else
-                    <span class="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200">
-                        Gmail compose + send enabled
-                    </span>
                 @endif
                 <button
                     type="button"
@@ -397,54 +393,168 @@
 
                 <aside class="hidden 2xl:block border-l border-gray-200 bg-gray-50/70 p-4 overflow-y-auto dark:border-gray-700 dark:bg-gray-900/30">
                     @if($selectedThread)
-                        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Contact Context</h3>
+                        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Context Intelligence</h3>
 
-                        <div class="mt-3 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-                            @if($selectedThread['person'])
-                                <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ $selectedThread['person']->name }}</p>
-                                @if($selectedThread['person']->title)
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ $selectedThread['person']->title }}</p>
+                        <div class="mt-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-800 dark:bg-indigo-900/20">
+                            <h4 class="text-xs font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">Agent Suggestions</h4>
+                            <p class="mt-2 text-xs text-indigo-700 dark:text-indigo-300">Use these as starting points, then correct/refine below. Your choices are saved as context memory for this thread.</p>
+
+                            <div class="mt-3 space-y-2">
+                                @if(!empty($selectedThread['project_candidates']))
+                                    @php($topProject = $selectedThread['project_candidates'][0])
+                                    <div class="rounded-lg border border-indigo-100 bg-white px-2.5 py-2 dark:border-indigo-800 dark:bg-gray-800">
+                                        <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ $topProject['name'] }}</p>
+                                        <p class="text-[11px] text-gray-500 dark:text-gray-400">Project · {{ str_replace('_', ' ', $topProject['source']) }}</p>
+                                        <button
+                                            type="button"
+                                            wire:click="$set('selectedProjectId', '{{ $topProject['id'] }}')"
+                                            class="mt-2 inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                        >
+                                            Use This Project
+                                        </button>
+                                    </div>
                                 @endif
-                                @if($selectedThread['person']->email)
-                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ $selectedThread['person']->email }}</p>
+
+                                @if(!empty($selectedThread['grant_candidates']))
+                                    @php($topGrant = $selectedThread['grant_candidates'][0])
+                                    <div class="rounded-lg border border-indigo-100 bg-white px-2.5 py-2 dark:border-indigo-800 dark:bg-gray-800">
+                                        <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ $topGrant['name'] }}</p>
+                                        <p class="text-[11px] text-gray-500 dark:text-gray-400">
+                                            Grant @if(!empty($topGrant['funder_name'])) · {{ $topGrant['funder_name'] }} @endif · {{ str_replace('_', ' ', $topGrant['source']) }}
+                                        </p>
+                                        <button
+                                            type="button"
+                                            wire:click="$set('selectedGrantId', '{{ $topGrant['id'] }}')"
+                                            class="mt-2 inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                        >
+                                            Use This Grant
+                                        </button>
+                                    </div>
                                 @endif
-                                <a href="{{ route('contacts.show', $selectedThread['person']) }}" wire:navigate
-                                    class="mt-3 inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
-                                    Open contact
-                                </a>
-                            @else
-                                <p class="text-sm text-gray-600 dark:text-gray-300">This sender is not yet linked to a contact.</p>
-                            @endif
+                            </div>
                         </div>
 
                         <div class="mt-4 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-                            <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Organization</h4>
-                            @if($selectedThread['organization'])
-                                <p class="mt-2 text-sm font-medium text-gray-900 dark:text-white">{{ $selectedThread['organization']->name }}</p>
-                                <a href="{{ route('organizations.show', $selectedThread['organization']) }}" wire:navigate
-                                    class="mt-2 inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
-                                    Open organization
-                                </a>
-                            @else
-                                <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">No organization linked yet.</p>
-                            @endif
+                            <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Correct / Refine Context</h4>
+
+                            <div class="mt-3 space-y-3">
+                                <div class="space-y-2">
+                                    <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Contact</label>
+                                    <select wire:model.live="selectedContextPersonId" class="w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        <option value="">No contact selected</option>
+                                        @foreach($contextCandidates['contacts'] ?? [] as $candidate)
+                                            <option value="{{ $candidate['id'] }}">{{ $candidate['name'] }} @if(!empty($candidate['email'])) · {{ $candidate['email'] }} @endif</option>
+                                        @endforeach
+                                    </select>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <button type="button" wire:click="linkThreadToSelectedContact" class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Link Contact</button>
+                                        <button type="button" wire:click="createContactFromThread" class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Create Contact</button>
+                                        @if($selectedThread['person'])
+                                            <a href="{{ route('contacts.show', $selectedThread['person']) }}" wire:navigate class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Open</a>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                <div class="space-y-2">
+                                    <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Organization</label>
+                                    <select wire:model.live="selectedContextOrganizationId" class="w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        <option value="">No organization selected</option>
+                                        @foreach($contextCandidates['organizations'] ?? [] as $candidate)
+                                            <option value="{{ $candidate['id'] }}">{{ $candidate['name'] }} @if(!empty($candidate['type'])) · {{ $candidate['type'] }} @endif</option>
+                                        @endforeach
+                                    </select>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <button type="button" wire:click="linkThreadToSelectedOrganization" class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Link Organization</button>
+                                        <button type="button" wire:click="createOrganizationFromThread" class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Create Organization</button>
+                                        @if($selectedThread['organization'])
+                                            <a href="{{ route('organizations.show', $selectedThread['organization']) }}" wire:navigate class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Open</a>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                <div class="space-y-2">
+                                    <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Meeting</label>
+                                    <select wire:model.live="selectedContextMeetingId" class="w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        <option value="">No meeting selected</option>
+                                        @foreach($contextCandidates['meetings'] ?? [] as $meeting)
+                                            <option value="{{ $meeting['id'] }}">{{ $meeting['title'] }} · {{ $meeting['date_label'] }}</option>
+                                        @endforeach
+                                    </select>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <button type="button" wire:click="linkThreadToSelectedMeeting" class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Link Meeting</button>
+                                        <button type="button" wire:click="createMeetingFromThread" class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Create Meeting</button>
+                                    </div>
+                                </div>
+
+                                @if(auth()->user()?->isManagement())
+                                    <div class="space-y-2">
+                                        <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Funder / Grant</label>
+                                        <select wire:model.live="selectedGrantId" class="w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            <option value="">No grant selected</option>
+                                            @foreach($selectedThread['grant_candidates'] as $grant)
+                                                <option value="{{ $grant['id'] }}">{{ $grant['name'] }} @if(!empty($grant['funder_name'])) · {{ $grant['funder_name'] }} @endif</option>
+                                            @endforeach
+                                        </select>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <button type="button" wire:click="linkThreadToSelectedGrant" class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Link Grant</button>
+                                            @if(auth()->user()?->isAdmin() && $selectedGrantId !== '')
+                                                <button type="button" wire:click="openSelectedGrantRecord" class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Open Grant</button>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @endif
+
+                                <div class="space-y-2">
+                                    <label class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Media</label>
+                                    <div class="grid gap-2">
+                                        <select wire:model.live="selectedContextMediaContactId" class="w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            <option value="">Media contact</option>
+                                            @foreach($contextCandidates['media_contacts'] ?? [] as $candidate)
+                                                <option value="{{ $candidate['id'] }}">{{ $candidate['name'] }} @if(!empty($candidate['email'])) · {{ $candidate['email'] }} @endif</option>
+                                            @endforeach
+                                        </select>
+                                        <select wire:model.live="selectedContextMediaOutletId" class="w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            <option value="">Media outlet</option>
+                                            @foreach($contextCandidates['media_outlets'] ?? [] as $candidate)
+                                                <option value="{{ $candidate['id'] }}">{{ $candidate['name'] }} @if(!empty($candidate['type'])) · {{ $candidate['type'] }} @endif</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <button type="button" wire:click="linkThreadToSelectedMediaContact" class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Link Media Contact</button>
+                                        <button type="button" wire:click="linkThreadToSelectedMediaOutlet" class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Link Media Outlet</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="mt-4 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-                            <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Project Candidates</h4>
-                            @if(!empty($selectedThread['project_candidates']))
+                            <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Context Memory</h4>
+                            @if(($threadContextLinks ?? collect())->isNotEmpty())
                                 <div class="mt-2 space-y-2">
-                                    @foreach($selectedThread['project_candidates'] as $project)
+                                    @foreach($threadContextLinks as $link)
                                         <div class="rounded-lg border border-gray-200 px-2.5 py-2 dark:border-gray-700">
-                                            <p class="text-sm font-medium text-gray-900 dark:text-white">{{ $project['name'] }}</p>
-                                            <p class="text-[11px] text-gray-500 dark:text-gray-400">
-                                                {{ ucfirst($project['status']) }} · {{ str_replace('_', ' ', $project['source']) }}
-                                            </p>
+                                            <div class="flex items-start justify-between gap-2">
+                                                <div>
+                                                    <p class="text-sm font-medium text-gray-900 dark:text-white">{{ $link['label'] }}</p>
+                                                    <p class="text-[11px] text-gray-500 dark:text-gray-400">
+                                                        {{ str_replace('_', ' ', $link['link_type']) }}
+                                                        @if(!empty($link['subtitle'])) · {{ $link['subtitle'] }} @endif
+                                                        @if(!empty($link['source'])) · {{ str_replace('_', ' ', $link['source']) }} @endif
+                                                    </p>
+                                                </div>
+                                                <div class="flex items-center gap-1">
+                                                    @if(!empty($link['url']))
+                                                        <a href="{{ $link['url'] }}" wire:navigate class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Open</a>
+                                                    @endif
+                                                    <button type="button" wire:click="removeThreadContextLink({{ $link['id'] }})" class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">Remove</button>
+                                                </div>
+                                            </div>
                                         </div>
                                     @endforeach
                                 </div>
                             @else
-                                <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">No project matches found yet.</p>
+                                <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">No saved context refinements yet. Link or create records above to teach this thread context.</p>
                             @endif
                         </div>
                     @else

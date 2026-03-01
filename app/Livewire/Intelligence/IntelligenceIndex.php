@@ -12,12 +12,17 @@ use App\Models\AgentSuggestion;
 use App\Models\AgentTemplate;
 use App\Models\Grant;
 use App\Models\Meeting;
+use App\Models\MeetingIntelNote;
+use App\Models\Organization;
+use App\Models\Person;
 use App\Models\Project;
 use App\Models\ProjectTask;
+use App\Models\SupportSignal;
 use App\Models\Trip;
 use App\Services\Agents\AgentOrchestratorService;
 use App\Services\Agents\MemoryQueryService;
 use App\Services\Agents\VisibilityPolicyService;
+use App\Services\Support\SupportSignalPolicyService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
@@ -41,6 +46,18 @@ class IntelligenceIndex extends Component
     public array $insights = [];
 
     public string $generatedAt = '';
+
+    public array $supportSignalDigest = [];
+
+    public array $meetingsIntelNotes = [];
+
+    public array $meetingsIntelTagDrafts = [];
+
+    public array $meetingsIntelOptions = [];
+
+    public bool $meetingsIntelSlackConfigured = false;
+
+    public string $meetingsIntelChannelHint = '';
 
     public array $agentDirectory = [];
 
@@ -90,6 +107,9 @@ class IntelligenceIndex extends Component
             $this->selectedAgentId = $requestedAgentId;
         }
 
+        $this->loadMeetingsIntelWorkspace();
+        $this->loadManagementSupportDigest();
+
         $this->migrationReady = $this->hasAgentSchema();
 
         if (! $this->migrationReady) {
@@ -110,6 +130,8 @@ class IntelligenceIndex extends Component
     {
         $this->agentCouncil = $this->buildAgentCouncil();
         $this->insights = $this->buildInsightStream();
+        $this->loadMeetingsIntelWorkspace();
+        $this->loadManagementSupportDigest();
 
         if ($this->migrationReady) {
             $this->loadPermissionSnapshot();
@@ -422,6 +444,86 @@ class IntelligenceIndex extends Component
         }
     }
 
+    public function saveMeetingIntelTags(int $noteId): void
+    {
+        if (! Schema::hasTable('meeting_intel_notes')) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations to enable Meetings Intel notes.');
+
+            return;
+        }
+
+        $note = MeetingIntelNote::query()->find($noteId);
+        if (! $note) {
+            $this->dispatch('notify', type: 'error', message: 'Meeting intel note not found.');
+
+            return;
+        }
+
+        $draft = is_array($this->meetingsIntelTagDrafts[$noteId] ?? null)
+            ? $this->meetingsIntelTagDrafts[$noteId]
+            : [];
+
+        $meetingId = $this->normalizeNullableInt($draft['meeting_id'] ?? null);
+        if ($meetingId && ! Meeting::query()->whereKey($meetingId)->exists()) {
+            $meetingId = null;
+        }
+
+        $projectId = $this->normalizeNullableInt($draft['project_id'] ?? null);
+        if ($projectId && ! Project::query()->whereKey($projectId)->exists()) {
+            $projectId = null;
+        }
+
+        $grantId = $this->normalizeNullableInt($draft['grant_id'] ?? null);
+        if ($grantId && ! Grant::query()->whereKey($grantId)->exists()) {
+            $grantId = null;
+        }
+
+        $personIds = $this->normalizeIdArray($draft['person_ids'] ?? []);
+        if (! empty($personIds)) {
+            $personIds = Person::query()->whereIn('id', $personIds)->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+        }
+
+        $organizationIds = $this->normalizeIdArray($draft['organization_ids'] ?? []);
+        if (! empty($organizationIds)) {
+            $organizationIds = Organization::query()->whereIn('id', $organizationIds)->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+        }
+
+        $funderOrganizationIds = $this->normalizeIdArray($draft['funder_organization_ids'] ?? []);
+        if (! empty($funderOrganizationIds)) {
+            $funderOrganizationIds = Organization::query()
+                ->whereIn('id', $funderOrganizationIds)
+                ->where('is_funder', true)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->values()
+                ->all();
+        }
+
+        $projectIds = $this->normalizeIdArray($draft['project_ids'] ?? []);
+        if (! empty($projectIds)) {
+            $projectIds = Project::query()->whereIn('id', $projectIds)->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+        }
+
+        $grantIds = $this->normalizeIdArray($draft['grant_ids'] ?? []);
+        if (! empty($grantIds)) {
+            $grantIds = Grant::query()->whereIn('id', $grantIds)->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+        }
+
+        $note->update([
+            'meeting_id' => $meetingId,
+            'project_id' => $projectId,
+            'grant_id' => $grantId,
+            'person_ids' => $personIds,
+            'organization_ids' => $organizationIds,
+            'funder_organization_ids' => $funderOrganizationIds,
+            'project_ids' => $projectIds,
+            'grant_ids' => $grantIds,
+        ]);
+
+        $this->loadMeetingsIntelNotes();
+        $this->dispatch('notify', type: 'success', message: 'Meetings Intel note context saved.');
+    }
+
     public function updatedSelectedAgentId($value): void
     {
         if (! $this->migrationReady) {
@@ -449,6 +551,11 @@ class IntelligenceIndex extends Component
 
     protected function refreshPanelData(): void
     {
+        if ($this->panel === 'home') {
+            $this->loadMeetingsIntelNotes();
+            $this->loadManagementSupportDigest();
+        }
+
         if ($this->panel === 'agents') {
             $this->loadAgentDirectory();
             $this->hydrateSelectedAgentWorkspace();
@@ -478,6 +585,287 @@ class IntelligenceIndex extends Component
         $this->pendingSuggestions = [];
         $this->recentRuns = [];
         $this->loadHomePendingSuggestions();
+    }
+
+    protected function loadManagementSupportDigest(): void
+    {
+        $this->supportSignalDigest = [];
+
+        if (! Schema::hasTable('support_signals')) {
+            return;
+        }
+
+        $actor = Auth::user();
+        if (! $actor || ! $actor->isManagement()) {
+            return;
+        }
+
+        $this->supportSignalDigest = app(SupportSignalPolicyService::class)
+            ->managementDigest($actor, 20);
+
+        $pendingIds = collect($this->supportSignalDigest)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->values()
+            ->all();
+
+        if (! empty($pendingIds)) {
+            SupportSignal::query()
+                ->whereIn('id', $pendingIds)
+                ->whereNull('digest_included_at')
+                ->update(['digest_included_at' => now()]);
+        }
+    }
+
+    protected function loadMeetingsIntelWorkspace(): void
+    {
+        $channelIds = $this->meetingsIntelChannelIds();
+        $this->meetingsIntelChannelHint = implode(', ', $channelIds);
+        $this->meetingsIntelSlackConfigured = trim((string) (
+            config('services.slack.bot_token')
+            ?: config('services.slack.notifications.bot_user_oauth_token')
+        )) !== '' && ! empty($channelIds);
+
+        if (! Schema::hasTable('meeting_intel_notes')) {
+            $this->meetingsIntelNotes = [];
+            $this->meetingsIntelTagDrafts = [];
+            $this->meetingsIntelOptions = [
+                'meetings' => [],
+                'people' => [],
+                'organizations' => [],
+                'funders' => [],
+                'projects' => [],
+                'grants' => [],
+            ];
+
+            return;
+        }
+
+        $this->loadMeetingsIntelOptions();
+        $this->loadMeetingsIntelNotes();
+    }
+
+    protected function loadMeetingsIntelOptions(): void
+    {
+        $user = Auth::user();
+        $grantsQuery = Grant::query()->with('funder:id,name')->orderBy('name');
+        if ($user) {
+            $grantsQuery->visibleTo($user);
+        }
+
+        $this->meetingsIntelOptions = [
+            'meetings' => Meeting::query()
+                ->orderByDesc('meeting_date')
+                ->limit(250)
+                ->get(['id', 'title', 'meeting_date'])
+                ->map(fn (Meeting $meeting) => [
+                    'id' => $meeting->id,
+                    'label' => trim(((string) ($meeting->title ?: 'Meeting #'.$meeting->id)).($meeting->meeting_date ? ' · '.$meeting->meeting_date->format('M j, Y') : '')),
+                ])
+                ->values()
+                ->all(),
+            'people' => Person::query()
+                ->orderBy('name')
+                ->limit(300)
+                ->get(['id', 'name'])
+                ->map(fn (Person $person) => [
+                    'id' => $person->id,
+                    'label' => $person->name,
+                ])
+                ->values()
+                ->all(),
+            'organizations' => Organization::query()
+                ->orderBy('name')
+                ->limit(300)
+                ->get(['id', 'name'])
+                ->map(fn (Organization $organization) => [
+                    'id' => $organization->id,
+                    'label' => $organization->name,
+                ])
+                ->values()
+                ->all(),
+            'funders' => Organization::query()
+                ->where('is_funder', true)
+                ->orderBy('name')
+                ->limit(250)
+                ->get(['id', 'name'])
+                ->map(fn (Organization $organization) => [
+                    'id' => $organization->id,
+                    'label' => $organization->name,
+                ])
+                ->values()
+                ->all(),
+            'projects' => Project::query()
+                ->orderBy('name')
+                ->limit(300)
+                ->get(['id', 'name'])
+                ->map(fn (Project $project) => [
+                    'id' => $project->id,
+                    'label' => $project->name,
+                ])
+                ->values()
+                ->all(),
+            'grants' => $grantsQuery
+                ->limit(300)
+                ->get(['id', 'name', 'organization_id'])
+                ->map(fn (Grant $grant) => [
+                    'id' => $grant->id,
+                    'label' => trim($grant->name.($grant->funder?->name ? ' · '.$grant->funder->name : '')),
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    protected function loadMeetingsIntelNotes(): void
+    {
+        if (! Schema::hasTable('meeting_intel_notes')) {
+            $this->meetingsIntelNotes = [];
+            $this->meetingsIntelTagDrafts = [];
+
+            return;
+        }
+
+        $notes = MeetingIntelNote::query()
+            ->with([
+                'author:id,name',
+                'meeting:id,title,meeting_date',
+                'project:id,name',
+                'grant:id,name,organization_id',
+                'grant.funder:id,name',
+            ])
+            ->latest('captured_at')
+            ->latest('created_at')
+            ->limit(80)
+            ->get();
+
+        $meetingsById = collect($this->meetingsIntelOptions['meetings'] ?? [])->keyBy('id');
+        $peopleById = collect($this->meetingsIntelOptions['people'] ?? [])->keyBy('id');
+        $organizationsById = collect($this->meetingsIntelOptions['organizations'] ?? [])->keyBy('id');
+        $fundersById = collect($this->meetingsIntelOptions['funders'] ?? [])->keyBy('id');
+        $projectsById = collect($this->meetingsIntelOptions['projects'] ?? [])->keyBy('id');
+        $grantsById = collect($this->meetingsIntelOptions['grants'] ?? [])->keyBy('id');
+
+        $this->meetingsIntelNotes = $notes->map(function (MeetingIntelNote $note) use (
+            $meetingsById,
+            $peopleById,
+            $organizationsById,
+            $fundersById,
+            $projectsById,
+            $grantsById
+        ): array {
+            $personIds = $this->normalizeIdArray($note->person_ids ?? []);
+            $organizationIds = $this->normalizeIdArray($note->organization_ids ?? []);
+            $funderOrganizationIds = $this->normalizeIdArray($note->funder_organization_ids ?? []);
+            $projectIds = $this->normalizeIdArray($note->project_ids ?? []);
+            $grantIds = $this->normalizeIdArray($note->grant_ids ?? []);
+
+            $meetingId = (int) ($note->meeting_id ?? 0);
+            $projectId = (int) ($note->project_id ?? 0);
+            $grantId = (int) ($note->grant_id ?? 0);
+
+            $this->meetingIntelTagDrafts[$note->id] = [
+                'meeting_id' => $meetingId > 0 ? $meetingId : '',
+                'project_id' => $projectId > 0 ? $projectId : '',
+                'grant_id' => $grantId > 0 ? $grantId : '',
+                'person_ids' => $personIds,
+                'organization_ids' => $organizationIds,
+                'funder_organization_ids' => $funderOrganizationIds,
+                'project_ids' => $projectIds,
+                'grant_ids' => $grantIds,
+            ];
+
+            $meetingLabel = $meetingId > 0
+                ? (string) ($meetingsById->get($meetingId)['label'] ?? ($note->meeting?->title ?: 'Meeting #'.$meetingId))
+                : null;
+            $projectLabel = $projectId > 0
+                ? (string) ($projectsById->get($projectId)['label'] ?? ($note->project?->name ?: 'Project #'.$projectId))
+                : null;
+            $grantLabel = $grantId > 0
+                ? (string) ($grantsById->get($grantId)['label'] ?? ($note->grant?->name ?: 'Grant #'.$grantId))
+                : null;
+
+            return [
+                'id' => $note->id,
+                'source' => $note->source,
+                'author' => $note->author?->name ?: ($note->author_label ?: 'Unknown'),
+                'content' => $note->content,
+                'captured_at' => ($note->captured_at ?: $note->created_at)?->format('M j, Y g:i A'),
+                'slack_channel_id' => $note->slack_channel_id,
+                'slack_message_ts' => $note->slack_message_ts,
+                'meeting_label' => $meetingLabel,
+                'meeting_url' => $meetingId > 0 ? route('meetings.show', $meetingId) : null,
+                'project_label' => $projectLabel,
+                'project_url' => $projectId > 0 ? route('projects.show', $projectId) : null,
+                'grant_label' => $grantLabel,
+                'grant_url' => $grantId > 0 ? route('grants.show', $grantId) : null,
+                'person_tags' => $personIds
+                    ? collect($personIds)->map(fn (int $id) => (string) ($peopleById->get($id)['label'] ?? "Person #{$id}"))->values()->all()
+                    : [],
+                'organization_tags' => $organizationIds
+                    ? collect($organizationIds)->map(fn (int $id) => (string) ($organizationsById->get($id)['label'] ?? "Organization #{$id}"))->values()->all()
+                    : [],
+                'funder_tags' => $funderOrganizationIds
+                    ? collect($funderOrganizationIds)->map(fn (int $id) => (string) ($fundersById->get($id)['label'] ?? "Funder #{$id}"))->values()->all()
+                    : [],
+                'project_tags' => $projectIds
+                    ? collect($projectIds)->map(fn (int $id) => (string) ($projectsById->get($id)['label'] ?? "Project #{$id}"))->values()->all()
+                    : [],
+                'grant_tags' => $grantIds
+                    ? collect($grantIds)->map(fn (int $id) => (string) ($grantsById->get($id)['label'] ?? "Grant #{$id}"))->values()->all()
+                    : [],
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * @param  mixed  $value
+     * @return array<int,int>
+     */
+    protected function normalizeIdArray(mixed $value): array
+    {
+        if (! is_array($value)) {
+            if ($value === null || $value === '') {
+                return [];
+            }
+            $value = [$value];
+        }
+
+        return array_values(array_unique(array_values(array_filter(array_map(
+            static fn ($item): int => (int) $item,
+            $value
+        ), static fn (int $id): bool => $id > 0))));
+    }
+
+    /**
+     * @param  mixed  $value
+     */
+    protected function normalizeNullableInt(mixed $value): ?int
+    {
+        $id = (int) $value;
+
+        return $id > 0 ? $id : null;
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    protected function meetingsIntelChannelIds(): array
+    {
+        $configured = config('services.slack.meetings_intel_channel_ids', []);
+        if (is_string($configured)) {
+            $configured = [$configured];
+        }
+
+        if (! is_array($configured)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(
+            static fn ($channelId): string => trim((string) $channelId),
+            $configured
+        )));
     }
 
     protected function loadHomePendingSuggestions(): void

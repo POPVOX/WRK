@@ -76,6 +76,21 @@ class TripIndex extends Component
         $this->resetPage();
     }
 
+    public function updateTripStatus(int $tripId, string $status): void
+    {
+        if (! array_key_exists($status, Trip::getStatusOptions())) {
+            return;
+        }
+
+        $trip = Trip::find($tripId);
+        if (! $trip) {
+            return;
+        }
+
+        $trip->update(['status' => $status]);
+        $this->dispatch('notify', type: 'success', message: 'Trip status updated.');
+    }
+
     public function getTripsProperty()
     {
         $query = Trip::with(['travelers', 'project', 'creator', 'destinations'])

@@ -1,4 +1,8 @@
-<div class="space-y-6" x-on:open-project-edit-modal.window="$wire.startEditing()">
+<div
+    class="space-y-6"
+    x-on:open-project-edit-modal.window="$wire.startEditing()"
+    x-on:request-project-delete.window="$wire.deleteProject()"
+>
     <x-slot name="header">
         <div class="flex items-center justify-between gap-4">
             <div class="flex items-center gap-4 min-w-0">
@@ -81,8 +85,9 @@
                     </svg>
                     Duplicate
                 </a>
-                <button wire:click="deleteProject"
-                    wire:confirm="Delete this project? This removes its brief, docs, notes, and links. Any sub-projects will remain and move to top level."
+                <button
+                    type="button"
+                    @click="if (window.confirm('Delete this project? This removes its brief, docs, notes, and links. Any sub-projects will remain and move to top level.')) { $dispatch('request-project-delete') }"
                     class="px-4 py-2 text-sm font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 rounded-md hover:bg-red-200 dark:hover:bg-red-900/50">
                     Delete
                 </button>

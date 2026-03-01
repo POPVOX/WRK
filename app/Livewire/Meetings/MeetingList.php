@@ -89,7 +89,12 @@ class MeetingList extends Component
             ->when($this->organization, fn($q) => $q->whereHas('organizations', fn($o) => $o->where('organizations.id', $this->organization)))
             ->when($this->issue, fn($q) => $q->whereHas('issues', fn($i) => $i->where('issues.id', $this->issue)))
             ->when($this->teamMember, fn($q) => $q->whereHas('teamMembers', fn($t) => $t->where('users.id', $this->teamMember)))
-            ->when($this->scope === 'mine' && !$this->teamMember, fn($q) => $q->whereHas('teamMembers', fn($t) => $t->where('users.id', auth()->id())));
+            ->when($this->scope === 'mine' && !$this->teamMember, function ($q) {
+                $q->where(function ($mine) {
+                    $mine->where('user_id', auth()->id())
+                        ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', auth()->id()));
+                });
+            });
     }
 
     // Bulk Import Methods

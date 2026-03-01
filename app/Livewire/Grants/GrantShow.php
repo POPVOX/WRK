@@ -9,6 +9,7 @@ use App\Models\GrantDocument;
 use App\Models\Project;
 use App\Models\ReportingRequirement;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -79,18 +80,26 @@ class GrantShow extends Component
 
     public ?int $editPrimaryProjectId = null;
 
+    protected bool $hasReportingRequirementsTable = false;
+
     public function mount(Grant $grant): void
     {
         if (! Auth::user()?->isAdmin()) {
             abort(403, 'Access denied. Admin only.');
         }
 
-        $this->grant = $grant->load([
+        $this->hasReportingRequirementsTable = Schema::hasTable('reporting_requirements');
+
+        $relations = [
             'funder',
             'documents.uploader',
-            'reportingRequirements',
             'projects',
-        ]);
+        ];
+        if ($this->hasReportingRequirementsTable) {
+            $relations[] = 'reportingRequirements';
+        }
+
+        $this->grant = $grant->load($relations);
     }
 
     public function setTab(string $tab): void
@@ -310,6 +319,12 @@ class GrantShow extends Component
 
     public function addRequirement(): void
     {
+        if (! $this->hasReportingRequirementsTable) {
+            session()->flash('error', 'Reporting requirements are unavailable until migrations are corrected.');
+
+            return;
+        }
+
         $this->validate([
             'reqName' => 'required|string|max:255',
             'reqType' => 'required|string',
@@ -334,6 +349,12 @@ class GrantShow extends Component
 
     public function updateRequirementStatus(int $reqId, string $status): void
     {
+        if (! $this->hasReportingRequirementsTable) {
+            session()->flash('error', 'Reporting requirements are unavailable until migrations are corrected.');
+
+            return;
+        }
+
         $req = ReportingRequirement::where('grant_id', $this->grant->id)->findOrFail($reqId);
         $req->update(['status' => $status]);
         $this->grant->refresh();
@@ -374,10 +395,12 @@ class GrantShow extends Component
     {
         $linkedProjects = $this->grant->projects;
 
-        $upcomingRequirements = $this->grant->reportingRequirements()
-            ->where('status', '!=', 'submitted')
-            ->orderBy('due_date')
-            ->get();
+        $upcomingRequirements = $this->hasReportingRequirementsTable
+            ? $this->grant->reportingRequirements()
+                ->where('status', '!=', 'submitted')
+                ->orderBy('due_date')
+                ->get()
+            : collect();
 
         // Get contacts from the funder organization
         $funderContacts = $this->grant->funder

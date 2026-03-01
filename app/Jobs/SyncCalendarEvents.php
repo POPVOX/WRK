@@ -31,6 +31,8 @@ class SyncCalendarEvents implements ShouldQueue
 
     public function handle(GoogleCalendarService $calendarService): void
     {
+        $syncSucceeded = false;
+
         if (! $calendarService->isConnected($this->user)) {
             Log::info("Calendar sync skipped for user {$this->user->id} - not connected");
 
@@ -221,6 +223,8 @@ class SyncCalendarEvents implements ShouldQueue
                     'status' => Meeting::STATUS_NEW,
                 ]);
 
+                $meeting->teamMembers()->syncWithoutDetaching([$this->user->id]);
+
                 // Link attendees
                 foreach ($eventAttendees as $att) {
                     $person = Person::where('email', $att['email'])->first();
@@ -233,12 +237,13 @@ class SyncCalendarEvents implements ShouldQueue
             }
 
             Log::info("Calendar sync completed for user {$this->user->id}: {$imported} new, {$updated} updated");
+            $syncSucceeded = true;
         } catch (\Exception $e) {
             Log::error("Calendar sync failed for user {$this->user->id}: ".$e->getMessage());
         } finally {
-            // Always update last sync time - even if partial sync or errors occurred
-            // This prevents the "hasn't synced" warning from showing incorrectly
-            $this->user->update(['calendar_import_date' => now()]);
+            if ($syncSucceeded) {
+                $this->user->update(['calendar_import_date' => now()]);
+            }
         }
     }
 
@@ -346,7 +351,7 @@ class SyncCalendarEvents implements ShouldQueue
         ];
 
         foreach ($skipPatterns as $pattern) {
-            if (str_contains($summary, $pattern)) {
+            if ($this->containsStandalonePattern($summary, $pattern)) {
                 return true;
             }
         }
@@ -369,5 +374,12 @@ class SyncCalendarEvents implements ShouldQueue
         }
 
         return false;
+    }
+
+    protected function containsStandalonePattern(string $summary, string $pattern): bool
+    {
+        $escaped = preg_quote($pattern, '/');
+
+        return (bool) preg_match('/(^|[\\s\\-:()\\[\\],.])'.$escaped.'($|[\\s\\-:()\\[\\],.])/i', $summary);
     }
 }

@@ -1670,6 +1670,28 @@ class InboxIndex extends Component
         return $this->selectedThreadSnapshot();
     }
 
+    public function getContextCandidatesProperty(): array
+    {
+        return $this->buildContextCandidates($this->selectedThreadSnapshot());
+    }
+
+    public function getThreadContextLinksProperty(): Collection
+    {
+        $user = Auth::user();
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $user || ! $snapshot || ! Schema::hasTable('inbox_thread_context_links')) {
+            return collect();
+        }
+
+        return InboxThreadContextLink::query()
+            ->where('user_id', $user->id)
+            ->where('thread_key', (string) ($snapshot['thread_key'] ?? ''))
+            ->latest('id')
+            ->get()
+            ->map(fn (InboxThreadContextLink $link) => $this->resolveContextLinkDisplay($link))
+            ->values();
+    }
+
     public function getInboxActionLogsProperty(): Collection
     {
         $user = Auth::user();
@@ -1785,6 +1807,15 @@ class InboxIndex extends Component
         $organization = $person?->organization;
         $projectCandidates = $this->projectCandidates($messages, $person)->values();
         $grantCandidates = $this->grantCandidates($messages, $person, $organization)->values();
+        $projectCandidates = $this->manualProjectCandidatesForThread($this->selectedThreadKey)->concat($projectCandidates)->unique('id')->values();
+        $grantCandidates = $this->manualGrantCandidatesForThread($this->selectedThreadKey)->concat($grantCandidates)->unique('id')->values();
+
+        if ($person && $this->selectedContextPersonId === '') {
+            $this->selectedContextPersonId = (string) $person->id;
+        }
+        if ($organization && $this->selectedContextOrganizationId === '') {
+            $this->selectedContextOrganizationId = (string) $organization->id;
+        }
 
         if ($projectCandidates->isNotEmpty()) {
             $candidateIds = $projectCandidates->pluck('id')->map(fn ($id) => (string) $id)->all();
@@ -2304,6 +2335,298 @@ class InboxIndex extends Component
         return Str::limit($clean, 100, '');
     }
 
+    protected function manualProjectCandidatesForThread(?string $threadKey): Collection
+    {
+        $user = Auth::user();
+        $threadKey = trim((string) $threadKey);
+        if (! $user || $threadKey === '' || ! Schema::hasTable('inbox_thread_context_links')) {
+            return collect();
+        }
+
+        $projectIds = InboxThreadContextLink::query()
+            ->where('user_id', $user->id)
+            ->where('thread_key', $threadKey)
+            ->where('link_type', InboxThreadContextLink::TYPE_PROJECT)
+            ->pluck('link_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($projectIds === []) {
+            return collect();
+        }
+
+        return Project::query()
+            ->whereIn('id', $projectIds)
+            ->orderBy('name')
+            ->get(['id', 'name', 'status'])
+            ->map(fn (Project $project) => [
+                'id' => $project->id,
+                'name' => $project->name,
+                'status' => $project->status,
+                'source' => 'manual_context',
+            ])
+            ->values();
+    }
+
+    protected function manualGrantCandidatesForThread(?string $threadKey): Collection
+    {
+        $actor = Auth::user();
+        $threadKey = trim((string) $threadKey);
+        if (! $actor || $threadKey === '' || ! Schema::hasTable('inbox_thread_context_links')) {
+            return collect();
+        }
+
+        $grantIds = InboxThreadContextLink::query()
+            ->where('user_id', $actor->id)
+            ->where('thread_key', $threadKey)
+            ->where('link_type', InboxThreadContextLink::TYPE_GRANT)
+            ->pluck('link_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($grantIds === []) {
+            return collect();
+        }
+
+        return Grant::query()
+            ->visibleTo($actor)
+            ->with('funder:id,name')
+            ->whereIn('id', $grantIds)
+            ->orderBy('name')
+            ->get(['id', 'organization_id', 'name', 'status', 'visibility'])
+            ->map(fn (Grant $grant) => [
+                'id' => $grant->id,
+                'name' => $grant->name,
+                'status' => $grant->status,
+                'visibility' => $grant->visibility,
+                'funder_name' => (string) ($grant->funder?->name ?? ''),
+                'source' => 'manual_context',
+            ])
+            ->values();
+    }
+
+    protected function buildContextCandidates(?array $snapshot): array
+    {
+        if (! $snapshot) {
+            return [
+                'contacts' => [],
+                'organizations' => [],
+                'meetings' => [],
+                'media_contacts' => [],
+                'media_outlets' => [],
+            ];
+        }
+
+        $counterpartEmail = Str::lower(trim((string) ($snapshot['counterpart_email'] ?? '')));
+        $counterpartName = trim((string) ($snapshot['counterpart_name'] ?? ''));
+        $domain = $counterpartEmail !== '' && Str::contains($counterpartEmail, '@')
+            ? Str::after($counterpartEmail, '@')
+            : '';
+
+        $exactContact = collect();
+        if ($counterpartEmail !== '') {
+            $exactContact = Person::query()
+                ->whereRaw('LOWER(email) = ?', [$counterpartEmail])
+                ->limit(1)
+                ->get(['id', 'name', 'email', 'organization_id']);
+        }
+
+        $nameContacts = collect();
+        if ($counterpartName !== '') {
+            $nameContacts = Person::query()
+                ->where('name', 'like', '%'.$counterpartName.'%')
+                ->limit(8)
+                ->get(['id', 'name', 'email', 'organization_id']);
+        }
+
+        $domainContacts = collect();
+        if ($domain !== '') {
+            $domainContacts = Person::query()
+                ->where('email', 'like', '%@'.$domain)
+                ->limit(20)
+                ->get(['id', 'name', 'email', 'organization_id']);
+        }
+
+        $contacts = $exactContact
+            ->concat($nameContacts)
+            ->concat($domainContacts)
+            ->unique('id')
+            ->take(30)
+            ->map(fn (Person $person) => [
+                'id' => $person->id,
+                'name' => $person->name,
+                'email' => (string) ($person->email ?? ''),
+            ])
+            ->values()
+            ->all();
+
+        $seedOrganization = $snapshot['organization'] ?? null;
+        $domainStem = $domain !== '' ? Str::lower((string) Str::before($domain, '.')) : '';
+
+        $domainOrganizations = collect();
+        if ($domain !== '' || $domainStem !== '') {
+            $domainOrganizations = Organization::query()
+                ->when($domain !== '', fn ($query) => $query->orWhereRaw('LOWER(COALESCE(website, \'\')) LIKE ?', ['%'.$domain.'%']))
+                ->when($domainStem !== '', fn ($query) => $query->orWhereRaw('LOWER(name) LIKE ?', ['%'.$domainStem.'%']))
+                ->orderBy('name')
+                ->limit(20)
+                ->get(['id', 'name', 'type']);
+        }
+
+        $organizations = collect();
+        if ($seedOrganization instanceof Organization) {
+            $organizations->push($seedOrganization);
+        }
+        $organizations = $organizations
+            ->concat($domainOrganizations)
+            ->unique('id')
+            ->take(30)
+            ->map(fn (Organization $organization) => [
+                'id' => $organization->id,
+                'name' => $organization->name,
+                'type' => (string) ($organization->type ?? ''),
+            ])
+            ->values()
+            ->all();
+
+        $person = $snapshot['person'] ?? null;
+        $personId = $person instanceof Person ? (int) $person->id : 0;
+        $organizationId = $seedOrganization instanceof Organization ? (int) $seedOrganization->id : 0;
+
+        $relatedMeetings = Meeting::query()
+            ->when($personId > 0, fn ($query) => $query->orWhereHas('people', fn ($people) => $people->where('people.id', $personId)))
+            ->when($organizationId > 0, fn ($query) => $query->orWhereHas('organizations', fn ($orgs) => $orgs->where('organizations.id', $organizationId)))
+            ->orderByDesc('meeting_date')
+            ->limit(15)
+            ->get(['id', 'title', 'meeting_date']);
+
+        $recentMeetings = Meeting::query()
+            ->orderByDesc('meeting_date')
+            ->limit(20)
+            ->get(['id', 'title', 'meeting_date']);
+
+        $meetings = $relatedMeetings
+            ->concat($recentMeetings)
+            ->unique('id')
+            ->take(30)
+            ->map(fn (Meeting $meeting) => [
+                'id' => $meeting->id,
+                'title' => (string) ($meeting->title ?: 'Untitled Meeting'),
+                'date_label' => $meeting->meeting_date?->format('M j, Y') ?: 'No date',
+            ])
+            ->values()
+            ->all();
+
+        $mediaContacts = Person::query()
+            ->where('is_journalist', true)
+            ->orderBy('name')
+            ->limit(30)
+            ->get(['id', 'name', 'email'])
+            ->map(fn (Person $person) => [
+                'id' => $person->id,
+                'name' => $person->name,
+                'email' => (string) ($person->email ?? ''),
+            ])
+            ->values()
+            ->all();
+
+        $mediaOutlets = Organization::query()
+            ->where(function ($query) {
+                $query->whereRaw('LOWER(COALESCE(type, \'\')) = ?', ['media'])
+                    ->orWhereHas('journalists');
+            })
+            ->orderBy('name')
+            ->limit(30)
+            ->get(['id', 'name', 'type'])
+            ->map(fn (Organization $organization) => [
+                'id' => $organization->id,
+                'name' => $organization->name,
+                'type' => (string) ($organization->type ?? ''),
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'contacts' => $contacts,
+            'organizations' => $organizations,
+            'meetings' => $meetings,
+            'media_contacts' => $mediaContacts,
+            'media_outlets' => $mediaOutlets,
+        ];
+    }
+
+    protected function resolveContextLinkDisplay(InboxThreadContextLink $link): array
+    {
+        $label = '#'.$link->link_id;
+        $subtitle = '';
+        $url = null;
+
+        switch ($link->link_type) {
+            case InboxThreadContextLink::TYPE_PERSON:
+            case InboxThreadContextLink::TYPE_MEDIA_CONTACT:
+                $person = Person::query()->find($link->link_id);
+                if ($person) {
+                    $label = $person->name;
+                    $subtitle = (string) ($person->email ?? '');
+                    $url = route('contacts.show', $person);
+                }
+                break;
+
+            case InboxThreadContextLink::TYPE_ORGANIZATION:
+            case InboxThreadContextLink::TYPE_MEDIA_OUTLET:
+                $organization = Organization::query()->find($link->link_id);
+                if ($organization) {
+                    $label = $organization->name;
+                    $subtitle = (string) ($organization->type ?? '');
+                    $url = route('organizations.show', $organization);
+                }
+                break;
+
+            case InboxThreadContextLink::TYPE_PROJECT:
+                $project = Project::query()->find($link->link_id);
+                if ($project) {
+                    $label = $project->name;
+                    $subtitle = (string) ($project->status ?? '');
+                    $url = route('projects.show', $project);
+                }
+                break;
+
+            case InboxThreadContextLink::TYPE_MEETING:
+                $meeting = Meeting::query()->find($link->link_id);
+                if ($meeting) {
+                    $label = (string) ($meeting->title ?: 'Untitled Meeting');
+                    $subtitle = $meeting->meeting_date?->format('M j, Y') ?: '';
+                    $url = route('meetings.show', $meeting);
+                }
+                break;
+
+            case InboxThreadContextLink::TYPE_GRANT:
+                $grant = Grant::query()->find($link->link_id);
+                if ($grant) {
+                    $label = $grant->name;
+                    $subtitle = (string) ($grant->status ?? '');
+                    $url = route('grants.show', $grant);
+                }
+                break;
+        }
+
+        return [
+            'id' => $link->id,
+            'link_type' => $link->link_type,
+            'link_id' => (int) $link->link_id,
+            'label' => $label,
+            'subtitle' => $subtitle,
+            'source' => (string) ($link->metadata['source'] ?? 'manual'),
+            'url' => $url,
+        ];
+    }
+
     protected function groupedMessages(): Collection
     {
         return $this->filteredMessages()->groupBy(fn (GmailMessage $message) => $this->threadKeyForMessage($message));
@@ -2566,10 +2889,14 @@ class InboxIndex extends Component
     {
         $threadSummaries = $this->threadSummaries;
         $selected = $this->selectedThread;
+        $contextCandidates = $this->contextCandidates;
+        $threadContextLinks = $this->threadContextLinks;
 
         return view('livewire.communications.inbox-index', [
             'threadSummaries' => $threadSummaries,
             'selectedThread' => $selected,
+            'contextCandidates' => $contextCandidates,
+            'threadContextLinks' => $threadContextLinks,
             'folderCounts' => $this->folderCounts,
             'hasMessages' => ! empty($threadSummaries),
             'inboxActionLogs' => $this->inboxActionLogs,

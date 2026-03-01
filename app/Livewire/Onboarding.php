@@ -435,6 +435,8 @@ class Onboarding extends Component
                     'status' => Meeting::STATUS_NEW,
                 ]);
 
+                $meeting->teamMembers()->syncWithoutDetaching([$user->id]);
+
                 // Link people to meeting
                 foreach ($event['attendees'] as $attendee) {
                     $person = Person::where('email', $attendee['email'])->first();
