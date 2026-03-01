@@ -1788,8 +1788,9 @@ class InboxIndex extends Component
 
         if ($projectCandidates->isNotEmpty()) {
             $candidateIds = $projectCandidates->pluck('id')->map(fn ($id) => (string) $id)->all();
-            if ($this->selectedProjectId === '' || ! in_array((string) $this->selectedProjectId, $candidateIds, true)) {
-                $this->selectedProjectId = (string) $projectCandidates->first()['id'];
+            // Respect explicit "No project selected" in the UI; only clear invalid stale values.
+            if ($this->selectedProjectId !== '' && ! in_array((string) $this->selectedProjectId, $candidateIds, true)) {
+                $this->selectedProjectId = '';
             }
         } else {
             $this->selectedProjectId = '';
