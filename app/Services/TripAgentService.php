@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ApprovalRequest;
 use App\Models\Trip;
 use App\Models\TripAgentAction;
 use App\Models\TripAgentConversation;
@@ -99,25 +100,57 @@ class TripAgentService
                 ]),
             ]);
 
-            try {
-                $action = $this->applyAction($action, $user);
-            } catch (\Throwable $exception) {
+            $approvalGate = app(ApprovalGateService::class);
+            $approvalDecision = $approvalGate->evaluate($user, 'trip.auto_apply', [
+                'resource_type' => 'trip_agent_action',
+                'resource_id' => $action->id,
+                'trip_id' => $trip->id,
+                'title' => $action->summary ?: 'Trip agent action',
+                'summary' => $action->summary ?: 'Trip updates proposed',
+                'fingerprint' => implode(
+                    '|',
+                    collect($changes)->map(fn ($change) => (string) ($change['type'] ?? 'unknown'))->values()->all()
+                ),
+            ]);
+
+            if (! $approvalDecision['allowed']) {
+                $approvalRequest = $approvalDecision['request'] ?? null;
                 $action->update([
-                    'status' => 'failed',
-                    'executed_by' => $user->id,
-                    'executed_at' => now(),
-                    'error_message' => $exception->getMessage(),
+                    'approval_request_id' => $approvalRequest?->id,
+                    'status' => 'pending',
+                    'error_message' => null,
                 ]);
 
                 $conversation->messages()->create([
                     'role' => 'assistant',
-                    'content' => 'I could not apply those changes automatically. Please share clearer details or try again.',
+                    'content' => 'I prepared those updates, but they require approval before I can apply them.',
                     'meta' => [
                         'action_id' => $action->id,
-                        'status' => 'failed',
-                        'error' => $exception->getMessage(),
+                        'status' => 'pending_approval',
+                        'approval_request_id' => $approvalRequest?->id,
                     ],
                 ]);
+            } else {
+                try {
+                    $action = $this->applyAction($action, $user);
+                } catch (\Throwable $exception) {
+                    $action->update([
+                        'status' => 'failed',
+                        'executed_by' => $user->id,
+                        'executed_at' => now(),
+                        'error_message' => $exception->getMessage(),
+                    ]);
+
+                    $conversation->messages()->create([
+                        'role' => 'assistant',
+                        'content' => 'I could not apply those changes automatically. Please share clearer details or try again.',
+                        'meta' => [
+                            'action_id' => $action->id,
+                            'status' => 'failed',
+                            'error' => $exception->getMessage(),
+                        ],
+                    ]);
+                }
             }
         }
 
@@ -133,6 +166,11 @@ class TripAgentService
     {
         if ($action->status !== 'pending') {
             throw new \RuntimeException("Only pending actions can be rejected. Current status: {$action->status}");
+        }
+
+        $approvalRequest = $action->approvalRequest;
+        if ($approvalRequest && $approvalRequest->approval_status === ApprovalRequest::STATUS_PENDING) {
+            app(ApprovalGateService::class)->reject($approvalRequest, $user, 'Rejected from trip agent action queue.');
         }
 
         $action->update([
@@ -160,6 +198,25 @@ class TripAgentService
             throw new \RuntimeException("Only pending/approved actions can be applied. Current status: {$action->status}");
         }
 
+        $approvalRequest = $action->approvalRequest;
+        if ($approvalRequest) {
+            if ($approvalRequest->approval_status === ApprovalRequest::STATUS_REJECTED) {
+                throw new \RuntimeException('This action was rejected and cannot be applied.');
+            }
+
+            if ($approvalRequest->approval_status === ApprovalRequest::STATUS_PENDING) {
+                if (! $user->isManagement()) {
+                    throw new \RuntimeException('This action requires management approval before it can be applied.');
+                }
+
+                $approvalRequest = app(ApprovalGateService::class)->approve(
+                    $approvalRequest,
+                    $user,
+                    'Approved during trip action application.'
+                );
+            }
+        }
+
         $conversation = $action->conversation()->with('trip')->firstOrFail();
         $trip = $conversation->trip;
         if (! $trip) {
@@ -175,7 +232,7 @@ class TripAgentService
             throw new \RuntimeException('Action has no changes to apply.');
         }
 
-        DB::transaction(function () use ($action, $trip, $conversation, $user, $changes): void {
+        DB::transaction(function () use ($action, $approvalRequest, $trip, $conversation, $user, $changes): void {
             $action->update([
                 'status' => 'approved',
                 'approved_by' => $user->id,
@@ -229,6 +286,10 @@ class TripAgentService
                 'execution_log' => $executionLog,
                 'error_message' => null,
             ]);
+
+            if ($approvalRequest && $approvalRequest->approval_status === ApprovalRequest::STATUS_APPROVED) {
+                app(ApprovalGateService::class)->markExecuted($approvalRequest);
+            }
 
             $summary = trim((string) $action->summary);
             $executionSummary = $this->buildExecutionSummary($executionLog);

@@ -11,6 +11,7 @@ class TripAgentAction extends Model
         'conversation_id',
         'proposed_by_message_id',
         'requested_by',
+        'approval_request_id',
         'status',
         'summary',
         'payload',
@@ -42,6 +43,11 @@ class TripAgentAction extends Model
     public function requester(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requested_by');
+    }
+
+    public function approvalRequest(): BelongsTo
+    {
+        return $this->belongsTo(ApprovalRequest::class, 'approval_request_id');
     }
 
     public function approver(): BelongsTo

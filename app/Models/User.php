@@ -144,6 +144,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Agents directly assigned to this staffer identity.
+     */
+    public function staffedAgents(): HasMany
+    {
+        return $this->hasMany(Agent::class, 'staffer_id');
+    }
+
+    /**
      * Get the meetings logged by this user.
      */
     public function meetings(): HasMany
@@ -241,6 +249,14 @@ class User extends Authenticatable
     public function outreachActivityLogs(): HasMany
     {
         return $this->hasMany(OutreachActivityLog::class);
+    }
+
+    /**
+     * Slack workspace identities mapped to this user.
+     */
+    public function slackIdentities(): HasMany
+    {
+        return $this->hasMany(UserSlackIdentity::class);
     }
 
     /**

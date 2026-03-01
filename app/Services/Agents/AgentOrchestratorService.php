@@ -10,6 +10,7 @@ use App\Models\AgentRun;
 use App\Models\AgentSuggestion;
 use App\Models\AgentSuggestionSource;
 use App\Models\AgentThread;
+use App\Models\ApprovalRequest;
 use App\Models\Grant;
 use App\Models\Meeting;
 use App\Models\Organization;
@@ -18,14 +19,25 @@ use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\Trip;
 use App\Models\User;
+use App\Services\ApprovalGateService;
 use Carbon\Carbon;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use RuntimeException;
 
 class AgentOrchestratorService
 {
+    protected ?bool $threadVisibilityColumnExists = null;
+
+    protected ?bool $messageVisibilityColumnExists = null;
+
+    public function __construct(
+        protected PromptAssemblyService $promptAssemblyService,
+        protected MemoryExtractionService $memoryExtractionService
+    ) {}
+
     public function direct(Agent $agent, User $actor, string $message): array
     {
         $cleanMessage = trim($message);
@@ -35,16 +47,16 @@ class AgentOrchestratorService
 
         $thread = AgentThread::firstOrCreate(
             ['agent_id' => $agent->id, 'user_id' => $actor->id],
-            ['title' => $agent->name.' Thread']
+            $this->threadSeedAttributes($agent)
         );
 
-        AgentMessage::create([
+        $userMessage = AgentMessage::create($this->messagePayload($thread, [
             'thread_id' => $thread->id,
             'user_id' => $actor->id,
             'role' => 'user',
             'content' => $cleanMessage,
             'meta' => ['source' => 'intelligence'],
-        ]);
+        ]));
 
         $run = AgentRun::create([
             'agent_id' => $agent->id,
@@ -56,11 +68,21 @@ class AgentOrchestratorService
         ]);
 
         try {
+            $promptPreview = $this->promptAssemblyService->assembleForAgent($agent, $actor, [
+                'directive' => $cleanMessage,
+                'thread_id' => $thread->id,
+                'run_id' => $run->id,
+            ]);
+
             $entityIndex = $this->buildEntityIndex();
             $lines = $this->extractDirectiveLines($cleanMessage);
             $reasoning = [];
             $alternatives = [];
             $createdSuggestions = [];
+
+            foreach ($promptPreview['diagnostics'] as $diagnostic) {
+                $reasoning[] = '['.$diagnostic['severity'].'] '.$diagnostic['message'];
+            }
 
             foreach ($lines as $line) {
                 $suggestion = $this->buildSuggestion($agent, $run, $thread, $line, $entityIndex);
@@ -102,8 +124,16 @@ class AgentOrchestratorService
             });
 
             $autoExecuted = [];
+            $blockedByApprovalGate = [];
             foreach ($suggestionModels as $suggestionModel) {
-                if (! $this->shouldAutonomouslyExecute($agent, $suggestionModel)) {
+                $autoExecutionDecision = $this->evaluateAutonomousExecution($agent, $suggestionModel, $actor);
+                if (! $autoExecutionDecision['allowed']) {
+                    if (! empty($autoExecutionDecision['blocked_by_approval_gate'])) {
+                        $blockedByApprovalGate[] = [
+                            'suggestion_id' => $suggestionModel->id,
+                            'approval_request_id' => $autoExecutionDecision['approval_request_id'] ?? null,
+                        ];
+                    }
                     continue;
                 }
 
@@ -116,9 +146,14 @@ class AgentOrchestratorService
 
             $suggestionModels = $suggestionModels->map(fn (AgentSuggestion $suggestion) => $suggestion->fresh(['sources']));
 
-            $response = $this->buildAssistantResponse($agent, $suggestionModels->all(), count($autoExecuted));
+            $response = $this->buildAssistantResponse(
+                $agent,
+                $suggestionModels->all(),
+                count($autoExecuted),
+                count($blockedByApprovalGate)
+            );
 
-            AgentMessage::create([
+            $assistantMessage = AgentMessage::create($this->messagePayload($thread, [
                 'thread_id' => $thread->id,
                 'role' => 'assistant',
                 'content' => $response,
@@ -126,8 +161,17 @@ class AgentOrchestratorService
                     'run_id' => $run->id,
                     'suggestion_ids' => $suggestionModels->pluck('id')->all(),
                     'auto_executed_count' => count($autoExecuted),
+                    'approval_gate_blocked_count' => count($blockedByApprovalGate),
+                    'effective_prompt_hash' => $promptPreview['effective_prompt_hash'] ?? null,
+                    'prompt_diagnostics_count' => count($promptPreview['diagnostics'] ?? []),
                 ],
-            ]);
+            ]));
+
+            try {
+                $this->memoryExtractionService->extractFromExchange($agent, $thread, [$userMessage, $assistantMessage]);
+            } catch (\Throwable $memoryException) {
+                report($memoryException);
+            }
 
             $run->update([
                 'status' => 'completed',
@@ -153,12 +197,12 @@ class AgentOrchestratorService
                 'completed_at' => now(),
             ]);
 
-            AgentMessage::create([
+            AgentMessage::create($this->messagePayload($thread, [
                 'thread_id' => $thread->id,
                 'role' => 'assistant',
                 'content' => 'I could not process that directive cleanly. Please try rephrasing with one item per line.',
                 'meta' => ['run_id' => $run->id, 'error' => true],
-            ]);
+            ]));
 
             throw $exception;
         }
@@ -167,9 +211,28 @@ class AgentOrchestratorService
     public function approveSuggestion(AgentSuggestion $suggestion, User $reviewer, ?string $overrideTitle = null, bool $force = false): string
     {
         return DB::transaction(function () use ($suggestion, $reviewer, $overrideTitle, $force): string {
-            $suggestion->refresh();
+            $suggestion->refresh()->loadMissing('approvalRequest');
             if ($suggestion->approval_status !== AgentSuggestion::STATUS_PENDING) {
                 throw new RuntimeException('Suggestion is no longer pending.');
+            }
+
+            $approvalRequest = $suggestion->approvalRequest;
+            if ($approvalRequest) {
+                if ($approvalRequest->approval_status === ApprovalRequest::STATUS_REJECTED) {
+                    throw new RuntimeException('This suggestion was rejected and can no longer be executed.');
+                }
+
+                if ($approvalRequest->approval_status === ApprovalRequest::STATUS_PENDING) {
+                    if (! $reviewer->isManagement()) {
+                        throw new RuntimeException('Management approval is required before executing this suggestion.');
+                    }
+
+                    $approvalRequest = app(ApprovalGateService::class)->approve(
+                        $approvalRequest,
+                        $reviewer,
+                        'Approved during suggestion execution.'
+                    );
+                }
             }
 
             if (! $force) {
@@ -193,13 +256,19 @@ class AgentOrchestratorService
             ]);
 
             if ($suggestion->thread_id) {
-                AgentMessage::create([
+                $thread = AgentThread::query()->find($suggestion->thread_id);
+                $payload = [
                     'thread_id' => $suggestion->thread_id,
                     'user_id' => $reviewer->id,
                     'role' => 'assistant',
                     'content' => 'Executed: '.$executionSummary,
                     'meta' => ['suggestion_id' => $suggestion->id, 'executed' => true],
-                ]);
+                ];
+                AgentMessage::create($thread ? $this->messagePayload($thread, $payload) : $payload);
+            }
+
+            if ($approvalRequest && $approvalRequest->approval_status === ApprovalRequest::STATUS_APPROVED) {
+                app(ApprovalGateService::class)->markExecuted($approvalRequest);
             }
 
             return $executionSummary;
@@ -210,6 +279,16 @@ class AgentOrchestratorService
     {
         $this->assertReviewerCanApprove($suggestion, $reviewer);
 
+        $suggestion->loadMissing('approvalRequest');
+        $approvalRequest = $suggestion->approvalRequest;
+        if ($approvalRequest && $approvalRequest->approval_status === ApprovalRequest::STATUS_PENDING) {
+            app(ApprovalGateService::class)->reject(
+                $approvalRequest,
+                $reviewer,
+                $reason ?: 'Dismissed from suggestion queue.'
+            );
+        }
+
         $suggestion->update([
             'approval_status' => AgentSuggestion::STATUS_REJECTED,
             'reviewed_by' => $reviewer->id,
@@ -218,13 +297,15 @@ class AgentOrchestratorService
         ]);
 
         if ($suggestion->thread_id) {
-            AgentMessage::create([
+            $thread = AgentThread::query()->find($suggestion->thread_id);
+            $payload = [
                 'thread_id' => $suggestion->thread_id,
                 'user_id' => $reviewer->id,
                 'role' => 'assistant',
                 'content' => 'Dismissed: '.$suggestion->title,
                 'meta' => ['suggestion_id' => $suggestion->id, 'dismissed' => true],
-            ]);
+            ];
+            AgentMessage::create($thread ? $this->messagePayload($thread, $payload) : $payload);
         }
     }
 
@@ -267,13 +348,111 @@ class AgentOrchestratorService
         }
     }
 
-    protected function shouldAutonomouslyExecute(Agent $agent, AgentSuggestion $suggestion): bool
+    /**
+     * @return array<string,mixed>
+     */
+    protected function threadSeedAttributes(Agent $agent): array
     {
-        if ($agent->autonomy_mode === 'propose_only') {
-            return false;
+        $attributes = [
+            'title' => $agent->name.' Thread',
+        ];
+
+        if ($this->threadVisibilityColumnExists()) {
+            $attributes['visibility'] = AgentThread::VISIBILITY_PRIVATE;
         }
 
-        return $this->governanceModeFor($agent, $suggestion->risk_level) === 'autonomous';
+        return $attributes;
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     * @return array<string,mixed>
+     */
+    protected function messagePayload(AgentThread $thread, array $payload): array
+    {
+        if ($this->messageVisibilityColumnExists()) {
+            $payload['visibility'] = trim((string) ($thread->visibility ?? '')) ?: AgentThread::VISIBILITY_PRIVATE;
+        }
+
+        return $payload;
+    }
+
+    protected function threadVisibilityColumnExists(): bool
+    {
+        if ($this->threadVisibilityColumnExists === null) {
+            $this->threadVisibilityColumnExists = Schema::hasColumn('agent_threads', 'visibility');
+        }
+
+        return $this->threadVisibilityColumnExists;
+    }
+
+    protected function messageVisibilityColumnExists(): bool
+    {
+        if ($this->messageVisibilityColumnExists === null) {
+            $this->messageVisibilityColumnExists = Schema::hasColumn('agent_messages', 'visibility');
+        }
+
+        return $this->messageVisibilityColumnExists;
+    }
+
+    /**
+     * @return array{allowed:bool,blocked_by_approval_gate:bool,approval_request_id:int|null}
+     */
+    protected function evaluateAutonomousExecution(Agent $agent, AgentSuggestion $suggestion, User $actor): array
+    {
+        if ($agent->autonomy_mode === 'propose_only') {
+            return [
+                'allowed' => false,
+                'blocked_by_approval_gate' => false,
+                'approval_request_id' => null,
+            ];
+        }
+
+        if ($this->governanceModeFor($agent, $suggestion->risk_level) !== 'autonomous') {
+            return [
+                'allowed' => false,
+                'blocked_by_approval_gate' => false,
+                'approval_request_id' => null,
+            ];
+        }
+
+        $approvalDecision = app(ApprovalGateService::class)->evaluate($actor, 'agent.autonomous_execute', [
+            'risk_level' => $suggestion->risk_level,
+            'resource_type' => 'agent_suggestion',
+            'resource_id' => $suggestion->id,
+            'agent_id' => $agent->id,
+            'title' => $suggestion->title,
+            'summary' => $suggestion->reasoning,
+            'fingerprint' => implode('|', [
+                (string) $agent->id,
+                (string) $suggestion->suggestion_type,
+                (string) $suggestion->title,
+            ]),
+        ]);
+
+        if (! $approvalDecision['allowed']) {
+            /** @var \App\Models\ApprovalRequest|null $approvalRequest */
+            $approvalRequest = $approvalDecision['request'] ?? null;
+
+            $suggestion->update([
+                'approval_request_id' => $approvalRequest?->id,
+                'review_notes' => $approvalRequest
+                    ? 'Auto-execution blocked by approval gate (request #'.$approvalRequest->id.').'
+                    : 'Auto-execution blocked by approval gate.',
+            ]);
+
+            return [
+                'allowed' => false,
+                'blocked_by_approval_gate' => true,
+                'approval_request_id' => $approvalRequest?->id,
+            ];
+        }
+
+        return [
+            'allowed' => true,
+            'blocked_by_approval_gate' => false,
+            'approval_request_id' => null,
+        ];
     }
 
     protected function governanceModeFor(Agent $agent, string $riskLevel): string
@@ -484,7 +663,12 @@ class AgentOrchestratorService
         ];
     }
 
-    protected function buildAssistantResponse(Agent $agent, array $suggestions, int $autoExecutedCount = 0): string
+    protected function buildAssistantResponse(
+        Agent $agent,
+        array $suggestions,
+        int $autoExecutedCount = 0,
+        int $blockedByApprovalGateCount = 0
+    ): string
     {
         $counts = collect($suggestions)->countBy('suggestion_type');
 
@@ -493,6 +677,10 @@ class AgentOrchestratorService
 
         if ($autoExecutedCount > 0) {
             $lines[] = $autoExecutedCount.' low-risk action'.($autoExecutedCount === 1 ? ' was' : 's were').' executed automatically based on this agent\'s governance settings.';
+        }
+
+        if ($blockedByApprovalGateCount > 0) {
+            $lines[] = $blockedByApprovalGateCount.' autonomous action'.($blockedByApprovalGateCount === 1 ? ' was' : 's were').' held for management approval by policy.';
         }
 
         $lines[] = '';

@@ -11,6 +11,17 @@ use RuntimeException;
 
 class BoxClient
 {
+    protected ?string $scopedAccessToken = null;
+
+    public function withAccessToken(?string $accessToken): self
+    {
+        $clone = clone $this;
+        $token = trim((string) ($accessToken ?? ''));
+        $clone->scopedAccessToken = $token !== '' ? $token : null;
+
+        return $clone;
+    }
+
     public function isConfigured(): bool
     {
         $staticToken = trim((string) config('services.box.access_token', ''));
@@ -277,6 +288,10 @@ class BoxClient
 
     private function shouldRetryWithFreshToken(RequestException $exception): bool
     {
+        if ($this->scopedAccessToken !== null) {
+            return false;
+        }
+
         if (trim((string) config('services.box.access_token', '')) !== '') {
             return false;
         }
@@ -286,6 +301,10 @@ class BoxClient
 
     private function resolveAccessToken(bool $forceRefresh = false): string
     {
+        if ($this->scopedAccessToken !== null) {
+            return $this->scopedAccessToken;
+        }
+
         $staticToken = trim((string) config('services.box.access_token', ''));
         if ($staticToken !== '') {
             return $staticToken;

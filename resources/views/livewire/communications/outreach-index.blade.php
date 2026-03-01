@@ -1,9 +1,9 @@
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-6">
-    <div class="max-w-7xl mx-auto space-y-5">
-        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+<div class="space-y-6">
+    <div class="app-page-frame">
+        <div class="app-page-head">
             <div>
-                <h1 class="text-3xl font-semibold text-gray-900 dark:text-white">Outreach Suite</h1>
-                <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                <h1 class="app-page-title">Outreach</h1>
+                <p class="app-page-lead">
                     Newsletters, bulk campaigns, automated workflows, and Substack planning in one workspace.
                 </p>
             </div>
@@ -29,14 +29,26 @@
         @endif
 
         @if($migrationReady)
-            <nav class="flex flex-wrap items-center gap-2">
-                @foreach(['newsletters' => 'Newsletters', 'campaigns' => 'Campaigns', 'automations' => 'Automations', 'substack' => 'Substack', 'activity' => 'Activity'] as $key => $label)
-                    <a href="{{ route('communications.outreach', ['tab' => $key]) }}" wire:navigate
-                        class="rounded-lg px-3 py-2 text-sm font-medium {{ $tab === $key ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700' }}">
-                        {{ $label }}
-                    </a>
-                @endforeach
-            </nav>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <nav class="app-tabset">
+                    @foreach(['campaigns' => 'Campaigns', 'automations' => 'Automations', 'newsletters' => 'Newsletters'] as $key => $label)
+                        <a href="{{ route('communications.outreach', ['tab' => $key]) }}" wire:navigate
+                            class="app-tab {{ $tab === $key ? 'app-tab-active' : '' }}">
+                            {{ $label }}
+                        </a>
+                    @endforeach
+                </nav>
+                <details class="group">
+                    <summary class="list-none cursor-pointer rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                        More
+                    </summary>
+                    <div class="mt-2 app-link-group">
+                        <a href="{{ route('communications.outreach', ['tab' => 'substack']) }}" wire:navigate>Substack</a>
+                        <span>•</span>
+                        <a href="{{ route('communications.outreach', ['tab' => 'activity']) }}" wire:navigate>Activity</a>
+                    </div>
+                </details>
+            </div>
         @endif
 
         @if($migrationReady && $tab === 'newsletters')
@@ -179,78 +191,85 @@
                             @error('campaignForm.name') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                         </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Newsletter</label>
-                                <select wire:model.defer="campaignForm.newsletter_id"
-                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                    <option value="">No newsletter</option>
-                                    @foreach($newsletterOptions as $newsletter)
-                                        <option value="{{ $newsletter['id'] }}">{{ $newsletter['name'] }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Project</label>
-                                <select wire:model.defer="campaignForm.project_id"
-                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                    <option value="">No project</option>
-                                    @foreach($projectOptions as $project)
-                                        <option value="{{ $project['id'] }}">{{ $project['name'] }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        </div>
+                        <details class="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40" @if($campaignForm['send_mode'] === 'scheduled') open @endif>
+                            <summary class="cursor-pointer list-none text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                Delivery Settings
+                            </summary>
+                            <div class="mt-3 space-y-3">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Newsletter</label>
+                                        <select wire:model.defer="campaignForm.newsletter_id"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            <option value="">No newsletter</option>
+                                            @foreach($newsletterOptions as $newsletter)
+                                                <option value="{{ $newsletter['id'] }}">{{ $newsletter['name'] }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Project</label>
+                                        <select wire:model.defer="campaignForm.project_id"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            <option value="">No project</option>
+                                            @foreach($projectOptions as $project)
+                                                <option value="{{ $project['id'] }}">{{ $project['name'] }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div>
-                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Type</label>
-                                <select wire:model.defer="campaignForm.campaign_type"
-                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                    <option value="bulk">Bulk</option>
-                                    <option value="newsletter">Newsletter</option>
-                                    <option value="automated">Automated</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Channel</label>
-                                <select wire:model.defer="campaignForm.channel"
-                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                    <option value="gmail">Gmail</option>
-                                    <option value="substack">Substack</option>
-                                    <option value="hybrid">Hybrid</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Send Mode</label>
-                                <select wire:model.live="campaignForm.send_mode"
-                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                    <option value="draft">Draft</option>
-                                    <option value="immediate">Send now</option>
-                                    <option value="scheduled">Scheduled</option>
-                                </select>
-                            </div>
-                        </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Type</label>
+                                        <select wire:model.defer="campaignForm.campaign_type"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            <option value="bulk">Bulk</option>
+                                            <option value="newsletter">Newsletter</option>
+                                            <option value="automated">Automated</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Channel</label>
+                                        <select wire:model.defer="campaignForm.channel"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            <option value="gmail">Gmail</option>
+                                            <option value="substack">Substack</option>
+                                            <option value="hybrid">Hybrid</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Send Mode</label>
+                                        <select wire:model.live="campaignForm.send_mode"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            <option value="draft">Draft</option>
+                                            <option value="immediate">Send now</option>
+                                            <option value="scheduled">Scheduled</option>
+                                        </select>
+                                    </div>
+                                </div>
 
-                        @if($campaignForm['send_mode'] === 'scheduled')
-                            <div>
-                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Scheduled For</label>
-                                <input type="datetime-local" wire:model.defer="campaignForm.scheduled_for"
-                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                @if($campaignForm['send_mode'] === 'scheduled')
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Scheduled For</label>
+                                        <input type="datetime-local" wire:model.defer="campaignForm.scheduled_for"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                    </div>
+                                @endif
+
+                                <div>
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Preheader</label>
+                                    <input type="text" wire:model.defer="campaignForm.preheader"
+                                        class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                </div>
                             </div>
-                        @endif
+                        </details>
 
                         <div>
                             <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Subject</label>
                             <input type="text" wire:model.defer="campaignForm.subject"
                                 class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                             @error('campaignForm.subject') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                        </div>
-
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Preheader</label>
-                            <input type="text" wire:model.defer="campaignForm.preheader"
-                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                         </div>
 
                         <div>
@@ -368,28 +387,6 @@
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Newsletter</label>
-                                <select wire:model.defer="automationForm.newsletter_id"
-                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                    <option value="">No newsletter</option>
-                                    @foreach($newsletterOptions as $newsletter)
-                                        <option value="{{ $newsletter['id'] }}">{{ $newsletter['name'] }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Project</label>
-                                <select wire:model.defer="automationForm.project_id"
-                                    class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                    <option value="">No project</option>
-                                    @foreach($projectOptions as $project)
-                                        <option value="{{ $project['id'] }}">{{ $project['name'] }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
                                 <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Action</label>
                                 <select wire:model.defer="automationForm.action_type"
                                     class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
@@ -412,41 +409,71 @@
                                 placeholder="Context for the automation to use each run."></textarea>
                         </div>
 
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Campaign Subject Template</label>
-                            <input type="text" wire:model.defer="automationForm.subject"
-                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                placeholder="Weekly update: policy + project momentum">
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Campaign Body Template</label>
-                            <textarea rows="4" wire:model.defer="automationForm.body_text"
-                                class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
-                        </div>
-
-                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40">
-                            <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Audience Source</label>
-                            <select wire:model.live="automationForm.audience_mode"
-                                class="mt-2 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                <option value="contacts">From contacts by status</option>
-                                <option value="manual">Manual recipient list</option>
-                            </select>
-                            @if($automationForm['audience_mode'] === 'contacts')
-                                <div class="mt-2 flex flex-wrap gap-2">
-                                    @foreach($contactStatusOptions as $status => $label)
-                                        <label class="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-2.5 py-1 text-xs dark:border-gray-600 dark:bg-gray-700">
-                                            <input type="checkbox" wire:model.defer="automationForm.contact_statuses" value="{{ $status }}"
-                                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                                            <span class="text-gray-700 dark:text-gray-200">{{ $label }}</span>
-                                        </label>
-                                    @endforeach
+                        <details class="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40">
+                            <summary class="cursor-pointer list-none text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                Advanced Settings
+                            </summary>
+                            <div class="mt-3 space-y-3">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Newsletter</label>
+                                        <select wire:model.defer="automationForm.newsletter_id"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            <option value="">No newsletter</option>
+                                            @foreach($newsletterOptions as $newsletter)
+                                                <option value="{{ $newsletter['id'] }}">{{ $newsletter['name'] }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Project</label>
+                                        <select wire:model.defer="automationForm.project_id"
+                                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                            <option value="">No project</option>
+                                            @foreach($projectOptions as $project)
+                                                <option value="{{ $project['id'] }}">{{ $project['name'] }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
                                 </div>
-                            @else
-                                <textarea rows="3" wire:model.defer="automationForm.manual_recipients"
-                                    class="mt-2 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                    placeholder="One recipient per line"></textarea>
-                            @endif
-                        </div>
+
+                                <div>
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Campaign Subject Template</label>
+                                    <input type="text" wire:model.defer="automationForm.subject"
+                                        class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                        placeholder="Weekly update: policy + project momentum">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Campaign Body Template</label>
+                                    <textarea rows="4" wire:model.defer="automationForm.body_text"
+                                        class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"></textarea>
+                                </div>
+
+                                <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Audience Source</label>
+                                    <select wire:model.live="automationForm.audience_mode"
+                                        class="mt-2 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                        <option value="contacts">From contacts by status</option>
+                                        <option value="manual">Manual recipient list</option>
+                                    </select>
+                                    @if($automationForm['audience_mode'] === 'contacts')
+                                        <div class="mt-2 flex flex-wrap gap-2">
+                                            @foreach($contactStatusOptions as $status => $label)
+                                                <label class="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-2.5 py-1 text-xs dark:border-gray-600 dark:bg-gray-700">
+                                                    <input type="checkbox" wire:model.defer="automationForm.contact_statuses" value="{{ $status }}"
+                                                        class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                                    <span class="text-gray-700 dark:text-gray-200">{{ $label }}</span>
+                                                </label>
+                                            @endforeach
+                                        </div>
+                                    @else
+                                        <textarea rows="3" wire:model.defer="automationForm.manual_recipients"
+                                            class="mt-2 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                            placeholder="One recipient per line"></textarea>
+                                    @endif
+                                </div>
+                            </div>
+                        </details>
 
                         <button wire:click="createAutomation"
                             class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">

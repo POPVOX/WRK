@@ -17,74 +17,71 @@
         </div>
     </x-slot>
 
-    <div class="py-6">
-        <div class="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="app-page-frame">
 
             {{-- Project Header Card --}}
-            <div class="rounded-xl shadow-lg p-6 mb-6 text-white" style="background: linear-gradient(to right, #4f46e5, #7c3aed, #db2777);">
-                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div class="app-card p-6">
+                <div class="app-page-head">
                     <div>
-                        <div class="flex items-center gap-3">
-                            <span class="text-3xl">🏛️</span>
-                            <h1 class="text-2xl lg:text-3xl font-bold">{{ $project->name }}</h1>
-                        </div>
+                        <h1 class="app-page-title">{{ $project->name }}</h1>
                         @if($project->description)
-                            <p class="mt-2 text-white/80 max-w-3xl">{{ Str::limit($project->description, 200) }}</p>
+                            <p class="app-page-lead">{{ Str::limit($project->description, 220) }}</p>
                         @endif
                     </div>
-                    <div class="flex flex-wrap gap-4 text-sm">
-                        <div class="bg-white/20 rounded-lg px-4 py-3 backdrop-blur-sm">
-                            <div class="text-2xl font-bold">{{ $stats['publications_published'] }}/{{ $stats['publications_total'] }}</div>
-                            <div class="text-white/80">Published</div>
-                        </div>
-                        <div class="bg-white/20 rounded-lg px-4 py-3 backdrop-blur-sm">
-                            <div class="text-2xl font-bold">{{ $stats['events_completed'] }}/{{ $stats['events_total'] }}</div>
-                            <div class="text-white/80">Events</div>
-                        </div>
-                        <div class="bg-white/20 rounded-lg px-4 py-3 backdrop-blur-sm">
-                            <div class="text-2xl font-bold">{{ $stats['milestones_completed'] }}/{{ $stats['milestones_total'] }}</div>
-                            <div class="text-white/80">Milestones</div>
-                        </div>
+                    <div class="app-toolbar text-sm">
+                        <span class="inline-flex items-center rounded-full border border-gray-300 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200">
+                            {{ $stats['publications_published'] }}/{{ $stats['publications_total'] }} published
+                        </span>
+                        <span class="inline-flex items-center rounded-full border border-gray-300 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200">
+                            {{ $stats['events_completed'] }}/{{ $stats['events_total'] }} events
+                        </span>
+                        <span class="inline-flex items-center rounded-full border border-gray-300 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200">
+                            {{ $stats['milestones_completed'] }}/{{ $stats['milestones_total'] }} milestones
+                        </span>
                         @if($stats['milestones_overdue'] > 0)
-                            <div class="bg-red-500/40 rounded-lg px-4 py-3 backdrop-blur-sm border border-red-300/50">
-                                <div class="text-2xl font-bold">{{ $stats['milestones_overdue'] }}</div>
-                                <div class="text-white/80">Overdue</div>
-                            </div>
+                            <span class="inline-flex items-center rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 dark:border-red-700 dark:bg-red-900/30 dark:text-red-300">
+                                {{ $stats['milestones_overdue'] }} overdue
+                            </span>
                         @endif
                     </div>
                 </div>
             </div>
 
             {{-- Tab Navigation --}}
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
-                <div class="flex overflow-x-auto">
+            <div class="app-card p-3 mb-6 space-y-3">
+                <div class="app-tabset">
                     @foreach([
-                        'overview' => ['icon' => '📊', 'label' => 'Overview'],
-                        'timeline' => ['icon' => '📅', 'label' => 'Timeline'],
-                        'publications' => ['icon' => '📝', 'label' => 'Publications'],
-                        'events' => ['icon' => '🎪', 'label' => 'Events'],
-                        'documents' => ['icon' => '📁', 'label' => 'Documents'],
-                        'collaborator' => ['icon' => '🤖', 'label' => 'AI Collaborator'],
-                    ] as $tab => $info)
+                        'overview' => 'Overview',
+                        'timeline' => 'Timeline',
+                        'collaborator' => 'Agent',
+                    ] as $tab => $label)
                         <button wire:click="setTab('{{ $tab }}')"
-                            class="flex items-center gap-2 px-6 py-4 text-sm font-medium whitespace-nowrap border-b-2 transition-colors
-                            {{ $activeTab === $tab 
-                                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20' 
-                                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50' }}">
-                            <span>{{ $info['icon'] }}</span>
-                            <span>{{ $info['label'] }}</span>
-                            @if($tab === 'publications')
-                                <span class="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
-                                    {{ $stats['publications_total'] }}
-                                </span>
-                            @elseif($tab === 'events')
-                                <span class="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
-                                    {{ $stats['events_total'] }}
-                                </span>
-                            @endif
+                            class="app-tab {{ $activeTab === $tab ? 'app-tab-active' : '' }}">
+                            {{ $label }}
                         </button>
                     @endforeach
                 </div>
+
+                <details class="group">
+                    <summary class="list-none cursor-pointer rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                        More Sections
+                    </summary>
+                    <div class="mt-2 app-tabset">
+                        @foreach([
+                            'publications' => ['label' => 'Publications', 'count' => $stats['publications_total']],
+                            'events' => ['label' => 'Events', 'count' => $stats['events_total']],
+                            'documents' => ['label' => 'Documents', 'count' => null],
+                        ] as $tab => $info)
+                            <button wire:click="setTab('{{ $tab }}')"
+                                class="app-tab {{ $activeTab === $tab ? 'app-tab-active' : '' }}">
+                                {{ $info['label'] }}
+                                @if(!is_null($info['count']))
+                                    <span class="ml-1 text-[11px] text-gray-500 dark:text-gray-300">{{ $info['count'] }}</span>
+                                @endif
+                            </button>
+                        @endforeach
+                    </div>
+                </details>
             </div>
 
             {{-- Tab Content --}}
@@ -119,7 +116,6 @@
                     @include('livewire.projects.workspace.collaborator')
                 @endif
             </div>
-        </div>
     </div>
 
     {{-- Modals --}}

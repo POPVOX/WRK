@@ -577,7 +577,7 @@ class Dashboard extends Component
                         ->values()
                         ->all();
 
-                    $response = app(ChatService::class)->query($command, $historyForAi);
+                    $response = app(ChatService::class)->query($command, $historyForAi, $this->user);
                     $this->addConversationMessage('assistant', $response);
                 }
             }

@@ -12,6 +12,7 @@ use App\Models\TripSponsorship;
 use App\Models\User;
 use App\Services\ItineraryParserService;
 use App\Services\SponsorshipParserService;
+use App\Services\ApprovalGateService;
 use App\Services\TripAgentService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -28,7 +29,7 @@ class TripDetail extends Component
     public Trip $trip;
 
     #[Url]
-    public string $activeTab = 'itinerary';
+    public string $activeTab = 'agent';
 
     // Agent conversation
     public ?int $agentConversationId = null;
@@ -2066,6 +2067,69 @@ class TripDetail extends Component
         }
 
         $this->agentMessage = $template;
+    }
+
+    public function approveAgentAction(int $actionId, TripAgentService $service, ApprovalGateService $approvalGate): void
+    {
+        if (! $this->canEdit()) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to approve this action.');
+
+            return;
+        }
+
+        $action = $this->trip->agentActions()
+            ->whereKey($actionId)
+            ->with('approvalRequest')
+            ->first();
+
+        if (! $action) {
+            $this->dispatch('notify', type: 'error', message: 'Trip agent action not found.');
+
+            return;
+        }
+
+        try {
+            if ($action->approvalRequest && $action->approvalRequest->approval_status === \App\Models\ApprovalRequest::STATUS_PENDING) {
+                $approvalGate->approve($action->approvalRequest, Auth::user(), 'Approved from trip detail panel.');
+            }
+
+            $service->applyAction($action, Auth::user());
+            $this->loadTripRelations();
+            $this->dispatch('notify', type: 'success', message: 'Trip action approved and applied.');
+        } catch (\Throwable $exception) {
+            $this->dispatch('notify', type: 'error', message: $exception->getMessage());
+        }
+    }
+
+    public function rejectAgentAction(int $actionId, TripAgentService $service, ApprovalGateService $approvalGate): void
+    {
+        if (! $this->canEdit()) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to reject this action.');
+
+            return;
+        }
+
+        $action = $this->trip->agentActions()
+            ->whereKey($actionId)
+            ->with('approvalRequest')
+            ->first();
+
+        if (! $action) {
+            $this->dispatch('notify', type: 'error', message: 'Trip agent action not found.');
+
+            return;
+        }
+
+        try {
+            if ($action->approvalRequest && $action->approvalRequest->approval_status === \App\Models\ApprovalRequest::STATUS_PENDING) {
+                $approvalGate->reject($action->approvalRequest, Auth::user(), 'Rejected from trip detail panel.');
+            }
+
+            $service->rejectAction($action, Auth::user());
+            $this->dispatch('notify', type: 'success', message: 'Trip action rejected.');
+        } catch (\Throwable $exception) {
+            $this->dispatch('notify', type: 'error', message: $exception->getMessage());
+        }
     }
 
     public function getAgentConversationProperty(): ?TripAgentConversation

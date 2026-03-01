@@ -31,6 +31,10 @@ return [
     'slack' => [
         'api_base' => env('SLACK_API_BASE', 'https://slack.com/api'),
         'bot_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
+        'webhook' => [
+            'enforce_signature' => filter_var(env('SLACK_WEBHOOK_ENFORCE_SIGNATURE', true), FILTER_VALIDATE_BOOL),
+            'signing_secret' => env('SLACK_SIGNING_SECRET'),
+        ],
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),

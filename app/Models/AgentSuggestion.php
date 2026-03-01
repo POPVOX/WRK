@@ -23,6 +23,7 @@ class AgentSuggestion extends Model
         'payload',
         'risk_level',
         'approval_status',
+        'approval_request_id',
         'reviewed_by',
         'reviewed_at',
         'executed_at',
@@ -53,6 +54,11 @@ class AgentSuggestion extends Model
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function approvalRequest(): BelongsTo
+    {
+        return $this->belongsTo(ApprovalRequest::class, 'approval_request_id');
     }
 
     public function sources(): HasMany

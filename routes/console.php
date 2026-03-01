@@ -53,3 +53,11 @@ Schedule::command('box:reconcile-permissions --full')
     ->onOneServer()
     ->runInBackground()
     ->description('Nightly full Box permission reconciliation');
+
+// Standing goal scheduler: evaluate due triggers and enqueue goal runs.
+Schedule::command('agents:evaluate-goals')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping(14)
+    ->onOneServer()
+    ->runInBackground()
+    ->description('Evaluate active agent goals');

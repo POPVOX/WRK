@@ -2,32 +2,37 @@
 
 namespace App\Services;
 
+use App\Models\Action;
 use App\Models\Issue;
 use App\Models\Meeting;
 use App\Models\Organization;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\ProjectDecision;
+use App\Models\ProjectMilestone;
+use App\Models\ProjectQuestion;
+use App\Models\User;
 use App\Support\AI\AnthropicClient;
 use App\Support\AI\PromptProfile;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ChatService
 {
-    public function query(string $query, array $conversationHistory = []): string
+    public function query(string $query, array $conversationHistory = [], ?User $user = null): string
     {
         if (! config('ai.enabled')) {
             return 'AI features are disabled by the administrator.';
         }
 
         // Step 1: Retrieve relevant context from database
-        $context = $this->retrieveContext($query);
+        $context = $this->retrieveContext($query, $user);
 
         // Step 2: Build prompt with context
         $prompt = $this->buildPrompt($query, $context, $conversationHistory);
-        $cacheKey = 'ai:chat:'.md5($prompt);
+        $cacheKey = 'ai:chat:'.($user?->id ?? 'global').':'.md5($prompt);
 
         try {
             $response = AnthropicClient::send([
@@ -63,7 +68,7 @@ class ChatService
         }
     }
 
-    protected function retrieveContext(string $query): array
+    protected function retrieveContext(string $query, ?User $user = null): array
     {
         $context = [];
         $like = $this->likeOperator();
@@ -72,7 +77,7 @@ class ChatService
         $searchTerms = $this->extractSearchTerms($query);
 
         // Search meetings
-        $meetings = Meeting::query()
+        $meetings = $this->scopeMeetingsQueryForUser(Meeting::query(), $user)
             ->where(function ($q) use ($searchTerms, $query, $like) {
                 $q->where('ai_summary', $like, "%{$query}%")
                     ->orWhere('raw_notes', $like, "%{$query}%")
@@ -101,7 +106,7 @@ class ChatService
         }
 
         // Search projects
-        $projects = Project::query()
+        $projects = $this->scopeProjectsQueryForUser(Project::query(), $user)
             ->where(function ($q) use ($searchTerms, $query, $like) {
                 $q->where('name', $like, "%{$query}%")
                     ->orWhere('description', $like, "%{$query}%")
@@ -129,7 +134,12 @@ class ChatService
         }
 
         // Search decisions
-        $decisions = ProjectDecision::query()
+        $decisionsQuery = ProjectDecision::query();
+        if ($user && ! $user->isAdmin()) {
+            $decisionsQuery->whereHas('project', fn (Builder $q) => $this->scopeProjectsQueryForUser($q, $user));
+        }
+
+        $decisions = $decisionsQuery
             ->where(function ($q) use ($searchTerms, $query, $like) {
                 $q->where('title', $like, "%{$query}%")
                     ->orWhere('description', $like, "%{$query}%")
@@ -157,7 +167,7 @@ class ChatService
         }
 
         // Search organizations
-        $organizations = Organization::query()
+        $organizations = $this->scopeOrganizationsQueryForUser(Organization::query(), $user)
             ->where(function ($q) use ($searchTerms, $query, $like) {
                 $q->where('name', $like, "%{$query}%")
                     ->orWhere('notes', $like, "%{$query}%");
@@ -182,7 +192,7 @@ class ChatService
         }
 
         // Search people
-        $people = Person::query()
+        $people = $this->scopePeopleQueryForUser(Person::query(), $user)
             ->where(function ($q) use ($searchTerms, $query, $like) {
                 $q->where('name', $like, "%{$query}%")
                     ->orWhere('title', $like, "%{$query}%")
@@ -208,7 +218,7 @@ class ChatService
         }
 
         // Search issues
-        $issues = Issue::query()
+        $issues = $this->scopeIssuesQueryForUser(Issue::query(), $user)
             ->where('name', $like, "%{$query}%")
             ->withCount('meetings')
             ->limit(5)
@@ -221,64 +231,67 @@ class ChatService
             ])->toArray();
         }
 
-        // Optional KB full-text context
-        try {
-            $driver = DB::getDriverName();
+        // Optional KB full-text context. For non-admin requests, skip until KB docs have explicit per-user ACL filtering.
+        if (! $user || $user->isAdmin()) {
+            try {
+                $driver = DB::getDriverName();
 
-            if ($driver === 'sqlite') {
-                $kbMatches = DB::select(
-                    'SELECT doc_id, title, snippet(kb_index, 2, "[[", "]]", "...", 8) AS snippet
-                     FROM kb_index
-                     WHERE kb_index MATCH ?
-                     LIMIT 5',
-                    [$query]
-                );
-            } elseif ($driver === 'pgsql') {
-                $kbMatches = DB::select(
-                    "SELECT
-                        doc_id,
-                        title,
-                        ts_headline(
-                            'english',
-                            coalesce(body, ''),
-                            plainto_tsquery('english', ?),
-                            'StartSel=[[, StopSel=]], MaxWords=8, MinWords=3, ShortWord=2'
-                        ) AS snippet
-                     FROM kb_index
-                     WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
-                           @@ plainto_tsquery('english', ?)
-                     ORDER BY ts_rank_cd(
-                         to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, '')),
-                         plainto_tsquery('english', ?)
-                     ) DESC
-                     LIMIT 5",
-                    [$query, $query, $query]
-                );
-            } else {
-                $like = "%{$query}%";
-                $kbMatches = DB::select(
-                    'SELECT doc_id, title, substr(coalesce(body, \'\'), 1, 240) AS snippet
-                     FROM kb_index
-                     WHERE title LIKE ? OR body LIKE ?
-                     LIMIT 5',
-                    [$like, $like]
-                );
-            }
+                if ($driver === 'sqlite') {
+                    $kbMatches = DB::select(
+                        'SELECT doc_id, title, snippet(kb_index, 2, "[[", "]]", "...", 8) AS snippet
+                         FROM kb_index
+                         WHERE kb_index MATCH ?
+                         LIMIT 5',
+                        [$query]
+                    );
+                } elseif ($driver === 'pgsql') {
+                    $kbMatches = DB::select(
+                        "SELECT
+                            doc_id,
+                            title,
+                            ts_headline(
+                                'english',
+                                coalesce(body, ''),
+                                plainto_tsquery('english', ?),
+                                'StartSel=[[, StopSel=]], MaxWords=8, MinWords=3, ShortWord=2'
+                            ) AS snippet
+                         FROM kb_index
+                         WHERE to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
+                               @@ plainto_tsquery('english', ?)
+                         ORDER BY ts_rank_cd(
+                             to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, '')),
+                             plainto_tsquery('english', ?)
+                         ) DESC
+                         LIMIT 5",
+                        [$query, $query, $query]
+                    );
+                } else {
+                    $like = "%{$query}%";
+                    $kbMatches = DB::select(
+                        'SELECT doc_id, title, substr(coalesce(body, \'\'), 1, 240) AS snippet
+                         FROM kb_index
+                         WHERE title LIKE ? OR body LIKE ?
+                         LIMIT 5',
+                        [$like, $like]
+                    );
+                }
 
-            if (! empty($kbMatches)) {
-                $context['kb_matches'] = collect($kbMatches)->map(fn ($row) => [
-                    'doc_id' => $row->doc_id,
-                    'title' => $row->title,
-                    'snippet' => $row->snippet,
-                ])->toArray();
+                if (! empty($kbMatches)) {
+                    $context['kb_matches'] = collect($kbMatches)->map(fn ($row) => [
+                        'doc_id' => $row->doc_id,
+                        'title' => $row->title,
+                        'snippet' => $row->snippet,
+                    ])->toArray();
+                }
+            } catch (\Throwable $e) {
+                \Log::debug('ChatService FTS lookup skipped', ['error' => $e->getMessage()]);
             }
-        } catch (\Throwable $e) {
-            \Log::debug('ChatService FTS lookup skipped', ['error' => $e->getMessage()]);
         }
 
         // If query asks about "recent" or time-based, add recent meetings regardless of search match
         if (Str::contains(strtolower($query), ['recent', 'last week', 'last month', 'this week', 'today', 'yesterday', 'latest'])) {
-            $recentMeetings = Meeting::with(['organizations', 'projects'])
+            $recentMeetings = $this->scopeMeetingsQueryForUser(Meeting::query(), $user)
+                ->with(['organizations', 'projects'])
                 ->latest('meeting_date')
                 ->limit(10)
                 ->get();
@@ -293,7 +306,8 @@ class ChatService
 
         // If query asks about "pending" or "todo" or "action", add pending actions and milestones
         if (Str::contains(strtolower($query), ['pending', 'todo', 'action', 'follow up', 'overdue', 'due'])) {
-            $pendingActions = \App\Models\Action::where('status', 'pending')
+            $pendingActions = $this->scopeActionsQueryForUser(Action::query(), $user)
+                ->where('status', 'pending')
                 ->with('meeting.organizations')
                 ->orderBy('due_date')
                 ->limit(10)
@@ -307,11 +321,17 @@ class ChatService
             ])->toArray();
 
             // Also get overdue milestones
-            $overdueMilestones = \App\Models\ProjectMilestone::where('status', '!=', 'completed')
+            $overdueMilestonesQuery = ProjectMilestone::query()
+                ->where('status', '!=', 'completed')
                 ->whereNotNull('target_date')
                 ->where('target_date', '<', now())
-                ->with('project')
-                ->get();
+                ->with('project');
+
+            if ($user && ! $user->isAdmin()) {
+                $overdueMilestonesQuery->whereHas('project', fn (Builder $q) => $this->scopeProjectsQueryForUser($q, $user));
+            }
+
+            $overdueMilestones = $overdueMilestonesQuery->get();
 
             $context['overdue_milestones'] = $overdueMilestones->map(fn ($m) => [
                 'title' => $m->title,
@@ -321,13 +341,22 @@ class ChatService
         }
 
         // Add summary stats
+        $openQuestionsQuery = ProjectQuestion::query()->where('status', 'open');
+        if ($user && ! $user->isAdmin()) {
+            $openQuestionsQuery->whereHas('project', fn (Builder $q) => $this->scopeProjectsQueryForUser($q, $user));
+        }
+
         $context['system_stats'] = [
-            'total_meetings' => Meeting::count(),
-            'total_projects' => Project::where('status', 'active')->count(),
-            'total_organizations' => Organization::count(),
-            'total_people' => Person::count(),
-            'open_questions' => \App\Models\ProjectQuestion::where('status', 'open')->count(),
-            'pending_actions' => \App\Models\Action::where('status', 'pending')->count(),
+            'total_meetings' => $this->scopeMeetingsQueryForUser(Meeting::query(), $user)->count(),
+            'total_projects' => $this->scopeProjectsQueryForUser(Project::query(), $user)
+                ->where('status', 'active')
+                ->count(),
+            'total_organizations' => $this->scopeOrganizationsQueryForUser(Organization::query(), $user)->count(),
+            'total_people' => $this->scopePeopleQueryForUser(Person::query(), $user)->count(),
+            'open_questions' => $openQuestionsQuery->count(),
+            'pending_actions' => $this->scopeActionsQueryForUser(Action::query(), $user)
+                ->where('status', 'pending')
+                ->count(),
         ];
 
         return $context;
@@ -546,6 +575,82 @@ PROMPT;
                 ? $cached."\n\n(Served from cache because AI is unavailable.)"
                 : 'Sorry, I encountered an error processing your request. Please try again.';
         }
+    }
+
+    protected function scopeMeetingsQueryForUser(Builder $query, ?User $user): Builder
+    {
+        if (! $user || $user->isAdmin()) {
+            return $query;
+        }
+
+        $userId = (int) $user->id;
+
+        return $query->where(function (Builder $meetingQuery) use ($userId) {
+            $meetingQuery->where('user_id', $userId)
+                ->orWhereHas('teamMembers', fn (Builder $teamQuery) => $teamQuery->where('users.id', $userId));
+        });
+    }
+
+    protected function scopeProjectsQueryForUser(Builder $query, ?User $user): Builder
+    {
+        if (! $user || $user->isAdmin()) {
+            return $query;
+        }
+
+        $userId = (int) $user->id;
+        $firstName = trim(explode(' ', (string) $user->name)[0] ?? '');
+        $like = $this->likeOperator();
+
+        return $query->where(function (Builder $projectQuery) use ($firstName, $like, $userId) {
+            $projectQuery->where('created_by', $userId)
+                ->orWhereHas('staff', fn (Builder $staffQuery) => $staffQuery->where('users.id', $userId));
+
+            if ($firstName !== '') {
+                $projectQuery->orWhere('lead', $like, '%'.$firstName.'%');
+            }
+        });
+    }
+
+    protected function scopeOrganizationsQueryForUser(Builder $query, ?User $user): Builder
+    {
+        if (! $user || $user->isAdmin()) {
+            return $query;
+        }
+
+        return $query->where(function (Builder $organizationQuery) use ($user) {
+            $organizationQuery->whereHas('meetings', fn (Builder $meetingQuery) => $this->scopeMeetingsQueryForUser($meetingQuery, $user))
+                ->orWhereHas('projects', fn (Builder $projectQuery) => $this->scopeProjectsQueryForUser($projectQuery, $user));
+        });
+    }
+
+    protected function scopePeopleQueryForUser(Builder $query, ?User $user): Builder
+    {
+        if (! $user || $user->isAdmin()) {
+            return $query;
+        }
+
+        return $query->where(function (Builder $peopleQuery) use ($user) {
+            $peopleQuery->whereHas('meetings', fn (Builder $meetingQuery) => $this->scopeMeetingsQueryForUser($meetingQuery, $user))
+                ->orWhereHas('projects', fn (Builder $projectQuery) => $this->scopeProjectsQueryForUser($projectQuery, $user));
+        });
+    }
+
+    protected function scopeIssuesQueryForUser(Builder $query, ?User $user): Builder
+    {
+        if (! $user || $user->isAdmin()) {
+            return $query;
+        }
+
+        return $query->whereHas('meetings', fn (Builder $meetingQuery) => $this->scopeMeetingsQueryForUser($meetingQuery, $user));
+    }
+
+    protected function scopeActionsQueryForUser(Builder $query, ?User $user): Builder
+    {
+        if (! $user || $user->isAdmin()) {
+            return $query;
+        }
+
+        return $query->where('assigned_to', (int) $user->id);
     }
 
     /**

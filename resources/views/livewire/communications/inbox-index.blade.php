@@ -1,14 +1,14 @@
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-6">
-    <div class="max-w-[1800px] mx-auto space-y-4">
-        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+<div class="space-y-6">
+    <div class="app-page-frame-wide">
+        <div class="app-page-head">
             <div>
-                <h1 class="text-3xl font-semibold text-gray-900 dark:text-white">Inbox</h1>
-                <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                <h1 class="app-page-title">Inbox</h1>
+                <p class="app-page-lead">
                     Communications workspace with agent suggestions, context linking, and tracked follow-through.
                 </p>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="app-toolbar">
                 @if($readOnlyMode)
                     <span class="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
                         Gmail connected in read-only scope. Reconnect Google to enable send/compose.
@@ -36,7 +36,7 @@
             </div>
         </div>
 
-        <div class="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden dark:border-gray-700 dark:bg-gray-800">
+        <div class="app-card overflow-hidden">
             <div class="grid h-[calc(100vh-12rem)] grid-cols-1 lg:grid-cols-[15rem_22rem_minmax(0,1fr)] 2xl:grid-cols-[15rem_22rem_minmax(0,1fr)_20rem]">
                 <aside class="border-r border-gray-200 bg-gray-50/70 dark:border-gray-700 dark:bg-gray-900/30 p-3 overflow-y-auto">
                     <button
@@ -64,15 +64,16 @@
                         @endforeach
                     </nav>
 
-                    <div class="mt-6 border-t border-gray-200 pt-4 dark:border-gray-700">
-                        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">What Agent Can Do</h3>
-                        <ul class="mt-2 space-y-2 text-xs text-gray-600 dark:text-gray-300">
-                            <li>Create follow-up tasks from threads</li>
-                            <li>Suggest project linkage</li>
-                            <li>Draft response text and send from WRK</li>
-                            <li>Link contacts to projects</li>
+                    <details class="mt-6 border-t border-gray-200 pt-4 dark:border-gray-700">
+                        <summary class="cursor-pointer list-none text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                            Agent Shortcuts
+                        </summary>
+                        <ul class="mt-2 space-y-1.5 text-xs text-gray-600 dark:text-gray-300">
+                            <li>Create follow-up tasks from selected threads</li>
+                            <li>Suggest project links with one-click actions</li>
+                            <li>Draft responses and send from WRK after approval</li>
                         </ul>
-                    </div>
+                    </details>
                 </aside>
 
                 <section class="border-r border-gray-200 dark:border-gray-700 flex flex-col min-h-0">
@@ -141,7 +142,7 @@
 
                 <section class="flex flex-col min-h-0">
                     @if($selectedThread)
-                        <header class="h-16 border-b border-gray-100 px-4 flex items-center justify-between dark:border-gray-700">
+                        <header class="h-16 border-b border-gray-100 px-4 flex items-center dark:border-gray-700">
                             <div class="min-w-0">
                                 <h2 class="truncate text-lg font-semibold text-gray-900 dark:text-white">{{ $selectedThread['subject'] }}</h2>
                                 <p class="truncate text-xs text-gray-500 dark:text-gray-400">
@@ -151,15 +152,6 @@
                                     @endif
                                 </p>
                             </div>
-                            @if($readOnlyMode)
-                                <span class="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                                    Reconnect Google for send
-                                </span>
-                            @else
-                                <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                                    Send enabled
-                                </span>
-                            @endif
                         </header>
 
                         <div class="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50/60 dark:bg-gray-900/30">
@@ -467,14 +459,14 @@
                 </div>
             @endif
 
-            <div class="border-t border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-900/30">
-                <div class="flex items-center justify-between gap-2 mb-3">
+            <details class="border-t border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-900/30" @if($inboxActionLogs->isEmpty()) open @endif>
+                <summary class="list-none flex cursor-pointer items-center justify-between gap-2">
                     <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Inbox Action Log</h2>
                     <span class="text-xs text-gray-500 dark:text-gray-400">Latest {{ count($inboxActionLogs) }} actions</span>
-                </div>
+                </summary>
 
                 @if($inboxActionLogs->isNotEmpty())
-                    <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    <div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                         @foreach($inboxActionLogs as $log)
                             @php
                                 $statusClass = match($log->action_status) {
@@ -511,11 +503,11 @@
                         @endforeach
                     </div>
                 @else
-                    <div class="rounded-lg border border-dashed border-gray-300 p-3 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                    <div class="mt-3 rounded-lg border border-dashed border-gray-300 p-3 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
                         No inbox actions logged yet. Approve an agent suggestion to begin the audit trail.
                     </div>
                 @endif
-            </div>
+            </details>
         </div>
     </div>
 </div>

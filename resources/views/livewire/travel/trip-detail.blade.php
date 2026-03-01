@@ -1,7 +1,7 @@
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="app-page-frame">
     <!-- Back Link -->
     <div class="mb-6">
-        <a href="{{ route('travel.index') }}" class="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-sm">
+        <a href="{{ route('travel.index') }}" class="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
             </svg>
@@ -10,7 +10,7 @@
     </div>
 
     <!-- Header Card -->
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 mb-8">
+    <div class="app-card p-6 sm:p-8 mb-8">
         @if($editing)
             <!-- Edit Mode -->
             <div class="space-y-4">
@@ -145,12 +145,12 @@
     >
         <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
             <p class="text-sm text-gray-500 dark:text-gray-400">
-                Manage itinerary and expenses on the left, chat with your travel agent on the right.
+                Keep itinerary and spend in one place while the travel agent stays available on demand.
             </p>
             <button
                 type="button"
                 @click="agentDrawerOpen = !agentDrawerOpen"
-                class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/40 dark:border-indigo-800 dark:text-indigo-200"
+                class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
             >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-4 4v-4z"/>
@@ -165,7 +165,7 @@
                 <div class="mb-8 space-y-3">
                     <div class="flex flex-wrap items-center gap-2">
                         @foreach([
-                            'overview' => 'Overview',
+                            'agent' => 'Agent',
                             'itinerary' => 'Itinerary',
                             'expenses' => 'Expenses',
                         ] as $key => $label)
@@ -179,24 +179,32 @@
                         @endforeach
                     </div>
 
-                    <div class="flex flex-wrap items-center gap-2">
-                        <span class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">More</span>
-                        @foreach([
-                            'documents' => 'Documents',
-                            'events' => 'Events',
-                            'sponsorship' => 'Sponsorship',
-                            'checklist' => 'Checklist',
-                            'notes' => 'Notes',
-                        ] as $key => $label)
-                            <button
-                                wire:click="setTab('{{ $key }}')"
-                                class="px-3 py-1.5 rounded-full text-sm font-medium transition {{ $activeTab === $key
-                                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
-                                    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' }}">
-                                {{ $label }}
-                            </button>
-                        @endforeach
-                    </div>
+                    <details class="group">
+                        <summary class="list-none inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide uppercase bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 cursor-pointer">
+                            More Tools
+                            <svg class="w-3.5 h-3.5 transition group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </summary>
+                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                            @foreach([
+                                'overview' => 'Overview',
+                                'documents' => 'Documents',
+                                'events' => 'Events',
+                                'sponsorship' => 'Sponsorship',
+                                'checklist' => 'Checklist',
+                                'notes' => 'Notes',
+                            ] as $key => $label)
+                                <button
+                                    wire:click="setTab('{{ $key }}')"
+                                    class="px-3 py-1.5 rounded-full text-sm font-medium transition {{ $activeTab === $key
+                                        ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
+                                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' }}">
+                                    {{ $label }}
+                                </button>
+                            @endforeach
+                        </div>
+                    </details>
                 </div>
 
                 <!-- Tab Content -->
@@ -1376,9 +1384,35 @@
                 <div class="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 space-y-3">
                     @if($recentAgentActions->isNotEmpty())
                         <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-2 bg-gray-50 dark:bg-gray-900/40">
-                            <div class="text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Recent Agent Action</div>
-                            <div class="text-xs text-gray-600 dark:text-gray-300">
-                                {{ $recentAgentActions->first()->summary ?: 'Trip update processed' }}
+                            <div class="text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Recent Agent Actions</div>
+                            <div class="space-y-2">
+                                @foreach($recentAgentActions->take(3) as $action)
+                                    <div class="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 p-2">
+                                        <div class="flex items-start justify-between gap-2">
+                                            <div class="text-xs text-gray-700 dark:text-gray-200">
+                                                {{ $action->summary ?: 'Trip update processed' }}
+                                            </div>
+                                            <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                                                {{ $action->status }}
+                                            </span>
+                                        </div>
+
+                                        @if($action->status === 'pending' && $canEdit)
+                                            <div class="mt-2 flex gap-2">
+                                                <button
+                                                    wire:click="approveAgentAction({{ $action->id }})"
+                                                    class="px-2 py-1 text-[11px] rounded bg-green-600 text-white hover:bg-green-700">
+                                                    Approve & Apply
+                                                </button>
+                                                <button
+                                                    wire:click="rejectAgentAction({{ $action->id }})"
+                                                    class="px-2 py-1 text-[11px] rounded bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
+                                                    Reject
+                                                </button>
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endforeach
                             </div>
                         </div>
                     @endif

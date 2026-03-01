@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\Agent;
 use App\Models\GmailMessage;
 use App\Models\Person;
 use App\Models\User;
+use App\Services\Agents\AgentCredentialService;
 use Carbon\Carbon;
 use Google\Client as GoogleClient;
 use Google\Service\Gmail as GoogleGmail;
@@ -18,8 +20,9 @@ class GoogleGmailService
 {
     protected GoogleClient $client;
 
-    public function __construct()
-    {
+    public function __construct(
+        protected AgentCredentialService $agentCredentialService
+    ) {
         $this->client = new GoogleClient;
         $this->client->setClientId(config('services.google.client_id'));
         $this->client->setClientSecret(config('services.google.client_secret'));
@@ -32,28 +35,33 @@ class GoogleGmailService
         $this->client->setPrompt('consent');
     }
 
-    public function isConnected(User $user): bool
+    public function isConnected(User $user, ?Agent $agent = null): bool
     {
-        return ! empty($user->google_access_token);
+        $credential = $this->resolveGoogleCredential($user, $agent);
+
+        return trim((string) ($credential['access_token'] ?? '')) !== '';
     }
 
-    public function getGmailService(User $user): ?GoogleGmail
+    public function getGmailService(User $user, ?Agent $agent = null): ?GoogleGmail
     {
-        if (! $this->isConnected($user)) {
+        $credential = $this->resolveGoogleCredential($user, $agent);
+        if (trim((string) ($credential['access_token'] ?? '')) === '') {
             return null;
         }
 
-        if (! $user->google_token_expires_at || $user->google_token_expires_at->isPast()) {
-            $this->refreshToken($user);
+        $expiresAt = $credential['expires_at'] ?? null;
+        if ($expiresAt instanceof \Carbon\CarbonInterface && $expiresAt->isPast()) {
+            $this->refreshToken($user, $agent, $credential);
             $user->refresh();
+            $credential = $this->resolveGoogleCredential($user, $agent);
         }
 
-        $this->client->setAccessToken($user->google_access_token);
+        $this->client->setAccessToken((string) ($credential['access_token'] ?? ''));
 
         return new GoogleGmail($this->client);
     }
 
-    public function syncRecentMessages(User $user, int $daysBack = 30, int $maxMessages = 250): array
+    public function syncRecentMessages(User $user, int $daysBack = 30, int $maxMessages = 250, ?Agent $agent = null): array
     {
         if (! Schema::hasTable('gmail_messages')
             || ! Schema::hasColumn('users', 'gmail_import_date')
@@ -61,7 +69,7 @@ class GoogleGmailService
             throw new RuntimeException('Gmail sync tables are not ready. Run php artisan migrate --force.');
         }
 
-        $service = $this->getGmailService($user);
+        $service = $this->getGmailService($user, $agent);
         if (! $service) {
             return [
                 'connected' => false,
@@ -91,7 +99,7 @@ class GoogleGmailService
                     break;
                 }
 
-                $response = $this->executeGmailCall($user, function (GoogleGmail $gmail) use ($remaining, $query, $pageToken) {
+                $response = $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($remaining, $query, $pageToken) {
                     return $gmail->users_messages->listUsersMessages('me', array_filter([
                         'maxResults' => min(100, $remaining),
                         'q' => $query,
@@ -107,7 +115,7 @@ class GoogleGmailService
                     }
 
                     try {
-                        $message = $this->executeGmailCall($user, function (GoogleGmail $gmail) use ($messageRef) {
+                        $message = $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($messageRef) {
                             return $gmail->users_messages->get('me', $messageRef->getId(), [
                                 'format' => 'metadata',
                                 'metadataHeaders' => ['From', 'To', 'Cc', 'Bcc', 'Subject', 'Date'],
@@ -192,9 +200,10 @@ class GoogleGmailService
         string|array $to,
         string $subject,
         string $body,
-        array $options = []
+        array $options = [],
+        ?Agent $agent = null
     ): array {
-        return $this->executeGmailCall($user, function (GoogleGmail $gmail) use ($to, $subject, $body, $options) {
+        return $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($to, $subject, $body, $options) {
             $message = new GoogleMessage;
             $message->setRaw($this->buildRawMessage($to, $subject, $body, $options));
 
@@ -217,9 +226,10 @@ class GoogleGmailService
         string|array $to,
         string $subject,
         string $body,
-        array $options = []
+        array $options = [],
+        ?Agent $agent = null
     ): array {
-        return $this->executeGmailCall($user, function (GoogleGmail $gmail) use ($to, $subject, $body, $options) {
+        return $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($to, $subject, $body, $options) {
             $message = new GoogleMessage;
             $message->setRaw($this->buildRawMessage($to, $subject, $body, $options));
 
@@ -242,13 +252,18 @@ class GoogleGmailService
         });
     }
 
-    protected function refreshToken(User $user): bool
+    /**
+     * @param  array<string,mixed>|null  $credential
+     */
+    protected function refreshToken(User $user, ?Agent $agent = null, ?array $credential = null): bool
     {
-        if (! $user->google_refresh_token) {
+        $credential ??= $this->resolveGoogleCredential($user, $agent);
+        $refreshToken = trim((string) ($credential['refresh_token'] ?? ''));
+        if ($refreshToken === '') {
             return false;
         }
 
-        $token = $this->client->fetchAccessTokenWithRefreshToken($user->google_refresh_token);
+        $token = $this->client->fetchAccessTokenWithRefreshToken($refreshToken);
         if (! is_array($token)) {
             $token = $this->client->getAccessToken();
         }
@@ -256,11 +271,32 @@ class GoogleGmailService
         if (! empty($token['error']) || empty($token['access_token'])) {
             \Log::warning('Google token refresh failed for Gmail', [
                 'user_id' => $user->id,
+                'agent_id' => $agent?->id,
                 'error' => $token['error'] ?? 'missing_access_token',
                 'error_description' => $token['error_description'] ?? null,
             ]);
 
             return false;
+        }
+
+        if ($agent) {
+            $existing = $this->agentCredentialService->getCredential($agent, 'gmail');
+            $existingTokenData = is_array($existing?->token_data) ? $existing->token_data : [];
+            $tokenData = array_merge($existingTokenData, [
+                'access_token' => $token['access_token'],
+                'refresh_token' => $token['refresh_token'] ?? $refreshToken,
+                'token_type' => $token['token_type'] ?? ($existingTokenData['token_type'] ?? 'Bearer'),
+            ]);
+
+            $this->agentCredentialService->storeCredential(
+                $agent,
+                'gmail',
+                $tokenData,
+                is_array($existing?->scopes) ? $existing->scopes : [],
+                now()->addSeconds((int) ($token['expires_in'] ?? 3600))
+            );
+
+            return true;
         }
 
         $user->update([
@@ -270,6 +306,45 @@ class GoogleGmailService
         ]);
 
         return true;
+    }
+
+    /**
+     * @return array{
+     *   source:string,
+     *   access_token:string,
+     *   refresh_token:string,
+     *   expires_at:Carbon|null
+     * }
+     */
+    protected function resolveGoogleCredential(User $user, ?Agent $agent = null): array
+    {
+        if ($agent) {
+            $agentCredential = $this->agentCredentialService->getCredential($agent, 'gmail');
+            $tokenData = is_array($agentCredential?->token_data) ? $agentCredential->token_data : [];
+            $expiresAt = $agentCredential?->expires_at;
+
+            if (! $expiresAt && ! empty($tokenData['expires_at'])) {
+                try {
+                    $expiresAt = Carbon::parse((string) $tokenData['expires_at']);
+                } catch (\Throwable) {
+                    $expiresAt = null;
+                }
+            }
+
+            return [
+                'source' => 'agent',
+                'access_token' => trim((string) ($tokenData['access_token'] ?? '')),
+                'refresh_token' => trim((string) ($tokenData['refresh_token'] ?? '')),
+                'expires_at' => $expiresAt,
+            ];
+        }
+
+        return [
+            'source' => 'user',
+            'access_token' => trim((string) $user->google_access_token),
+            'refresh_token' => trim((string) $user->google_refresh_token),
+            'expires_at' => $user->google_token_expires_at,
+        ];
     }
 
     protected function mapMessageToRecord(User $user, GoogleMessage $message): array
@@ -408,9 +483,9 @@ class GoogleGmailService
         }
     }
 
-    protected function executeGmailCall(User $user, callable $callback): mixed
+    protected function executeGmailCall(User $user, ?Agent $agent, callable $callback): mixed
     {
-        $service = $this->getGmailService($user);
+        $service = $this->getGmailService($user, $agent);
         if (! $service) {
             throw new RuntimeException('Google account is not connected.');
         }
@@ -420,9 +495,9 @@ class GoogleGmailService
         } catch (Throwable $exception) {
             $this->throwIfInsufficientGmailScope($exception);
 
-            if ($this->isAuthError($exception) && $this->refreshToken($user)) {
+            if ($this->isAuthError($exception) && $this->refreshToken($user, $agent)) {
                 $user->refresh();
-                $retryService = $this->getGmailService($user);
+                $retryService = $this->getGmailService($user, $agent);
                 if ($retryService) {
                     return $callback($retryService);
                 }

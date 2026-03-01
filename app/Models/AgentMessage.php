@@ -13,6 +13,7 @@ class AgentMessage extends Model
         'role',
         'content',
         'meta',
+        'visibility',
     ];
 
     protected $casts = [

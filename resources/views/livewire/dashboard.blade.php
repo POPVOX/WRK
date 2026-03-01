@@ -1,5 +1,4 @@
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+<div class="app-page-frame space-y-8">
 
         @if($aiWarning || $calendarWarning || $gmailWarning || $passportWarning)
             <div class="space-y-2">
@@ -472,5 +471,4 @@
         @if($showTimezonePrompt)
             <livewire:components.timezone-location :isPrompt="true" />
         @endif
-    </div>
 </div>

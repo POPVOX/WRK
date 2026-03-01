@@ -1,9 +1,9 @@
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+<div class="app-page-frame space-y-8">
     <div class="flex flex-col gap-4">
-        <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div class="app-page-head">
             <div>
-                <h1 class="text-3xl font-semibold text-gray-900 dark:text-white">Intelligence</h1>
-                <p class="mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-300">
+                <h1 class="app-page-title">Intelligence</h1>
+                <p class="app-page-lead">
                     Agent command center for approvals, specialist operations, and auditable runs.
                 </p>
             </div>
@@ -16,24 +16,23 @@
             </div>
         </div>
 
-        <nav class="flex flex-wrap items-center gap-2">
-            <a href="{{ route('intelligence.index') }}" wire:navigate
-                class="rounded-lg px-3 py-2 text-sm font-medium {{ $panel === 'home' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700' }}">
-                Home
-            </a>
-            <a href="{{ route('intelligence.agents') }}" wire:navigate
-                class="rounded-lg px-3 py-2 text-sm font-medium {{ $panel === 'agents' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700' }}">
-                Agents
-            </a>
-            <a href="{{ route('intelligence.create') }}" wire:navigate
-                class="rounded-lg px-3 py-2 text-sm font-medium {{ $panel === 'create' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700' }}">
-                Create Agent
-            </a>
-            <a href="{{ route('intelligence.audit') }}" wire:navigate
-                class="rounded-lg px-3 py-2 text-sm font-medium {{ $panel === 'audit' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700' }}">
-                Audit
-            </a>
-        </nav>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <nav class="app-tabset">
+                <a href="{{ route('intelligence.index') }}" wire:navigate
+                    class="app-tab {{ $panel === 'home' ? 'app-tab-active' : '' }}">
+                    Command Center
+                </a>
+                <a href="{{ route('intelligence.agents') }}" wire:navigate
+                    class="app-tab {{ $panel === 'agents' ? 'app-tab-active' : '' }}">
+                    Agents
+                </a>
+            </nav>
+            <div class="app-link-group">
+                <a href="{{ route('intelligence.create') }}" wire:navigate class="hover:text-gray-900 dark:hover:text-gray-100">Create</a>
+                <span>•</span>
+                <a href="{{ route('intelligence.audit') }}" wire:navigate class="hover:text-gray-900 dark:hover:text-gray-100">Audit</a>
+            </div>
+        </div>
     </div>
 
     @if(!$migrationReady)
@@ -342,10 +341,19 @@
                         x-data
                         x-init="$nextTick(() => { if ($refs.thread) $refs.thread.scrollTop = $refs.thread.scrollHeight; })"
                         x-on:workspace-thread-updated.window="$nextTick(() => { if ($refs.thread) $refs.thread.scrollTop = $refs.thread.scrollHeight; })">
-                        <div class="flex items-center justify-between">
+                        <div class="flex items-center justify-between gap-3">
                             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Direct Agent</h2>
                             @if($selectedAgent)
-                                <span class="text-xs text-gray-500 dark:text-gray-400">{{ $selectedAgent->name }}</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ $selectedAgent->name }}</span>
+                                    <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold {{ $selectedThreadVisibility === 'public' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' }}">
+                                        {{ strtoupper($selectedThreadVisibility) }}
+                                    </span>
+                                    <button wire:click="toggleSelectedThreadVisibility"
+                                        class="rounded-lg border border-gray-300 px-2.5 py-1 text-[11px] font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                                        Toggle
+                                    </button>
+                                </div>
                             @endif
                         </div>
 
@@ -363,7 +371,7 @@
                                         <div class="flex {{ $isUser ? 'justify-end' : 'justify-start' }}">
                                             <div class="max-w-[95%] rounded-xl px-3 py-2 {{ $isUser ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-600' }}">
                                                 <div class="text-[11px] mb-1 {{ $isUser ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-400' }}">
-                                                    {{ $isUser ? 'You' : 'WRK Agent' }} • {{ $message['timestamp'] ?? '' }}
+                                                    {{ $isUser ? 'You' : 'WRK Agent' }} • {{ strtoupper($message['visibility'] ?? $selectedThreadVisibility) }} • {{ $message['timestamp'] ?? '' }}
                                                 </div>
                                                 <div class="whitespace-pre-wrap text-sm">{{ $message['content'] ?? '' }}</div>
                                             </div>
@@ -441,6 +449,46 @@
                                                 Dismiss
                                             </button>
                                         </div>
+                                    </article>
+                                @endforeach
+                            </div>
+                        @endif
+                    </section>
+
+                    <section class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Memory Audit</h2>
+                            <span class="text-xs text-gray-500 dark:text-gray-400">{{ count($memoryAudit) }} entries</span>
+                        </div>
+
+                        @if(empty($memoryAudit))
+                            <div class="mt-4 rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                                No memory entries available for this scope.
+                            </div>
+                        @else
+                            <div class="mt-4 space-y-2.5">
+                                @foreach($memoryAudit as $memory)
+                                    <article class="rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                                                {{ $memory['memory_type'] }}
+                                            </span>
+                                            <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold {{ $memory['visibility'] === 'public' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' }}">
+                                                {{ strtoupper($memory['visibility']) }}
+                                            </span>
+                                            @if($memory['is_cross_agent'])
+                                                <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                                                    {{ $memory['agent_name'] }}
+                                                </span>
+                                            @endif
+                                            <span class="text-[11px] text-gray-500 dark:text-gray-400">
+                                                @if($memory['confidence'] !== null)
+                                                    {{ number_format((float) $memory['confidence'], 2) }} confidence •
+                                                @endif
+                                                {{ $memory['created_at'] }}
+                                            </span>
+                                        </div>
+                                        <p class="mt-1.5 text-sm text-gray-700 dark:text-gray-300">{{ $memory['text'] }}</p>
                                     </article>
                                 @endforeach
                             </div>

@@ -15,6 +15,13 @@ pest()->extend(Tests\TestCase::class)
     ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
     ->in('Feature');
 
+beforeAll(function (): void {
+    $connection = (string) config('database.default');
+    if ($connection !== 'pgsql') {
+        throw new \RuntimeException("Feature tests must run on PostgreSQL. Current DB connection: {$connection}.");
+    }
+});
+
 /*
 |--------------------------------------------------------------------------
 | Expectations

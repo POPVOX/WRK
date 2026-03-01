@@ -131,6 +131,22 @@ class Integrations extends Component
             }
         }
 
+        $signatureEnforced = (bool) config('services.box.webhook.enforce_signature', true);
+        $primaryKeyConfigured = trim((string) config('services.box.webhook.primary_signature_key', '')) !== '';
+        $secondaryKeyConfigured = trim((string) config('services.box.webhook.secondary_signature_key', '')) !== '';
+        $signatureKeysConfigured = $primaryKeyConfigured || $secondaryKeyConfigured;
+
+        $signatureStatus = 'healthy';
+        $signatureWarning = null;
+
+        if (! $signatureEnforced) {
+            $signatureStatus = 'disabled';
+            $signatureWarning = 'Signature verification is disabled. Set BOX_WEBHOOK_ENFORCE_SIGNATURE=true before production use.';
+        } elseif (! $signatureKeysConfigured) {
+            $signatureStatus = 'misconfigured';
+            $signatureWarning = 'Signature verification is enabled, but no signing keys are configured. Set BOX_WEBHOOK_PRIMARY_KEY (and optionally BOX_WEBHOOK_SECONDARY_KEY).';
+        }
+
         $webhook = [
             'table_ready' => Schema::hasTable('box_webhook_events'),
             'event_count' => null,
@@ -142,6 +158,10 @@ class Integrations extends Component
             'last_source' => null,
             'last_processed_at' => null,
             'last_error_message' => null,
+            'signature_enforced' => $signatureEnforced,
+            'signature_keys_configured' => $signatureKeysConfigured,
+            'signature_status' => $signatureStatus,
+            'signature_warning' => $signatureWarning,
         ];
 
         if ($webhook['table_ready']) {
@@ -196,4 +216,3 @@ class Integrations extends Component
         return view('livewire.admin.integrations');
     }
 }
-

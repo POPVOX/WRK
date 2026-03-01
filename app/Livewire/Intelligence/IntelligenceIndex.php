@@ -3,8 +3,10 @@
 namespace App\Livewire\Intelligence;
 
 use App\Models\Agent;
+use App\Models\AgentThread;
 use App\Models\AgentMessage;
 use App\Models\AgentPermission;
+use App\Models\AgentPromptLayer;
 use App\Models\AgentRun;
 use App\Models\AgentSuggestion;
 use App\Models\AgentTemplate;
@@ -14,6 +16,8 @@ use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\Trip;
 use App\Services\Agents\AgentOrchestratorService;
+use App\Services\Agents\MemoryQueryService;
+use App\Services\Agents\VisibilityPolicyService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
@@ -41,6 +45,10 @@ class IntelligenceIndex extends Component
     public array $agentDirectory = [];
 
     public array $agentMessages = [];
+
+    public string $selectedThreadVisibility = AgentThread::VISIBILITY_PRIVATE;
+
+    public array $memoryAudit = [];
 
     public array $pendingSuggestions = [];
 
@@ -183,6 +191,7 @@ class IntelligenceIndex extends Component
             'template_id' => $template?->id,
             'created_by' => Auth::id(),
             'owner_user_id' => Auth::id(),
+            'staffer_id' => Auth::id(),
             'mission' => trim((string) ($validated['createForm']['mission'] ?? '')) ?: ($template?->description ?: null),
             'instructions' => trim((string) ($validated['createForm']['instructions'] ?? '')) ?: ($template?->system_prompt ?: null),
             'knowledge_sources' => $this->buildKnowledgeSources($scope, $projectId ?: null, $templateConfig),
@@ -197,6 +206,19 @@ class IntelligenceIndex extends Component
 
         if ($template) {
             $template->increment('times_used');
+        }
+
+        if (Schema::hasTable('agent_prompt_layers')) {
+            $personalContent = trim((string) ($agent->instructions ?? ''));
+            if ($personalContent !== '') {
+                AgentPromptLayer::query()->create([
+                    'agent_id' => $agent->id,
+                    'layer_type' => AgentPromptLayer::LAYER_PERSONAL,
+                    'content' => $personalContent,
+                    'version' => 1,
+                    'updated_by' => Auth::id(),
+                ]);
+            }
         }
 
         $this->selectedAgentId = $agent->id;
@@ -236,6 +258,57 @@ class IntelligenceIndex extends Component
 
         $this->refresh();
         $this->dispatch('notify', type: 'success', message: 'Agent status updated.');
+    }
+
+    public function toggleSelectedThreadVisibility(): void
+    {
+        if (! Schema::hasColumn('agent_threads', 'visibility')) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations before using visibility controls.');
+
+            return;
+        }
+
+        $agent = $this->selectedAgent();
+        $actor = Auth::user();
+        if (! $agent || ! $actor) {
+            $this->dispatch('notify', type: 'error', message: 'Select an agent first.');
+
+            return;
+        }
+
+        $thread = AgentThread::query()->firstOrCreate(
+            ['agent_id' => $agent->id, 'user_id' => $actor->id],
+            [
+                'title' => $agent->name.' Thread',
+                'visibility' => AgentThread::VISIBILITY_PRIVATE,
+            ]
+        );
+
+        $policy = app(VisibilityPolicyService::class);
+        if (! $policy->canToggleThreadVisibility($actor, $thread)) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to change thread visibility.');
+
+            return;
+        }
+
+        $nextVisibility = $thread->visibility === AgentThread::VISIBILITY_PUBLIC
+            ? AgentThread::VISIBILITY_PRIVATE
+            : AgentThread::VISIBILITY_PUBLIC;
+
+        $thread->update(['visibility' => $nextVisibility]);
+
+        if (Schema::hasColumn('agent_messages', 'visibility')) {
+            AgentMessage::query()
+                ->where('thread_id', $thread->id)
+                ->whereNull('visibility')
+                ->update(['visibility' => $nextVisibility]);
+        }
+
+        $this->selectedThreadVisibility = $nextVisibility;
+        $this->hydrateSelectedAgentWorkspace();
+
+        $label = $nextVisibility === AgentThread::VISIBILITY_PUBLIC ? 'Public' : 'Private';
+        $this->dispatch('notify', type: 'success', message: "Thread visibility set to {$label}.");
     }
 
     public function directSelectedAgent(AgentOrchestratorService $orchestrator): void
@@ -712,6 +785,8 @@ class IntelligenceIndex extends Component
 
         if (! $agent) {
             $this->agentMessages = [];
+            $this->memoryAudit = [];
+            $this->selectedThreadVisibility = AgentThread::VISIBILITY_PRIVATE;
             $this->pendingSuggestions = [];
             $this->recentRuns = [];
 
@@ -723,21 +798,33 @@ class IntelligenceIndex extends Component
             ->first();
 
         if ($thread) {
+            $this->selectedThreadVisibility = trim((string) ($thread->visibility ?: AgentThread::VISIBILITY_PRIVATE));
+
+            $messageColumns = ['id', 'role', 'content', 'created_at'];
+            $hasMessageVisibility = Schema::hasColumn('agent_messages', 'visibility');
+            if ($hasMessageVisibility) {
+                $messageColumns[] = 'visibility';
+            }
+
             $this->agentMessages = AgentMessage::query()
                 ->where('thread_id', $thread->id)
                 ->orderBy('created_at')
                 ->limit(120)
-                ->get(['id', 'role', 'content', 'created_at'])
+                ->get($messageColumns)
                 ->map(fn (AgentMessage $message) => [
                     'id' => $message->id,
                     'role' => $message->role,
                     'content' => $message->content,
+                    'visibility' => $hasMessageVisibility
+                        ? ($message->visibility ?: $this->selectedThreadVisibility)
+                        : $this->selectedThreadVisibility,
                     'timestamp' => $message->created_at?->format('M j, g:i A'),
                 ])
                 ->values()
                 ->all();
         } else {
             $this->agentMessages = [];
+            $this->selectedThreadVisibility = AgentThread::VISIBILITY_PRIVATE;
         }
 
         $pending = AgentSuggestion::query()
@@ -805,6 +892,8 @@ class IntelligenceIndex extends Component
                 ])->values()->all(),
             ];
         })->values()->all();
+
+        $this->loadMemoryAudit($agent);
     }
 
     protected function selectedAgent(): ?Agent
@@ -858,7 +947,8 @@ class IntelligenceIndex extends Component
         }
 
         return (int) $agent->created_by === (int) $user->id
-            || (! empty($agent->owner_user_id) && (int) $agent->owner_user_id === (int) $user->id);
+            || (! empty($agent->owner_user_id) && (int) $agent->owner_user_id === (int) $user->id)
+            || (! empty($agent->staffer_id) && (int) $agent->staffer_id === (int) $user->id);
     }
 
     protected function canDirectAgent(Agent $agent): bool
@@ -880,7 +970,11 @@ class IntelligenceIndex extends Component
             return $this->canAccessProjectByScope((int) $agent->project_id);
         }
 
-        if ((int) $agent->created_by === (int) $user->id || (int) $agent->owner_user_id === (int) $user->id) {
+        if (
+            (int) $agent->created_by === (int) $user->id
+            || (int) $agent->owner_user_id === (int) $user->id
+            || (int) ($agent->staffer_id ?? 0) === (int) $user->id
+        ) {
             return true;
         }
 
@@ -917,6 +1011,41 @@ class IntelligenceIndex extends Component
         }
 
         return (bool) ($this->permissionSnapshot['can_approve_high_risk'] ?? false);
+    }
+
+    protected function loadMemoryAudit(Agent $agent): void
+    {
+        $this->memoryAudit = [];
+
+        $actor = Auth::user();
+        if (! $actor || ! Schema::hasTable('agent_memory')) {
+            return;
+        }
+
+        $memories = app(MemoryQueryService::class)->queryForAgent(
+            $agent,
+            $actor,
+            '',
+            24,
+            true
+        );
+
+        $this->memoryAudit = $memories->map(function ($memory) use ($agent): array {
+            $content = is_array($memory->content) ? $memory->content : [];
+            $text = trim((string) ($content['summary'] ?? $content['text'] ?? ''));
+
+            return [
+                'id' => (int) $memory->id,
+                'agent_id' => (int) $memory->agent_id,
+                'agent_name' => (string) ($memory->agent?->name ?? 'Agent'),
+                'memory_type' => (string) $memory->memory_type,
+                'visibility' => (string) $memory->visibility,
+                'confidence' => $memory->confidence !== null ? (float) $memory->confidence : null,
+                'text' => $text,
+                'created_at' => $memory->created_at?->format('M j, g:i A'),
+                'is_cross_agent' => (int) $memory->agent_id !== (int) $agent->id,
+            ];
+        })->values()->all();
     }
 
     protected function canAccessProjectByScope(int $projectId): bool

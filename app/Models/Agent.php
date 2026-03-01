@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Support\Str;
 
 class Agent extends Model
@@ -26,6 +27,7 @@ class Agent extends Model
         'template_id',
         'created_by',
         'owner_user_id',
+        'staffer_id',
         'mission',
         'instructions',
         'knowledge_sources',
@@ -71,6 +73,11 @@ class Agent extends Model
         return $this->belongsTo(User::class, 'owner_user_id');
     }
 
+    public function staffer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'staffer_id');
+    }
+
     public function threads(): HasMany
     {
         return $this->hasMany(AgentThread::class)->latest('updated_at');
@@ -84,6 +91,41 @@ class Agent extends Model
     public function suggestions(): HasMany
     {
         return $this->hasMany(AgentSuggestion::class)->latest('created_at');
+    }
+
+    public function promptLayers(): HasMany
+    {
+        return $this->hasMany(AgentPromptLayer::class)->latest('version');
+    }
+
+    public function promptOverrides(): HasMany
+    {
+        return $this->hasMany(AgentPromptOverride::class);
+    }
+
+    public function credentials(): HasMany
+    {
+        return $this->hasMany(AgentCredential::class);
+    }
+
+    public function memories(): HasMany
+    {
+        return $this->hasMany(AgentMemory::class)->latest('created_at');
+    }
+
+    public function goals(): HasMany
+    {
+        return $this->hasMany(AgentGoal::class)->orderByDesc('priority');
+    }
+
+    public function goalRuns(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            AgentGoalRun::class,
+            AgentGoal::class,
+            'agent_id',
+            'goal_id'
+        )->latest('triggered_at');
     }
 
     public function scopeActive($query)

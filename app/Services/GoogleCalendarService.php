@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\Agent;
 use App\Models\Meeting;
 use App\Models\User;
+use App\Services\Agents\AgentCredentialService;
 use Google\Client as GoogleClient;
 use Google\Service\Calendar as GoogleCalendar;
 use Google\Service\Gmail as GoogleGmail;
@@ -14,8 +16,9 @@ class GoogleCalendarService
 {
     protected GoogleClient $client;
 
-    public function __construct()
-    {
+    public function __construct(
+        protected AgentCredentialService $agentCredentialService
+    ) {
         $this->client = new GoogleClient;
         $this->client->setClientId(config('services.google.client_id'));
         $this->client->setClientSecret(config('services.google.client_secret'));
@@ -108,41 +111,47 @@ class GoogleCalendarService
     /**
      * Check if a user has Google Calendar connected.
      */
-    public function isConnected(User $user): bool
+    public function isConnected(User $user, ?Agent $agent = null): bool
     {
-        return !empty($user->google_access_token);
+        $credential = $this->resolveGoogleCredential($user, $agent);
+
+        return trim((string) ($credential['access_token'] ?? '')) !== '';
     }
 
     /**
      * Get the Google Calendar service for a user.
      */
-    public function getCalendarService(User $user): ?GoogleCalendar
+    public function getCalendarService(User $user, ?Agent $agent = null): ?GoogleCalendar
     {
-        if (!$this->isConnected($user)) {
+        $credential = $this->resolveGoogleCredential($user, $agent);
+        if (trim((string) ($credential['access_token'] ?? '')) === '') {
             return null;
         }
 
-        // Refresh token if expired
-        if (! $user->google_token_expires_at || $user->google_token_expires_at->isPast()) {
-            $this->refreshToken($user);
+        $expiresAt = $credential['expires_at'] ?? null;
+        if ($expiresAt instanceof \Carbon\CarbonInterface && $expiresAt->isPast()) {
+            $this->refreshToken($user, $agent, $credential);
             $user->refresh();
+            $credential = $this->resolveGoogleCredential($user, $agent);
         }
 
-        $this->client->setAccessToken($user->google_access_token);
+        $this->client->setAccessToken((string) ($credential['access_token'] ?? ''));
 
         return new GoogleCalendar($this->client);
     }
 
     /**
-     * Refresh the access token.
+     * @param  array<string,mixed>|null  $credential
      */
-    protected function refreshToken(User $user): bool
+    protected function refreshToken(User $user, ?Agent $agent = null, ?array $credential = null): bool
     {
-        if (! $user->google_refresh_token) {
+        $credential ??= $this->resolveGoogleCredential($user, $agent);
+        $refreshToken = trim((string) ($credential['refresh_token'] ?? ''));
+        if ($refreshToken === '') {
             return false;
         }
 
-        $token = $this->client->fetchAccessTokenWithRefreshToken($user->google_refresh_token);
+        $token = $this->client->fetchAccessTokenWithRefreshToken($refreshToken);
         if (! is_array($token)) {
             $token = $this->client->getAccessToken();
         }
@@ -150,11 +159,32 @@ class GoogleCalendarService
         if (! empty($token['error']) || empty($token['access_token'])) {
             \Log::warning('Google token refresh failed for Calendar', [
                 'user_id' => $user->id,
+                'agent_id' => $agent?->id,
                 'error' => $token['error'] ?? 'missing_access_token',
                 'error_description' => $token['error_description'] ?? null,
             ]);
 
             return false;
+        }
+
+        if ($agent) {
+            $existing = $this->agentCredentialService->getCredential($agent, 'gcal');
+            $existingTokenData = is_array($existing?->token_data) ? $existing->token_data : [];
+            $tokenData = array_merge($existingTokenData, [
+                'access_token' => $token['access_token'],
+                'refresh_token' => $token['refresh_token'] ?? $refreshToken,
+                'token_type' => $token['token_type'] ?? ($existingTokenData['token_type'] ?? 'Bearer'),
+            ]);
+
+            $this->agentCredentialService->storeCredential(
+                $agent,
+                'gcal',
+                $tokenData,
+                is_array($existing?->scopes) ? $existing->scopes : [],
+                now()->addSeconds((int) ($token['expires_in'] ?? 3600))
+            );
+
+            return true;
         }
 
         $user->update([
@@ -167,9 +197,48 @@ class GoogleCalendarService
     }
 
     /**
+     * @return array{
+     *   source:string,
+     *   access_token:string,
+     *   refresh_token:string,
+     *   expires_at:\Carbon\CarbonInterface|null
+     * }
+     */
+    protected function resolveGoogleCredential(User $user, ?Agent $agent = null): array
+    {
+        if ($agent) {
+            $agentCredential = $this->agentCredentialService->getCredential($agent, 'gcal');
+            $tokenData = is_array($agentCredential?->token_data) ? $agentCredential->token_data : [];
+            $expiresAt = $agentCredential?->expires_at;
+
+            if (! $expiresAt && ! empty($tokenData['expires_at'])) {
+                try {
+                    $expiresAt = \Carbon\Carbon::parse((string) $tokenData['expires_at']);
+                } catch (\Throwable) {
+                    $expiresAt = null;
+                }
+            }
+
+            return [
+                'source' => 'agent',
+                'access_token' => trim((string) ($tokenData['access_token'] ?? '')),
+                'refresh_token' => trim((string) ($tokenData['refresh_token'] ?? '')),
+                'expires_at' => $expiresAt,
+            ];
+        }
+
+        return [
+            'source' => 'user',
+            'access_token' => trim((string) $user->google_access_token),
+            'refresh_token' => trim((string) $user->google_refresh_token),
+            'expires_at' => $user->google_token_expires_at,
+        ];
+    }
+
+    /**
      * Get calendar events for a date range.
      */
-    public function getEvents(User $user, $startDate = null, $endDate = null): array
+    public function getEvents(User $user, $startDate = null, $endDate = null, ?Agent $agent = null): array
     {
         // Convert dates to Carbon if they aren't already
         // Default to 6 months back to 6 months ahead for wider coverage
@@ -185,7 +254,7 @@ class GoogleCalendarService
         $allowRetry = true;
 
         while (true) {
-            $service = $this->getCalendarService($user);
+            $service = $this->getCalendarService($user, $agent);
             if (! $service) {
                 return [];
             }
@@ -215,7 +284,7 @@ class GoogleCalendarService
 
                 return $allEvents;
             } catch (\Throwable $e) {
-                if ($allowRetry && $this->isAuthError($e) && $this->refreshToken($user)) {
+                if ($allowRetry && $this->isAuthError($e) && $this->refreshToken($user, $agent)) {
                     $allowRetry = false;
                     continue;
                 }

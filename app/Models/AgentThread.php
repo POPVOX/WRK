@@ -8,10 +8,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AgentThread extends Model
 {
+    public const VISIBILITY_PUBLIC = 'public';
+    public const VISIBILITY_PRIVATE = 'private';
+
     protected $fillable = [
         'agent_id',
         'user_id',
         'title',
+        'visibility',
     ];
 
     public function agent(): BelongsTo

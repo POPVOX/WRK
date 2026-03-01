@@ -106,6 +106,18 @@
                     <div class="flex justify-between"><span>Events stored</span><span>{{ $box['webhook']['event_count'] ?? '—' }}</span></div>
                     <div class="flex justify-between"><span>Last status</span><span>{{ $box['webhook']['last_status'] ?? '—' }}</span></div>
                     <div class="flex justify-between"><span>Last trigger</span><span>{{ $box['webhook']['last_trigger'] ?? '—' }}</span></div>
+                    <div class="flex justify-between">
+                        <span>Signature verification</span>
+                        <span class="{{ ($box['webhook']['signature_enforced'] ?? false) ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300' }}">
+                            {{ ($box['webhook']['signature_enforced'] ?? false) ? 'Enabled' : 'Disabled' }}
+                        </span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Signature keys</span>
+                        <span class="{{ ($box['webhook']['signature_keys_configured'] ?? false) ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300' }}">
+                            {{ ($box['webhook']['signature_keys_configured'] ?? false) ? 'Configured' : 'Missing' }}
+                        </span>
+                    </div>
                     <div class="flex justify-between"><span>Delivery ID</span><span class="truncate max-w-[160px] text-right">{{ $box['webhook']['last_delivery_id'] ?? '—' }}</span></div>
                     <div class="pt-2 text-xs text-gray-500 dark:text-gray-400">
                         Last event:
@@ -118,6 +130,11 @@
                     @if(!empty($box['webhook']['last_processed_at']))
                         <div class="text-xs text-gray-500 dark:text-gray-400">Processed at: {{ $box['webhook']['last_processed_at'] }}</div>
                     @endif
+                    @if(!empty($box['webhook']['signature_warning']))
+                        <div class="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                            {{ $box['webhook']['signature_warning'] }}
+                        </div>
+                    @endif
                     @if(!empty($box['webhook']['last_error_message']))
                         <div class="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
                             {{ $box['webhook']['last_error_message'] }}
@@ -128,4 +145,3 @@
         </section>
     </div>
 </div>
-

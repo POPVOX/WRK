@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -180,6 +181,18 @@ class Trip extends Model
     public function agentConversation(): HasOne
     {
         return $this->hasOne(TripAgentConversation::class, 'trip_id');
+    }
+
+    public function agentActions(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            TripAgentAction::class,
+            TripAgentConversation::class,
+            'trip_id',
+            'conversation_id',
+            'id',
+            'id'
+        );
     }
 
     // Scopes
