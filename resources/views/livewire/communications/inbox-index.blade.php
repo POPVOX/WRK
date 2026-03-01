@@ -154,6 +154,79 @@
                             </div>
                         </header>
 
+                        <div class="border-b border-gray-100 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    wire:click="openComposerForReply"
+                                    wire:loading.attr="disabled"
+                                    wire:target="openComposerForReply"
+                                    @disabled($readOnlyMode)
+                                    class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                    title="{{ $readOnlyMode ? 'Reconnect Google with Gmail compose scope first.' : 'Reply' }}"
+                                >
+                                    Reply
+                                </button>
+                                <button
+                                    type="button"
+                                    wire:click="openComposerForReplyAll"
+                                    wire:loading.attr="disabled"
+                                    wire:target="openComposerForReplyAll"
+                                    @disabled($readOnlyMode)
+                                    class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                    title="{{ $readOnlyMode ? 'Reconnect Google with Gmail compose scope first.' : 'Reply all' }}"
+                                >
+                                    Reply All
+                                </button>
+                                <button
+                                    type="button"
+                                    wire:click="openComposerForForward"
+                                    wire:loading.attr="disabled"
+                                    wire:target="openComposerForForward"
+                                    @disabled($readOnlyMode)
+                                    class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                    title="{{ $readOnlyMode ? 'Reconnect Google with Gmail compose scope first.' : 'Forward' }}"
+                                >
+                                    Forward
+                                </button>
+                                <button
+                                    type="button"
+                                    wire:click="saveThreadToProject"
+                                    wire:loading.attr="disabled"
+                                    wire:target="saveThreadToProject"
+                                    @disabled($selectedProjectId === '')
+                                    class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                    title="{{ $selectedProjectId === '' ? 'Choose a project first' : 'Save this thread to selected project' }}"
+                                >
+                                    Save to Project
+                                </button>
+                                <button
+                                    type="button"
+                                    wire:click="markSelectedThreadAsSpam"
+                                    wire:confirm="Mark this thread as spam?"
+                                    wire:loading.attr="disabled"
+                                    wire:target="markSelectedThreadAsSpam"
+                                    @disabled($readOnlyMode)
+                                    class="inline-flex items-center rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                                    title="{{ $readOnlyMode ? 'Reconnect Google with Gmail modify scope first.' : 'Mark as spam' }}"
+                                >
+                                    Mark as Spam
+                                </button>
+                                <button
+                                    type="button"
+                                    wire:click="deleteSelectedThread"
+                                    wire:confirm="Move this thread to Gmail trash?"
+                                    wire:loading.attr="disabled"
+                                    wire:target="deleteSelectedThread"
+                                    @disabled($readOnlyMode)
+                                    class="inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/40"
+                                    title="{{ $readOnlyMode ? 'Reconnect Google with Gmail modify scope first.' : 'Delete thread' }}"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50/60 dark:bg-gray-900/30">
                             <div class="space-y-3">
                                 @foreach($selectedThread['messages'] as $message)

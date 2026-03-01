@@ -1223,7 +1223,7 @@ class InboxIndex extends Component
         }
 
         $user = Auth::user();
-        if (! $user) {
+        if (! $user || ! Schema::hasTable('inbox_thread_context_links')) {
             return;
         }
 
@@ -1798,8 +1798,9 @@ class InboxIndex extends Component
 
         if ($grantCandidates->isNotEmpty()) {
             $candidateIds = $grantCandidates->pluck('id')->map(fn ($id) => (string) $id)->all();
-            if ($this->selectedGrantId === '' || ! in_array((string) $this->selectedGrantId, $candidateIds, true)) {
-                $this->selectedGrantId = (string) $grantCandidates->first()['id'];
+            // Respect explicit "No grant selected" in the UI; only clear invalid stale values.
+            if ($this->selectedGrantId !== '' && ! in_array((string) $this->selectedGrantId, $candidateIds, true)) {
+                $this->selectedGrantId = '';
             }
         } else {
             $this->selectedGrantId = '';
@@ -2048,9 +2049,46 @@ class InboxIndex extends Component
                 'source' => 'thread_match',
             ]);
 
+        $selectedProjectId = (int) $this->selectedProjectId;
+        $matchedByProject = collect();
+        if ($selectedProjectId > 0) {
+            $projectGrantIds = Grant::query()
+                ->visibleTo($actor)
+                ->whereHas('projects', fn ($query) => $query->where('projects.id', $selectedProjectId))
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $matchedByProject = $visibleGrants
+                ->filter(fn (Grant $grant) => in_array((int) $grant->id, $projectGrantIds, true))
+                ->map(fn (Grant $grant) => [
+                    'id' => $grant->id,
+                    'name' => $grant->name,
+                    'status' => $grant->status,
+                    'visibility' => $grant->visibility,
+                    'funder_name' => (string) ($grant->funder?->name ?? ''),
+                    'source' => 'project_link',
+                ]);
+        }
+
+        // Always provide a broader fallback pool so users can override agent matching.
+        $fallbackRecent = $visibleGrants
+            ->take(40)
+            ->map(fn (Grant $grant) => [
+                'id' => $grant->id,
+                'name' => $grant->name,
+                'status' => $grant->status,
+                'visibility' => $grant->visibility,
+                'funder_name' => (string) ($grant->funder?->name ?? ''),
+                'source' => 'recent',
+            ]);
+
         return $matchedByOrganization
             ->concat($matchedByText)
+            ->concat($matchedByProject)
+            ->concat($fallbackRecent)
             ->unique('id')
+            ->take(40)
             ->values();
     }
 
@@ -2324,6 +2362,118 @@ class InboxIndex extends Component
         }
 
         return 'msg:'.(string) $message->gmail_message_id;
+    }
+
+    protected function selectedLatestMessageModel(): ?GmailMessage
+    {
+        $snapshot = $this->selectedThreadSnapshot();
+        if (! $snapshot) {
+            return null;
+        }
+
+        return $this->threadMessagesQuery($snapshot)
+            ->orderByDesc('sent_at')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    protected function threadMessagesQuery(array $snapshot)
+    {
+        $user = Auth::user();
+        $query = GmailMessage::query();
+        if (! $user) {
+            return $query->whereRaw('1=0');
+        }
+
+        $query->where('user_id', $user->id);
+
+        $threadId = trim((string) ($snapshot['gmail_thread_id'] ?? ''));
+        if ($threadId !== '') {
+            return $query->where('gmail_thread_id', $threadId);
+        }
+
+        $messageIds = collect($snapshot['messages'] ?? [])
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->values()
+            ->all();
+
+        if ($messageIds === []) {
+            return $query->whereRaw('1=0');
+        }
+
+        return $query->whereIn('id', $messageIds);
+    }
+
+    protected function applyThreadLabelMutation(string $threadId, array $add = [], array $remove = []): void
+    {
+        $threadId = trim($threadId);
+        $user = Auth::user();
+        if ($threadId === '' || ! $user) {
+            return;
+        }
+
+        $addLabels = collect($add)
+            ->map(fn ($label) => Str::upper(trim((string) $label)))
+            ->filter()
+            ->values()
+            ->all();
+        $removeLabels = collect($remove)
+            ->map(fn ($label) => Str::upper(trim((string) $label)))
+            ->filter()
+            ->values()
+            ->all();
+
+        $messages = GmailMessage::query()
+            ->where('user_id', $user->id)
+            ->where('gmail_thread_id', $threadId)
+            ->get();
+
+        foreach ($messages as $message) {
+            $labels = collect($message->labels ?? [])
+                ->map(fn ($label) => Str::upper(trim((string) $label)))
+                ->filter()
+                ->values();
+
+            if ($removeLabels !== []) {
+                $labels = $labels->reject(fn ($label) => in_array($label, $removeLabels, true))->values();
+            }
+
+            if ($addLabels !== []) {
+                $labels = $labels->concat($addLabels)->unique()->values();
+            }
+
+            $message->labels = $labels->all();
+            $message->save();
+        }
+    }
+
+    protected function saveContextLink(array $snapshot, string $linkType, int $linkId, array $metadata = []): void
+    {
+        $user = Auth::user();
+        if (! $user || $linkId <= 0 || ! Schema::hasTable('inbox_thread_context_links')) {
+            return;
+        }
+
+        $threadKey = trim((string) ($snapshot['thread_key'] ?? $this->selectedThreadKey ?? ''));
+        if ($threadKey === '') {
+            return;
+        }
+
+        InboxThreadContextLink::query()->updateOrCreate(
+            [
+                'user_id' => $user->id,
+                'thread_key' => $threadKey,
+                'link_type' => $linkType,
+                'link_id' => $linkId,
+            ],
+            [
+                'gmail_thread_id' => trim((string) ($snapshot['gmail_thread_id'] ?? '')) ?: null,
+                'created_by' => $user->id,
+                'metadata' => $metadata !== [] ? $metadata : null,
+            ]
+        );
     }
 
     protected function messageMatchesFolder(GmailMessage $message, string $folder): bool
