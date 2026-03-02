@@ -24,7 +24,7 @@
         $user = auth()->user();
 
         $coreNav = [
-            ['label' => 'Assistant', 'route' => 'dashboard', 'active' => ['dashboard'], 'badge' => null],
+            ['label' => 'WRKspace', 'route' => 'dashboard', 'active' => ['dashboard'], 'badge' => null],
             ['label' => 'Intelligence', 'route' => 'intelligence.index', 'active' => ['intelligence.*'], 'badge' => 'AI'],
             ['label' => 'Inbox', 'route' => 'communications.inbox', 'active' => ['communications.inbox'], 'badge' => null],
             ['label' => 'Notifications', 'route' => 'notifications.index', 'active' => ['notifications.index'], 'badge' => null],
