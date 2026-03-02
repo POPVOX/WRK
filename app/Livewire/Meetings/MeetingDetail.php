@@ -5,10 +5,12 @@ namespace App\Livewire\Meetings;
 use App\Models\Action;
 use App\Models\Issue;
 use App\Models\Meeting;
+use App\Models\MeetingIntelNote;
 use App\Models\Organization;
 use App\Models\Person;
 use App\Services\MeetingAIService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -19,8 +21,8 @@ class MeetingDetail extends Component
 {
     public Meeting $meeting;
 
-    // Editing mode - default to true for inline editing
-    public bool $editing = true;
+    // Editing mode - default to view mode to keep screen clean.
+    public bool $editing = false;
 
     public string $title = '';
 
@@ -98,6 +100,10 @@ class MeetingDetail extends Component
     public ?int $newAgendaPresenter = null;
     public ?int $editingAgendaItemId = null;
 
+    // Team thread + recurring journal
+    public string $threadMessage = '';
+    public string $seriesJournalEntry = '';
+
     public function mount(Meeting $meeting)
     {
         $this->meeting = $meeting->load([
@@ -130,6 +136,71 @@ class MeetingDetail extends Component
         $this->selectedPeople = $this->meeting->people->pluck('id')->toArray();
         $this->selectedIssues = $this->meeting->issues->pluck('id')->toArray();
         $this->leadContactId = $this->meeting->lead_contact_id;
+    }
+
+    public function getRecurringSeriesKeyProperty(): ?string
+    {
+        $title = trim((string) $this->meeting->title);
+        if ($title === '') {
+            return null;
+        }
+
+        return mb_strtolower(preg_replace('/\s+/', ' ', $title) ?? $title);
+    }
+
+    public function getSeriesMeetingsProperty()
+    {
+        $seriesKey = $this->recurringSeriesKey;
+        if (! $seriesKey) {
+            return collect([$this->meeting]);
+        }
+
+        return Meeting::query()
+            ->whereRaw('LOWER(TRIM(title)) = ?', [$seriesKey])
+            ->orderBy('meeting_date')
+            ->orderBy('id')
+            ->get();
+    }
+
+    public function getIsRecurringProperty(): bool
+    {
+        $title = mb_strtolower(trim((string) $this->meeting->title));
+        if ($title === '') {
+            return false;
+        }
+
+        $keywordRecurring = Str::contains($title, [
+            'weekly',
+            'biweekly',
+            'fortnight',
+            'monthly',
+            'sync',
+            'standup',
+            'recurring',
+        ]);
+
+        $sameTitleCount = Meeting::query()
+            ->whereRaw('LOWER(TRIM(title)) = ?', [$title])
+            ->count();
+
+        return $keywordRecurring || $sameTitleCount > 1;
+    }
+
+    public function getThreadEntriesProperty()
+    {
+        $meetingIds = $this->seriesMeetings->pluck('id');
+        if ($meetingIds->isEmpty()) {
+            return collect();
+        }
+
+        return MeetingIntelNote::query()
+            ->with('author:id,name')
+            ->whereIn('meeting_id', $meetingIds)
+            ->whereIn('source', ['meeting_thread', 'recurring_journal'])
+            ->orderByDesc('captured_at')
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get();
     }
 
     public function startEditing()
@@ -177,6 +248,145 @@ class MeetingDetail extends Component
         $this->meeting->refresh();
         $this->editing = false;
         $this->dispatch('notify', type: 'success', message: 'Meeting updated successfully!');
+    }
+
+    public function postThreadMessage(): void
+    {
+        $body = trim($this->threadMessage);
+        if ($body === '') {
+            return;
+        }
+
+        MeetingIntelNote::query()->create([
+            'source' => 'meeting_thread',
+            'author_user_id' => Auth::id(),
+            'author_label' => Auth::user()?->name,
+            'content' => $body,
+            'meeting_id' => $this->meeting->id,
+            'captured_at' => now(),
+            'metadata' => [
+                'entry_type' => 'chat',
+            ],
+        ]);
+
+        // Keep ongoing free-form notes current in the meeting record itself.
+        $line = sprintf(
+            '- %s %s: %s',
+            now()->format('M j, Y g:i A'),
+            Auth::user()?->name ?? 'Staff',
+            $body
+        );
+        $existing = trim((string) $this->meeting->raw_notes);
+        $updatedNotes = $existing === '' ? $line : $existing."\n".$line;
+
+        $this->meeting->update([
+            'raw_notes' => $updatedNotes,
+        ]);
+        $this->raw_notes = $updatedNotes;
+        $this->threadMessage = '';
+        $this->meeting->refresh();
+
+        $this->dispatch('notify', type: 'success', message: 'Update posted to meeting thread.');
+    }
+
+    public function postSorryToMissIt(): void
+    {
+        $meetingTitle = $this->meeting->title ?: 'this meeting';
+        $meetingDate = optional($this->meeting->meeting_date)->format('F j');
+
+        $this->threadMessage = "Sorry to miss {$meetingTitle}".($meetingDate ? " ({$meetingDate})" : '').". Please drop key updates and follow-ups here and tag me if anything needs my input.";
+        $this->postThreadMessage();
+    }
+
+    public function addSeriesJournalEntry(): void
+    {
+        if (! $this->isRecurring) {
+            $this->dispatch('notify', type: 'warning', message: 'Series journal is for recurring meetings.');
+
+            return;
+        }
+
+        $entry = trim($this->seriesJournalEntry);
+        if ($entry === '') {
+            return;
+        }
+
+        MeetingIntelNote::query()->create([
+            'source' => 'recurring_journal',
+            'author_user_id' => Auth::id(),
+            'author_label' => Auth::user()?->name,
+            'content' => $entry,
+            'meeting_id' => $this->meeting->id,
+            'captured_at' => now(),
+            'metadata' => [
+                'entry_type' => 'journal',
+                'series_key' => $this->recurringSeriesKey,
+            ],
+        ]);
+
+        $this->seriesJournalEntry = '';
+        $this->meeting->refresh();
+
+        $this->dispatch('notify', type: 'success', message: 'Added to recurring meeting journal.');
+    }
+
+    public function downloadSeriesMarkdown()
+    {
+        if (! $this->isRecurring) {
+            $this->dispatch('notify', type: 'warning', message: 'This meeting does not appear to be recurring.');
+
+            return null;
+        }
+
+        $meetings = $this->seriesMeetings;
+        $meetingIds = $meetings->pluck('id');
+
+        $entriesByMeeting = MeetingIntelNote::query()
+            ->with('author:id,name')
+            ->whereIn('meeting_id', $meetingIds)
+            ->whereIn('source', ['meeting_thread', 'recurring_journal'])
+            ->orderBy('captured_at')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('meeting_id');
+
+        $title = trim((string) ($this->meeting->title ?: 'Recurring Meeting'));
+        $lines = [];
+        $lines[] = '# '.$title.' - Ongoing Notes';
+        $lines[] = '';
+        $lines[] = 'Generated '.now()->format('F j, Y g:i A');
+
+        foreach ($meetings as $seriesMeeting) {
+            $lines[] = '';
+            $lines[] = '## '.optional($seriesMeeting->meeting_date)->format('F j, Y');
+
+            if (! empty($seriesMeeting->raw_notes)) {
+                $lines[] = '';
+                $lines[] = '### Meeting Notes';
+                $lines[] = trim((string) $seriesMeeting->raw_notes);
+            }
+
+            $entryRows = $entriesByMeeting->get($seriesMeeting->id, collect());
+            if ($entryRows->isNotEmpty()) {
+                $lines[] = '';
+                $lines[] = '### Team Thread';
+
+                foreach ($entryRows as $entry) {
+                    $author = $entry->author?->name ?: ($entry->author_label ?: 'Staff');
+                    $time = optional($entry->captured_at ?: $entry->created_at)->format('M j, Y g:i A');
+                    $lines[] = sprintf('- %s — %s: %s', $time, $author, trim((string) $entry->content));
+                }
+            }
+        }
+
+        $markdown = implode("\n", $lines)."\n";
+        $filename = Str::slug($title).'-ongoing-notes.md';
+
+        return response()->streamDownload(function () use ($markdown): void {
+            echo $markdown;
+        }, $filename, [
+            'Content-Type' => 'text/markdown; charset=UTF-8',
+        ]);
     }
 
     public function toggleActionComplete(int $actionId)
@@ -716,6 +926,9 @@ class MeetingDetail extends Component
             'allIssues' => Issue::orderBy('name')->get(),
             'teamMembers' => \App\Models\User::orderBy('name')->get(['id', 'name']),
             'agendaStatuses' => \App\Models\MeetingAgendaItem::STATUSES,
+            'isRecurring' => $this->isRecurring,
+            'threadEntries' => $this->threadEntries,
+            'seriesMeetings' => $this->seriesMeetings,
         ]);
     }
 }

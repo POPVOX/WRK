@@ -114,12 +114,6 @@
                 </div>
             </div>
 
-            <div class="px-3 py-3 border-b border-gray-200">
-                <a href="{{ route('dashboard') }}#workspace-assistant" wire:navigate class="app-surface block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
-                    Open Assistant Console
-                </a>
-            </div>
-
             <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-6">
                 <section>
                     <p class="px-2 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase app-muted">Core Work</p>

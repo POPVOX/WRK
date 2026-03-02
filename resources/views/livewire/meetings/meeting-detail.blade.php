@@ -80,6 +80,106 @@
                 </div>
             </div>
 
+            {{-- Shared team thread + recurring journal --}}
+            <div class="mb-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <section class="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
+                    <div class="p-4 border-b border-gray-100 dark:border-gray-700">
+                        <h3 class="text-base font-semibold text-gray-900 dark:text-white">Team Thread</h3>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Use this like a lightweight meeting chat. Quick updates are shared with staff and also appended to notes.
+                        </p>
+                    </div>
+                    <div class="p-4 space-y-3">
+                        <form wire:submit.prevent="postThreadMessage" class="space-y-2">
+                            <textarea
+                                wire:model="threadMessage"
+                                rows="2"
+                                placeholder="Drop a quick update (for example: Sorry to miss this one, please share key outcomes.)"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm"
+                            ></textarea>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="submit"
+                                    class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
+                                >
+                                    Post Update
+                                </button>
+                                <button
+                                    type="button"
+                                    wire:click="postSorryToMissIt"
+                                    class="inline-flex items-center px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg dark:bg-indigo-900/30 dark:text-indigo-300"
+                                >
+                                    Sorry to miss it
+                                </button>
+                            </div>
+                        </form>
+
+                        <div class="max-h-64 overflow-y-auto space-y-2 pr-1">
+                            @forelse($threadEntries as $entry)
+                                <article class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40 px-3 py-2">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <p class="text-xs font-semibold text-gray-700 dark:text-gray-200">
+                                            {{ $entry->author?->name ?? $entry->author_label ?? 'Staff' }}
+                                        </p>
+                                        <p class="text-[11px] text-gray-500 dark:text-gray-400">
+                                            {{ optional($entry->captured_at ?? $entry->created_at)->diffForHumans() }}
+                                        </p>
+                                    </div>
+                                    <p class="mt-1 text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{{ $entry->content }}</p>
+                                </article>
+                            @empty
+                                <p class="text-sm text-gray-500 dark:text-gray-400">No team thread updates yet.</p>
+                            @endforelse
+                        </div>
+                    </div>
+                </section>
+
+                <section class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
+                    <div class="p-4 border-b border-gray-100 dark:border-gray-700">
+                        <h3 class="text-base font-semibold text-gray-900 dark:text-white">Recurring Journal</h3>
+                        @if($isRecurring)
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                Detected recurring series ({{ $seriesMeetings->count() }} meetings). Keep an ongoing markdown log.
+                            </p>
+                        @else
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                This meeting does not look recurring yet.
+                            </p>
+                        @endif
+                    </div>
+                    <div class="p-4 space-y-3">
+                        @if($isRecurring)
+                            <textarea
+                                wire:model="seriesJournalEntry"
+                                rows="4"
+                                placeholder="Add an ongoing note for this recurring series..."
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm"
+                            ></textarea>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    wire:click="addSeriesJournalEntry"
+                                    class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-gray-900 hover:bg-black rounded-lg dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                                >
+                                    Add Journal Entry
+                                </button>
+                                <button
+                                    type="button"
+                                    wire:click="downloadSeriesMarkdown"
+                                    class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                                >
+                                    Download .md
+                                </button>
+                            </div>
+                        @else
+                            <p class="text-sm text-gray-600 dark:text-gray-300">
+                                Once multiple meetings share this title (or include recurring keywords like weekly/biweekly/sync), journal export will be enabled.
+                            </p>
+                        @endif
+                    </div>
+                </section>
+            </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 <!-- Main Content -->
