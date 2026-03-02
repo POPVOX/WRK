@@ -27,6 +27,7 @@
             ['label' => 'Assistant', 'route' => 'dashboard', 'active' => ['dashboard'], 'badge' => null],
             ['label' => 'Intelligence', 'route' => 'intelligence.index', 'active' => ['intelligence.*'], 'badge' => 'AI'],
             ['label' => 'Inbox', 'route' => 'communications.inbox', 'active' => ['communications.inbox'], 'badge' => null],
+            ['label' => 'Notifications', 'route' => 'notifications.index', 'active' => ['notifications.index'], 'badge' => null],
             ['label' => 'Projects', 'route' => 'projects.index', 'active' => ['projects.*'], 'badge' => null],
             ['label' => 'Meetings', 'route' => 'meetings.index', 'active' => ['meetings.*'], 'badge' => null],
             ['label' => 'Travel', 'route' => 'travel.index', 'active' => ['travel.*'], 'badge' => null],
@@ -41,16 +42,18 @@
             ['label' => 'Team', 'route' => 'team.hub', 'active' => ['team.*'], 'badge' => null],
         ];
 
-        $adminNav = [
-            ['label' => 'Permissions', 'route' => 'admin.permissions', 'active' => ['admin.permissions']],
-            ['label' => 'Agent Policies', 'route' => 'admin.agent-policies', 'active' => ['admin.agent-policies', 'admin.agents.prompt-preview']],
-            ['label' => 'Integrations', 'route' => 'admin.integrations', 'active' => ['admin.integrations']],
-            ['label' => 'Metrics', 'route' => 'admin.metrics', 'active' => ['admin.metrics']],
-            ['label' => 'Feedback', 'route' => 'admin.feedback', 'active' => ['admin.feedback']],
-        ];
-
+        $adminNav = [];
+        if ($user && $user->isAdmin()) {
+            $adminNav = [
+                ['label' => 'Permissions', 'route' => 'admin.permissions', 'active' => ['admin.permissions']],
+                ['label' => 'Agent Policies', 'route' => 'admin.agent-policies', 'active' => ['admin.agent-policies', 'admin.agents.prompt-preview']],
+                ['label' => 'Integrations', 'route' => 'admin.integrations', 'active' => ['admin.integrations']],
+                ['label' => 'Metrics', 'route' => 'admin.metrics', 'active' => ['admin.metrics']],
+                ['label' => 'Feedback', 'route' => 'admin.feedback', 'active' => ['admin.feedback']],
+            ];
+        }
         if ($user && $user->isManagement()) {
-            $coreNav[] = ['label' => 'Notifications', 'route' => 'notifications.admin', 'active' => ['notifications.admin'], 'badge' => 'Mgr'];
+            $adminNav[] = ['label' => 'Notifications', 'route' => 'notifications.admin', 'active' => ['notifications.admin']];
         }
 
         $routeExists = static fn (array $item): bool => Route::has($item['route']);
@@ -145,7 +148,7 @@
                     </div>
                 </section>
 
-                @if($user && $user->isAdmin() && !empty($adminNav))
+                @if($user && $user->isManagement() && !empty($adminNav))
                     <section>
                         <p class="px-2 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase app-muted">Admin</p>
                         <div class="space-y-1.5">
@@ -258,6 +261,20 @@
                                 @endforeach
                             </div>
                         </section>
+                        @if($user && $user->isManagement() && !empty($adminNav))
+                            <section>
+                                <p class="px-2 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase app-muted">Admin</p>
+                                <div class="space-y-1.5">
+                                    @foreach($adminNav as $item)
+                                        @php($active = $isActive($item))
+                                        <a href="{{ route($item['route']) }}" wire:navigate @click="mobileNavOpen = false"
+                                           class="{{ $linkClasses($active) }}">
+                                            <span>{{ $item['label'] }}</span>
+                                        </a>
+                                    @endforeach
+                                </div>
+                            </section>
+                        @endif
                     </div>
                 </div>
             </div>
