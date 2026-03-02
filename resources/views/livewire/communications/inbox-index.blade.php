@@ -29,11 +29,18 @@
                     </span>
                     <span class="ml-2" wire:loading wire:target="syncGmail">Syncing...</span>
                 </button>
+                <button
+                    type="button"
+                    wire:click="toggleContextPanel"
+                    class="hidden 2xl:inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                    {{ $showContextPanel ? 'Hide Context' : 'Show Context' }}
+                </button>
             </div>
         </div>
 
         <div class="app-card overflow-hidden">
-            <div class="grid h-[calc(100vh-12rem)] grid-cols-1 lg:grid-cols-[15rem_22rem_minmax(0,1fr)] 2xl:grid-cols-[15rem_22rem_minmax(0,1fr)_20rem]">
+            <div class="grid h-[calc(100vh-12rem)] grid-cols-1 lg:grid-cols-[15rem_20rem_minmax(0,1fr)] {{ $showContextPanel ? '2xl:grid-cols-[15rem_20rem_minmax(0,1fr)_17rem]' : '2xl:grid-cols-[15rem_20rem_minmax(0,1fr)]' }}">
                 <aside class="border-r border-gray-200 bg-gray-50/70 dark:border-gray-700 dark:bg-gray-900/30 p-3 overflow-y-auto">
                     <button
                         type="button"
@@ -294,37 +301,39 @@
                             </div>
 
                             @if(!empty($selectedThread['grant_candidates']))
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Funding context</label>
-                                    <select
-                                        wire:model.live="selectedGrantId"
-                                        class="min-w-[280px] rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                    >
-                                        <option value="">No grant selected</option>
-                                        @foreach($selectedThread['grant_candidates'] as $candidate)
-                                            <option value="{{ $candidate['id'] }}">
-                                                {{ $candidate['name'] }} @if(!empty($candidate['funder_name'])) · {{ $candidate['funder_name'] }} @endif
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                    @if($selectedProjectId !== '' && $selectedGrantId !== '' && !($selectedThread['is_project_linked_to_selected_grant'] ?? false))
-                                        <button
-                                            type="button"
-                                            wire:click="linkSelectedProjectToGrant"
-                                            class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                <div class="{{ $showContextPanel ? '2xl:hidden' : '' }}">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Funding context</label>
+                                        <select
+                                            wire:model.live="selectedGrantId"
+                                            class="min-w-[280px] rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                                         >
-                                            Link Project to Grant
-                                        </button>
-                                    @endif
-                                    @if(auth()->user()?->isAdmin() && $selectedGrantId !== '')
-                                        <button
-                                            type="button"
-                                            wire:click="openSelectedGrantRecord"
-                                            class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                                        >
-                                            Open Grant
-                                        </button>
-                                    @endif
+                                            <option value="">No grant selected</option>
+                                            @foreach($selectedThread['grant_candidates'] as $candidate)
+                                                <option value="{{ $candidate['id'] }}">
+                                                    {{ $candidate['name'] }} @if(!empty($candidate['funder_name'])) · {{ $candidate['funder_name'] }} @endif
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        @if($selectedProjectId !== '' && $selectedGrantId !== '' && !($selectedThread['is_project_linked_to_selected_grant'] ?? false))
+                                            <button
+                                                type="button"
+                                                wire:click="linkSelectedProjectToGrant"
+                                                class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                            >
+                                                Link Project to Grant
+                                            </button>
+                                        @endif
+                                        @if(auth()->user()?->isAdmin() && $selectedGrantId !== '')
+                                            <button
+                                                type="button"
+                                                wire:click="openSelectedGrantRecord"
+                                                class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                            >
+                                                Open Grant
+                                            </button>
+                                        @endif
+                                    </div>
                                 </div>
                             @endif
 
@@ -391,7 +400,7 @@
                     @endif
                 </section>
 
-                <aside class="hidden 2xl:block border-l border-gray-200 bg-gray-50/70 p-4 overflow-y-auto dark:border-gray-700 dark:bg-gray-900/30">
+                <aside class="{{ $showContextPanel ? 'hidden 2xl:block' : 'hidden' }} border-l border-gray-200 bg-gray-50/70 p-4 overflow-y-auto dark:border-gray-700 dark:bg-gray-900/30">
                     @if($selectedThread)
                         <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Context Intelligence</h3>
 

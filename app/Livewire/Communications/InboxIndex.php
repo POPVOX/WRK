@@ -76,6 +76,8 @@ class InboxIndex extends Component
 
     public bool $readOnlyMode = false;
 
+    public bool $showContextPanel = false;
+
     public array $folders = [
         'inbox' => 'Inbox',
         'sent' => 'Sent',
@@ -91,6 +93,11 @@ class InboxIndex extends Component
         $user = Auth::user();
         $this->lastGmailSyncAt = $user?->gmail_import_date?->diffForHumans();
         $this->readOnlyMode = ! $this->gmailWriteScopesConfigured();
+    }
+
+    public function toggleContextPanel(): void
+    {
+        $this->showContextPanel = ! $this->showContextPanel;
     }
 
     public function updatedFolder(): void
