@@ -67,16 +67,44 @@
         $linkClasses = static fn (bool $active): string => 'app-nav-link '.($active ? 'app-nav-link-active' : '');
     @endphp
 
-    <div x-data="{ mobileNavOpen: false, mobileUserOpen: false }" class="app-shell">
-        <aside class="app-sidebar hidden lg:flex lg:flex-col">
+    <div
+        x-data="{
+            mobileNavOpen: false,
+            mobileUserOpen: false,
+            desktopNavCollapsed: (() => {
+                try {
+                    return JSON.parse(window.localStorage.getItem('wrk.desktop_nav_collapsed') ?? 'false') === true;
+                } catch (error) {
+                    return false;
+                }
+            })(),
+        }"
+        x-init="$watch('desktopNavCollapsed', value => window.localStorage.setItem('wrk.desktop_nav_collapsed', JSON.stringify(!!value)))"
+        class="app-shell"
+        :style="desktopNavCollapsed ? 'grid-template-columns: 0 minmax(0, 1fr);' : ''"
+    >
+        <aside class="app-sidebar hidden lg:flex lg:flex-col overflow-hidden transition-all duration-200"
+               :class="desktopNavCollapsed ? 'lg:opacity-0 lg:pointer-events-none lg:-translate-x-2' : 'lg:opacity-100 lg:translate-x-0'">
             <div class="px-4 py-4 border-b border-gray-200">
-                <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center gap-3">
-                    <img src="{{ asset('images/logo.png') }}" alt="WRK" class="h-8 w-auto">
-                    <div>
-                        <p class="text-sm font-semibold text-gray-900">WRK</p>
-                        <p class="text-xs app-muted">Agent Workspace</p>
-                    </div>
-                </a>
+                <div class="flex items-center justify-between gap-2">
+                    <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center gap-3">
+                        <img src="{{ asset('images/logo.png') }}" alt="WRK" class="h-8 w-auto">
+                        <div>
+                            <p class="text-sm font-semibold text-gray-900">WRK</p>
+                            <p class="text-xs app-muted">Agent Workspace</p>
+                        </div>
+                    </a>
+                    <button
+                        type="button"
+                        @click="desktopNavCollapsed = true"
+                        class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100"
+                        aria-label="Collapse navigation"
+                    >
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <div class="px-3 py-3 border-b border-gray-200">
@@ -158,6 +186,18 @@
         </aside>
 
         <div class="app-main">
+            <button
+                type="button"
+                x-cloak
+                x-show="desktopNavCollapsed"
+                @click="desktopNavCollapsed = false"
+                class="fixed left-3 top-3 z-40 hidden h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-100 lg:inline-flex"
+                aria-label="Expand navigation"
+            >
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+            </button>
             <header class="app-topbar lg:hidden sticky top-0 z-40">
                 <div class="px-3 py-2.5 flex items-center justify-between gap-3">
                     <button type="button"

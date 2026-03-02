@@ -32,16 +32,16 @@
                 <button
                     type="button"
                     wire:click="toggleContextPanel"
-                    class="hidden 2xl:inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                 >
-                    {{ $showContextPanel ? 'Hide Context' : 'Show Context' }}
+                    {{ $showContextPanel ? 'Close Context' : 'Open Context' }}
                 </button>
             </div>
         </div>
 
         <div class="app-card overflow-hidden">
-            <div class="grid h-[calc(100vh-12rem)] grid-cols-1 lg:grid-cols-[15rem_20rem_minmax(0,1fr)] {{ $showContextPanel ? '2xl:grid-cols-[15rem_20rem_minmax(0,1fr)_17rem]' : '2xl:grid-cols-[15rem_20rem_minmax(0,1fr)]' }}">
-                <aside class="border-r border-gray-200 bg-gray-50/70 dark:border-gray-700 dark:bg-gray-900/30 p-3 overflow-y-auto">
+            <div class="grid h-[calc(100vh-12rem)] grid-cols-1 {{ $showInboxMenu ? 'lg:grid-cols-[15rem_20rem_minmax(0,1fr)]' : 'lg:grid-cols-[20rem_minmax(0,1fr)]' }}">
+                <aside class="{{ $showInboxMenu ? 'border-r border-gray-200 bg-gray-50/70 dark:border-gray-700 dark:bg-gray-900/30 p-3 overflow-y-auto' : 'hidden' }}">
                     <button
                         type="button"
                         wire:click="openComposer"
@@ -50,6 +50,13 @@
                         title="{{ $readOnlyMode ? 'Reconnect Google with Gmail compose/send scope first.' : 'Compose a new email' }}"
                     >
                         Compose
+                    </button>
+                    <button
+                        type="button"
+                        wire:click="toggleInboxMenu"
+                        class="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                        Hide Inbox Menu
                     </button>
 
                     <nav class="mt-4 space-y-1">
@@ -81,16 +88,27 @@
 
                 <section class="border-r border-gray-200 dark:border-gray-700 flex flex-col min-h-0">
                     <div class="p-3 border-b border-gray-100 dark:border-gray-700">
-                        <div class="relative">
-                            <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                            <input
-                                type="text"
-                                wire:model.live.debounce.300ms="search"
-                                placeholder="Search mail, contact, organization..."
-                                class="w-full rounded-lg border-gray-200 pl-9 pr-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                            >
+                        <div class="flex items-center gap-2">
+                            @if(!$showInboxMenu)
+                                <button
+                                    type="button"
+                                    wire:click="toggleInboxMenu"
+                                    class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                                >
+                                    Show Inbox Menu
+                                </button>
+                            @endif
+                            <div class="relative flex-1">
+                                <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                    type="text"
+                                    wire:model.live.debounce.300ms="search"
+                                    placeholder="Search mail, contact, organization..."
+                                    class="w-full rounded-lg border-gray-200 pl-9 pr-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                >
+                            </div>
                         </div>
                     </div>
 
@@ -301,7 +319,7 @@
                             </div>
 
                             @if(!empty($selectedThread['grant_candidates']))
-                                <div class="{{ $showContextPanel ? '2xl:hidden' : '' }}">
+                                <div>
                                     <div class="flex flex-wrap items-center gap-2">
                                         <label class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Funding context</label>
                                         <select
@@ -400,9 +418,27 @@
                     @endif
                 </section>
 
-                <aside class="{{ $showContextPanel ? 'hidden 2xl:block' : 'hidden' }} border-l border-gray-200 bg-gray-50/70 p-4 overflow-y-auto dark:border-gray-700 dark:bg-gray-900/30">
+                @if($showContextPanel)
+                    <button
+                        type="button"
+                        wire:click="toggleContextPanel"
+                        class="fixed inset-0 z-40 bg-gray-900/35"
+                        aria-label="Close context drawer"
+                    ></button>
+                @endif
+
+                <aside class="{{ $showContextPanel ? 'fixed right-0 top-0 z-50 h-full w-full max-w-md border-l border-gray-200 bg-gray-50/95 p-4 shadow-2xl dark:border-gray-700 dark:bg-gray-900/95' : 'hidden' }} overflow-y-auto">
                     @if($selectedThread)
-                        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Context Intelligence</h3>
+                        <div class="mb-3 flex items-center justify-between gap-2">
+                            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Context Intelligence</h3>
+                            <button
+                                type="button"
+                                wire:click="toggleContextPanel"
+                                class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                            >
+                                Close
+                            </button>
+                        </div>
 
                         <div class="mt-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-800 dark:bg-indigo-900/20">
                             <h4 class="text-xs font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">Agent Suggestions</h4>
@@ -571,8 +607,15 @@
                             @endif
                         </div>
                     @else
-                        <div class="h-full flex items-center justify-center text-center text-sm text-gray-500 dark:text-gray-400">
-                            Context details appear when you select a thread.
+                        <div class="h-full flex flex-col items-center justify-center gap-3 text-center text-sm text-gray-500 dark:text-gray-400">
+                            <p>Context details appear when you select a thread.</p>
+                            <button
+                                type="button"
+                                wire:click="toggleContextPanel"
+                                class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                            >
+                                Close
+                            </button>
                         </div>
                     @endif
                 </aside>

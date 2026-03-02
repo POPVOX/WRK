@@ -76,6 +76,8 @@ class InboxIndex extends Component
 
     public bool $readOnlyMode = false;
 
+    public bool $showInboxMenu = true;
+
     public bool $showContextPanel = false;
 
     public array $folders = [
@@ -98,6 +100,11 @@ class InboxIndex extends Component
     public function toggleContextPanel(): void
     {
         $this->showContextPanel = ! $this->showContextPanel;
+    }
+
+    public function toggleInboxMenu(): void
+    {
+        $this->showInboxMenu = ! $this->showInboxMenu;
     }
 
     public function updatedFolder(): void
@@ -1995,7 +2002,7 @@ class InboxIndex extends Component
     protected function projectCandidates(Collection $messages, ?Person $person): Collection
     {
         $allProjects = Project::query()
-            ->whereIn('status', ['planning', 'active', 'on_hold'])
+            ->whereIn('status', ['planning', 'active', 'on_hold', 'completed'])
             ->orderBy('name')
             ->limit(250)
             ->get(['id', 'name', 'status']);
@@ -2031,9 +2038,20 @@ class InboxIndex extends Component
                 ]);
         }
 
+        $fallbackRecent = $allProjects
+            ->take(80)
+            ->map(fn (Project $project) => [
+                'id' => $project->id,
+                'name' => $project->name,
+                'status' => $project->status,
+                'source' => 'recent',
+            ]);
+
         return $matchedByPerson
             ->concat($matchedByText)
+            ->concat($fallbackRecent)
             ->unique('id')
+            ->take(80)
             ->values();
     }
 

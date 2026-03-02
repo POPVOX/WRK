@@ -80,6 +80,8 @@ class ProjectCreate extends Component
 
     public string $sourceProjectName = '';
 
+    public ?string $saveError = null;
+
     public function mount(?Project $project = null): void
     {
         $this->chatMessages[] = [
@@ -586,10 +588,12 @@ PROMPT;
 
     public function save()
     {
+        $this->saveError = null;
         $this->normalizeFieldsBeforeSave();
 
         $lock = Cache::lock('project-create:'.auth()->id(), 10);
         if (! $lock->get()) {
+            $this->saveError = 'A project is already being created. Please wait a second and try again.';
             $this->dispatch('notify', type: 'warning', message: 'A project is already being created. Please wait a second.');
 
             return null;
@@ -607,7 +611,7 @@ PROMPT;
 
             $recentDuplicate = $this->findRecentlyCreatedDuplicateProject();
             if ($recentDuplicate) {
-                return redirect()->route('projects.show', $recentDuplicate);
+                return $this->redirectRoute('projects.show', $recentDuplicate, navigate: true);
             }
 
             // Parse tags from comma-separated string
@@ -682,12 +686,15 @@ PROMPT;
                 return $project;
             });
 
-            return redirect()->route('projects.show', $project);
+            return $this->redirectRoute('projects.show', $project, navigate: true);
         } catch (ValidationException $exception) {
+            $this->saveError = 'Please review the highlighted fields and try again.';
             $this->dispatch('notify', type: 'error', message: 'Please review the highlighted fields and try again.');
             throw $exception;
         } catch (\Throwable $exception) {
             report($exception);
+            $this->saveError = 'Could not create project. Please try again.';
+            $this->addError('save', $this->saveError);
             $this->dispatch('notify', type: 'error', message: 'Could not create project. Please try again.');
             return null;
         } finally {
