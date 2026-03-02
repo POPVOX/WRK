@@ -100,6 +100,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/travel/create', \App\Livewire\Travel\TripCreate::class)->name('travel.create');
     Route::get('/travel/{trip}', \App\Livewire\Travel\TripDetail::class)->name('travel.show');
 
+    // Manager notifications admin
+    Route::get('/notifications/admin', \App\Livewire\Admin\NotificationsManager::class)->name('notifications.admin');
+
     // Admin routes
     Route::middleware(['admin'])->prefix('admin')->group(function () {
         Route::get('/staff', \App\Livewire\Admin\StaffManagement::class)->name('admin.staff');

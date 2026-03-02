@@ -7,6 +7,7 @@ use App\Models\Organization;
 use App\Models\Project;
 use App\Models\Trip;
 use App\Models\User;
+use App\Services\Notifications\WorkspaceNotificationService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -329,6 +330,31 @@ class TripCreate extends Component
             $trip->travelers()->attach($userId, [
                 'role' => $userId === $this->leadTravelerId ? 'lead' : 'participant',
             ]);
+        }
+
+        $addedTravelers = User::query()
+            ->whereIn('id', $this->selectedTravelers)
+            ->where('id', '!=', Auth::id())
+            ->where('is_visible', true)
+            ->get(['id', 'name', 'email']);
+
+        if ($addedTravelers->isNotEmpty()) {
+            app(WorkspaceNotificationService::class)->sendToUsers(
+                $addedTravelers,
+                'trip_added',
+                Auth::user()->name.' added you to a new trip',
+                $trip->name,
+                [
+                    'category' => 'travel',
+                    'level' => 'info',
+                    'action_label' => 'Open Trip',
+                    'action_url' => route('travel.show', $trip),
+                    'actor' => Auth::user(),
+                    'meta' => [
+                        'trip_id' => $trip->id,
+                    ],
+                ],
+            );
         }
 
         // Create all destinations

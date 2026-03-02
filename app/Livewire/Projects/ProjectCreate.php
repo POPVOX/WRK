@@ -5,6 +5,7 @@ namespace App\Livewire\Projects;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\User;
+use App\Services\Notifications\WorkspaceNotificationService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -685,6 +686,42 @@ PROMPT;
 
                 return $project;
             });
+
+            $addedStaffIds = collect($staffCollaboratorIds)
+                ->when(
+                    $this->lead_user_id !== null,
+                    fn ($ids) => $ids->push((int) $this->lead_user_id)
+                )
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn ($id) => $id > 0 && $id !== (int) auth()->id())
+                ->unique()
+                ->values();
+
+            if ($addedStaffIds->isNotEmpty()) {
+                $addedStaff = User::query()
+                    ->whereIn('id', $addedStaffIds->all())
+                    ->where('is_visible', true)
+                    ->get();
+
+                if ($addedStaff->isNotEmpty()) {
+                    app(WorkspaceNotificationService::class)->sendToUsers(
+                        $addedStaff,
+                        'project_added',
+                        auth()->user()->name.' added you to a new project',
+                        $project->name,
+                        [
+                            'category' => 'project',
+                            'level' => 'info',
+                            'action_label' => 'Open Project',
+                            'action_url' => route('projects.show', $project),
+                            'actor' => auth()->user(),
+                            'meta' => [
+                                'project_id' => $project->id,
+                            ],
+                        ],
+                    );
+                }
+            }
 
             return $this->redirectRoute('projects.show', $project, navigate: true);
         } catch (ValidationException $exception) {

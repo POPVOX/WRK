@@ -24,6 +24,7 @@ use App\Models\User;
 use App\Services\Box\BoxProjectDocumentService;
 use App\Services\ChatService;
 use App\Services\DocumentSafety;
+use App\Services\Notifications\WorkspaceNotificationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -617,7 +618,7 @@ class ProjectShow extends Component
 
         $maxOrder = $this->project->milestones()->max('sort_order') ?? 0;
 
-        $this->project->milestones()->create([
+        $milestone = $this->project->milestones()->create([
             'title' => $this->milestoneTitle,
             'description' => $this->milestoneDescription ?: null,
             'due_date' => $this->milestoneTargetDate ?: null,
@@ -629,6 +630,18 @@ class ProjectShow extends Component
         $this->showMilestoneForm = false;
         $this->project->refresh();
         $this->dispatch('notify', type: 'success', message: 'Milestone added!');
+
+        $this->notifyProjectStaff(
+            'project_milestone_recorded',
+            'Milestone recorded for '.$this->project->name,
+            $milestone->title,
+            [
+                'meta' => [
+                    'project_id' => $this->project->id,
+                    'milestone_id' => $milestone->id,
+                ],
+            ],
+        );
     }
 
     public function completeMilestone(int $milestoneId)
@@ -1025,6 +1038,26 @@ class ProjectShow extends Component
         $this->project->refresh();
         $this->toggleAddStaffModal();
         $this->dispatch('notify', type: 'success', message: 'Team member added!');
+
+        $addedUser = User::query()->find($this->selectedStaffId);
+        if ($addedUser && $addedUser->id !== Auth::id()) {
+            app(WorkspaceNotificationService::class)->sendToUsers(
+                [$addedUser],
+                'project_added',
+                Auth::user()->name.' added you to a new project',
+                $this->project->name,
+                [
+                    'category' => 'project',
+                    'level' => 'info',
+                    'action_label' => 'Open Project',
+                    'action_url' => route('projects.show', $this->project),
+                    'actor' => Auth::user(),
+                    'meta' => [
+                        'project_id' => $this->project->id,
+                    ],
+                ],
+            );
+        }
     }
 
     public function updateStaffRole(int $userId, string $role)
@@ -1183,11 +1216,24 @@ class ProjectShow extends Component
             $data['file_size'] = $this->documentFile->getSize();
         }
 
-        ProjectDocument::create($data);
+        $document = ProjectDocument::create($data);
 
         $this->project->refresh();
         $this->toggleDocumentForm();
         $this->dispatch('notify', type: 'success', message: 'Document added!');
+
+        $this->notifyProjectStaff(
+            'project_document_uploaded',
+            Auth::user()->name.' uploaded a document to '.$this->project->name,
+            $document->title,
+            [
+                'action_label' => 'Open Project',
+                'meta' => [
+                    'project_id' => $this->project->id,
+                    'document_id' => $document->id,
+                ],
+            ],
+        );
     }
 
     public function deleteDocument(int $documentId)
@@ -1670,6 +1716,19 @@ PROMPT;
         $this->project->refresh();
         $this->project->load('documents');
         $this->dispatch('notify', type: 'success', message: 'Document uploaded.');
+
+        $this->notifyProjectStaff(
+            'project_document_uploaded',
+            Auth::user()->name.' uploaded a document to '.$this->project->name,
+            $doc->title,
+            [
+                'action_label' => 'Open Project',
+                'meta' => [
+                    'project_id' => $this->project->id,
+                    'document_id' => $doc->id,
+                ],
+            ],
+        );
     }
 
     public function addDocumentLink(): void
@@ -1709,6 +1768,46 @@ PROMPT;
         $this->project->refresh();
         $this->project->load('documents');
         $this->dispatch('notify', type: 'success', message: 'Link added.');
+
+        $this->notifyProjectStaff(
+            'project_document_uploaded',
+            Auth::user()->name.' added a document link to '.$this->project->name,
+            $doc->title,
+            [
+                'action_label' => 'Open Project',
+                'meta' => [
+                    'project_id' => $this->project->id,
+                    'document_id' => $doc->id,
+                    'is_link' => true,
+                ],
+            ],
+        );
+    }
+
+    protected function notifyProjectStaff(string $kind, string $title, string $body, array $options = []): void
+    {
+        $recipients = $this->project->staff()
+            ->where('users.id', '!=', Auth::id())
+            ->where('users.is_visible', true)
+            ->get(['users.id', 'users.name', 'users.email']);
+
+        if ($recipients->isEmpty()) {
+            return;
+        }
+
+        app(WorkspaceNotificationService::class)->sendToUsers(
+            $recipients,
+            $kind,
+            $title,
+            $body,
+            array_merge([
+                'category' => 'project',
+                'level' => 'info',
+                'action_label' => 'Open Project',
+                'action_url' => route('projects.show', $this->project),
+                'actor' => Auth::user(),
+            ], $options),
+        );
     }
 
     // --- Document Sync Methods ---

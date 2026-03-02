@@ -8,6 +8,7 @@ use App\Models\AccomplishmentReaction;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\UserActivityStats;
+use App\Services\Notifications\WorkspaceNotificationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
@@ -196,7 +197,7 @@ class AccomplishmentsIndex extends Component
             ? array_map(fn ($id) => ['user_id' => (int) $id, 'role' => 'collaborator'], $this->newContributors)
             : null;
 
-        Accomplishment::create([
+        $accomplishment = Accomplishment::create([
             'user_id' => Auth::id(),
             'title' => $this->newTitle,
             'description' => $this->newDescription,
@@ -212,9 +213,41 @@ class AccomplishmentsIndex extends Component
             'grant_id' => $this->newGrantId,
         ]);
 
+        $mentionedUserIds = collect($this->newContributors)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0 && $id !== (int) Auth::id())
+            ->unique()
+            ->values();
+
         $this->closeAddModal();
         $this->loadStats();
         $this->dispatch('notify', type: 'success', message: 'Accomplishment added! 🎉');
+
+        if ($mentionedUserIds->isNotEmpty()) {
+            $mentionedUsers = User::query()
+                ->whereIn('id', $mentionedUserIds->all())
+                ->where('is_visible', true)
+                ->get(['id', 'name', 'email']);
+
+            if ($mentionedUsers->isNotEmpty()) {
+                app(WorkspaceNotificationService::class)->sendToUsers(
+                    $mentionedUsers,
+                    'win_mentioned',
+                    Auth::user()->name.' mentioned you in a win',
+                    $accomplishment->title,
+                    [
+                        'category' => 'team',
+                        'level' => 'success',
+                        'action_label' => 'View Wins',
+                        'action_url' => route('accomplishments.index'),
+                        'actor' => Auth::user(),
+                        'meta' => [
+                            'accomplishment_id' => $accomplishment->id,
+                        ],
+                    ],
+                );
+            }
+        }
     }
 
     // === Recognition ===
@@ -248,7 +281,7 @@ class AccomplishmentsIndex extends Component
             return;
         }
 
-        Accomplishment::create([
+        $recognition = Accomplishment::create([
             'user_id' => $this->recognizeUserId,
             'title' => $this->recognizeTitle,
             'description' => $this->recognizeDescription,
@@ -259,10 +292,29 @@ class AccomplishmentsIndex extends Component
             'is_recognition' => true,
         ]);
 
+        $recognizedUserId = (int) $this->recognizeUserId;
         $this->closeRecognizeModal();
         $this->dispatch('notify', type: 'success', message: 'Recognition sent! 🌟');
 
-        // TODO: Send notification to recognized user
+        $recognizedUser = User::query()->find($recognizedUserId);
+        if ($recognizedUser) {
+            app(WorkspaceNotificationService::class)->sendToUsers(
+                [$recognizedUser],
+                'win_mentioned',
+                Auth::user()->name.' mentioned you in a win',
+                $recognition->title,
+                [
+                    'category' => 'team',
+                    'level' => 'success',
+                    'action_label' => 'View Wins',
+                    'action_url' => route('accomplishments.index'),
+                    'actor' => Auth::user(),
+                    'meta' => [
+                        'accomplishment_id' => $recognition->id,
+                    ],
+                ],
+            );
+        }
     }
 
     // === Reactions ===
@@ -359,4 +411,3 @@ class AccomplishmentsIndex extends Component
         ]);
     }
 }
-

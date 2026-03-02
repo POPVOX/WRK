@@ -61,3 +61,11 @@ Schedule::command('agents:evaluate-goals')
     ->onOneServer()
     ->runInBackground()
     ->description('Evaluate active agent goals');
+
+// Trip reminders: gentle heads-up one week before departure.
+Schedule::command('notifications:trip-upcoming --days=7')
+    ->dailyAt('08:10')
+    ->withoutOverlapping(30)
+    ->onOneServer()
+    ->runInBackground()
+    ->description('Send trip upcoming reminders');

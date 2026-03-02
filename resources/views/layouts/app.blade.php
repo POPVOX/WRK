@@ -49,6 +49,10 @@
             ['label' => 'Feedback', 'route' => 'admin.feedback', 'active' => ['admin.feedback']],
         ];
 
+        if ($user && $user->isManagement()) {
+            $coreNav[] = ['label' => 'Notifications', 'route' => 'notifications.admin', 'active' => ['notifications.admin'], 'badge' => 'Mgr'];
+        }
+
         $routeExists = static fn (array $item): bool => Route::has($item['route']);
         $coreNav = array_values(array_filter($coreNav, $routeExists));
         $orgNav = array_values(array_filter($orgNav, $routeExists));
@@ -294,6 +298,7 @@
     </div>
 
     @auth
+        <livewire:notifications.notifications-panel />
         <livewire:feedback-widget />
     @endauth
 
