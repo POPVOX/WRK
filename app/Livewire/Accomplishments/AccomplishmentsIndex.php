@@ -375,10 +375,62 @@ class AccomplishmentsIndex extends Component
 
     // === Export ===
 
-    public function exportAccomplishments(): void
+    public function exportAccomplishments()
     {
-        // TODO: Implement PDF/DOCX export
-        $this->dispatch('notify', type: 'info', message: 'Export feature coming soon!');
+        [$startDate, $endDate] = $this->getPeriodDates();
+
+        $accomplishments = Accomplishment::query()
+            ->with(['project', 'grant', 'addedBy'])
+            ->where('user_id', $this->viewingUserId)
+            ->whereBetween('date', [$startDate, $endDate])
+            ->when($this->type, fn ($query) => $query->where('type', $this->type))
+            ->when($this->visibility, fn ($query) => $query->where('visibility', $this->visibility))
+            ->orderBy('date', 'desc')
+            ->get();
+
+        $owner = $this->viewingUser?->name ?: 'user';
+        $slugOwner = trim(preg_replace('/[^a-z0-9]+/i', '-', strtolower($owner)) ?? 'user', '-') ?: 'user';
+        $filename = sprintf(
+            'accomplishments-%s-%s.csv',
+            $slugOwner,
+            now()->format('Ymd-His')
+        );
+
+        return response()->streamDownload(function () use ($accomplishments): void {
+            $handle = fopen('php://output', 'w');
+
+            fputcsv($handle, [
+                'Date',
+                'Title',
+                'Description',
+                'Type',
+                'Visibility',
+                'Recognition',
+                'Project',
+                'Grant',
+                'Source',
+                'Added By',
+            ]);
+
+            foreach ($accomplishments as $accomplishment) {
+                fputcsv($handle, [
+                    optional($accomplishment->date)->format('Y-m-d'),
+                    $accomplishment->title,
+                    $accomplishment->description,
+                    $accomplishment->type,
+                    $accomplishment->visibility,
+                    $accomplishment->is_recognition ? 'yes' : 'no',
+                    $accomplishment->project?->name,
+                    $accomplishment->grant?->name,
+                    $accomplishment->source,
+                    $accomplishment->addedBy?->name,
+                ]);
+            }
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
+        ]);
     }
 
     public function render()

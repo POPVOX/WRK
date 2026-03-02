@@ -3,12 +3,18 @@
 Date: March 1, 2026  
 Status: Execution backlog (aligned to current WRK codebase)
 
-## Execution Progress (Updated March 2, 2026)
+## Execution Progress (Updated March 3, 2026)
 
 - Epic A (P0): In progress, core prompt-layering backend and admin preview/editor shipped.
 - Epic B (P0): In progress, goal scheduler loop + command + idempotency tests shipped.
 - Epic C (P0): In progress, staffer identity + credential vault schema/services + scoping tests shipped.
 - Epic D (P1): In progress, memory + thread visibility schema/services/UI + boundary tests shipped.
+- Cross-cutting notification layer (new): Notifications V1 shipped.
+  - In-app notifications panel for all staff.
+  - Dedicated `/notifications` page for all users.
+  - Management notifications center (`/notifications/admin`) with template library and manual send controls.
+  - Auto-notifications wired for project/team/travel events.
+  - Scheduled `notifications:trip-upcoming --days=7` reminder loop added.
 
 ## 1) Current Baseline (Already in Code)
 

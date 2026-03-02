@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\User;
+use App\Notifications\TeamInvitation;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
@@ -74,11 +75,16 @@ class GenerateActivationLink extends Command
         }
 
         if ($this->option('send')) {
-            // TODO: Send activation email
-            $this->info("📧 Email would be sent to {$user->email} (not implemented yet)");
+            try {
+                $user->notify(new TeamInvitation($token));
+                $this->info("📧 Activation email sent to {$user->email}");
+            } catch (\Throwable $e) {
+                $this->error("Failed to send activation email: {$e->getMessage()}");
+
+                return self::FAILURE;
+            }
         }
 
         return self::SUCCESS;
     }
 }
-
