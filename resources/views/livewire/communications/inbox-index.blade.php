@@ -401,7 +401,9 @@
 
                             <div class="mt-3 space-y-2">
                                 @if(!empty($selectedThread['project_candidates']))
-                                    @php($topProject = $selectedThread['project_candidates'][0])
+                                    @php
+                                        $topProject = $selectedThread['project_candidates'][0];
+                                    @endphp
                                     <div class="rounded-lg border border-indigo-100 bg-white px-2.5 py-2 dark:border-indigo-800 dark:bg-gray-800">
                                         <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ $topProject['name'] }}</p>
                                         <p class="text-[11px] text-gray-500 dark:text-gray-400">Project · {{ str_replace('_', ' ', $topProject['source']) }}</p>
@@ -416,7 +418,9 @@
                                 @endif
 
                                 @if(!empty($selectedThread['grant_candidates']))
-                                    @php($topGrant = $selectedThread['grant_candidates'][0])
+                                    @php
+                                        $topGrant = $selectedThread['grant_candidates'][0];
+                                    @endphp
                                     <div class="rounded-lg border border-indigo-100 bg-white px-2.5 py-2 dark:border-indigo-800 dark:bg-gray-800">
                                         <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ $topGrant['name'] }}</p>
                                         <p class="text-[11px] text-gray-500 dark:text-gray-400">
