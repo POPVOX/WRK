@@ -6,10 +6,12 @@ use App\Models\Issue;
 use App\Models\Organization;
 use App\Models\Person;
 use App\Models\ProfileAttachment;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
+use Throwable;
 
 #[Layout('layouts.app')]
 class OrganizationShow extends Component
@@ -112,45 +114,54 @@ class OrganizationShow extends Component
 
     public function save()
     {
-        $this->validate([
-            'name' => 'required|string|max:255',
-            'abbreviation' => 'nullable|string|max:20',
-            'type' => 'nullable|string|max:255',
-            'website' => 'nullable|url|max:255',
-            'email' => 'nullable|email|max:255',
-            'phone' => 'nullable|string|max:50',
-            'linkedin_url' => 'nullable|url|max:255',
-            'notes' => 'nullable|string',
-        ]);
+        $this->website = $this->normalizeUrlInput($this->website);
+        $this->linkedin_url = $this->normalizeUrlInput($this->linkedin_url);
 
-        $linkedinChanged = $this->linkedin_url && $this->linkedin_url !== $this->organization->linkedin_url;
+        try {
+            $this->validate([
+                'name' => 'required|string|max:255',
+                'abbreviation' => 'nullable|string|max:20',
+                'type' => 'nullable|string|max:255',
+                'website' => 'nullable|url|max:255',
+                'email' => 'nullable|email|max:255',
+                'phone' => 'nullable|string|max:50',
+                'linkedin_url' => 'nullable|url|max:255',
+                'notes' => 'nullable|string',
+            ]);
 
-        $this->organization->update([
-            'name' => $this->name,
-            'abbreviation' => $this->abbreviation ?: null,
-            'type' => $this->type ?: null,
-            'website' => $this->website ?: null,
-            'email' => $this->email ?: null,
-            'phone' => $this->phone ?: null,
-            'linkedin_url' => $this->linkedin_url ?: null,
-            'notes' => $this->notes ?: null,
-        ]);
+            $linkedinChanged = $this->linkedin_url && $this->linkedin_url !== $this->organization->linkedin_url;
 
-        // Sync geographic tags
-        $this->organization->syncGeographicTags(
-            $this->selectedRegions,
-            $this->selectedCountries,
-            $this->selectedUsStates
-        );
+            $this->organization->update([
+                'name' => $this->name,
+                'abbreviation' => $this->abbreviation ?: null,
+                'type' => $this->type ?: null,
+                'website' => $this->website ?: null,
+                'email' => $this->email ?: null,
+                'phone' => $this->phone ?: null,
+                'linkedin_url' => $this->linkedin_url ?: null,
+                'notes' => $this->notes ?: null,
+            ]);
 
-        $this->organization->refresh();
-        $this->editing = false;
+            // Sync geographic tags
+            $this->organization->syncGeographicTags(
+                $this->selectedRegions,
+                $this->selectedCountries,
+                $this->selectedUsStates
+            );
 
-        // Auto-fetch LinkedIn if URL was added/changed and no logo exists
-        if ($linkedinChanged && ! $this->organization->logo_url) {
-            $this->fetchFromLinkedIn();
-        } else {
-            $this->dispatch('notify', type: 'success', message: 'Organization updated successfully!');
+            $this->organization->refresh();
+            $this->editing = false;
+
+            // Auto-fetch LinkedIn if URL was added/changed and no logo exists
+            if ($linkedinChanged && ! $this->organization->logo_url) {
+                $this->fetchFromLinkedIn();
+            } else {
+                $this->dispatch('notify', type: 'success', message: 'Organization updated successfully!');
+            }
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            $this->notifyFailure('Could not save organization changes.', $exception, 'save');
         }
     }
 
@@ -162,38 +173,86 @@ class OrganizationShow extends Component
             return;
         }
 
-        $scraper = app(\App\Services\LinkedInScraperService::class);
-        $data = $scraper->extractCompanyData($this->organization->linkedin_url);
+        try {
+            $scraper = app(\App\Services\LinkedInScraperService::class);
+            $data = $scraper->extractCompanyData($this->organization->linkedin_url);
 
-        if ($data['logo_url'] || $data['description']) {
-            $updates = [];
+            if ($data['logo_url'] || $data['description']) {
+                $updates = [];
 
-            if ($data['logo_url']) {
-                $updates['logo_url'] = $data['logo_url'];
+                if ($data['logo_url']) {
+                    $updates['logo_url'] = $data['logo_url'];
+                }
+
+                if ($data['description']) {
+                    $updates['description'] = $data['description'];
+                }
+
+                $this->organization->update($updates);
+                $this->dispatch('notify', type: 'success', message: 'LinkedIn data fetched successfully!');
+            } else {
+                $this->dispatch('notify', type: 'warning', message: 'Could not extract data from LinkedIn. The page may require login or the URL may be incorrect.');
             }
-
-            if ($data['description']) {
-                $updates['description'] = $data['description'];
-            }
-
-            $this->organization->update($updates);
-            $this->dispatch('notify', type: 'success', message: 'LinkedIn data fetched successfully!');
-        } else {
-            $this->dispatch('notify', type: 'warning', message: 'Could not extract data from LinkedIn. The page may require login or the URL may be incorrect.');
+        } catch (Throwable $exception) {
+            $this->notifyFailure('Could not fetch LinkedIn data right now.', $exception);
         }
     }
 
     public function delete()
     {
-        // Detach relationships
-        $this->organization->meetings()->detach();
+        try {
+            // Detach relationships
+            $this->organization->meetings()->detach();
 
-        // Optionally remove people or keep them orphaned
-        $this->organization->people()->update(['organization_id' => null]);
+            // Optionally remove people or keep them orphaned
+            $this->organization->people()->update(['organization_id' => null]);
 
-        $this->organization->delete();
+            $this->organization->delete();
+        } catch (Throwable $exception) {
+            $this->notifyFailure('Could not delete organization right now.', $exception);
+
+            return;
+        }
 
         return $this->redirect(route('organizations.index'), navigate: true);
+    }
+
+    protected function normalizeUrlInput(?string $value): string
+    {
+        $normalized = trim((string) $value);
+
+        if ($normalized === '') {
+            return '';
+        }
+
+        if (! preg_match('/^[a-z][a-z0-9+\-.]*:\/\//i', $normalized)) {
+            $normalized = 'https://'.ltrim($normalized, '/');
+        }
+
+        return $normalized;
+    }
+
+    protected function notifyFailure(string $fallbackMessage, Throwable $exception, ?string $errorBagKey = null): void
+    {
+        report($exception);
+
+        $message = $this->buildErrorMessage($fallbackMessage, $exception);
+
+        if ($errorBagKey) {
+            $this->addError($errorBagKey, $message);
+        }
+
+        $this->dispatch('notify', type: 'error', message: $message);
+    }
+
+    protected function buildErrorMessage(string $fallbackMessage, Throwable $exception): string
+    {
+        $message = trim($exception->getMessage());
+        if (! config('app.debug') || $message === '') {
+            return $fallbackMessage;
+        }
+
+        return $fallbackMessage.' '.$message;
     }
 
     public function getTopIssues()

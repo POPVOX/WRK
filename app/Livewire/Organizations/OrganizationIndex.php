@@ -4,11 +4,13 @@ namespace App\Livewire\Organizations;
 
 use App\Models\Organization;
 use App\Services\OrgNameNormalizerService;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Livewire\WithPagination;
+use Throwable;
 
 #[Layout('layouts.app')]
 #[Title('Organizations')]
@@ -358,67 +360,86 @@ class OrganizationIndex extends Component
 
     public function saveSingleOrg(): void
     {
-        $this->validate([
-            'orgName' => 'required|min:2|max:255',
-            'orgAbbreviation' => 'nullable|max:20',
-            'orgType' => 'nullable|in:' . implode(',', Organization::TYPES),
-            'orgWebsite' => 'nullable|url|max:500',
-            'orgLinkedIn' => 'nullable|url|max:500',
-            'orgDescription' => 'nullable|max:2000',
-        ]);
+        $this->resetValidation();
+        $this->orgWebsite = $this->normalizeUrlInput($this->orgWebsite);
+        $this->orgLinkedIn = $this->normalizeUrlInput($this->orgLinkedIn);
 
-        Organization::create([
-            'name' => $this->orgName,
-            'abbreviation' => $this->orgAbbreviation ?: null,
-            'type' => $this->orgType ?: null,
-            'website' => $this->orgWebsite ?: null,
-            'linkedin_url' => $this->orgLinkedIn ?: null,
-            'description' => $this->orgDescription ?: null,
-        ]);
+        try {
+            $this->validate([
+                'orgName' => 'required|min:2|max:255',
+                'orgAbbreviation' => 'nullable|max:20',
+                'orgType' => 'nullable|in:' . implode(',', Organization::TYPES),
+                'orgWebsite' => 'nullable|url|max:500',
+                'orgLinkedIn' => 'nullable|url|max:500',
+                'orgDescription' => 'nullable|max:2000',
+            ]);
+
+            Organization::create([
+                'name' => $this->orgName,
+                'abbreviation' => $this->orgAbbreviation ?: null,
+                'type' => $this->orgType ?: null,
+                'website' => $this->orgWebsite ?: null,
+                'linkedin_url' => $this->orgLinkedIn ?: null,
+                'description' => $this->orgDescription ?: null,
+            ]);
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            $this->notifyFailure('Could not create organization right now.', $exception, 'orgForm');
+
+            return;
+        }
 
         $this->closeAddModal();
         session()->flash('message', 'Organization created successfully.');
+        $this->dispatch('notify', type: 'success', message: 'Organization created successfully.');
     }
 
     public function importBulkText(): void
     {
-        $this->validate([
-            'bulkText' => 'required|min:3',
-        ]);
-
-        $lines = preg_split('/\r\n|\r|\n/', $this->bulkText);
-        $imported = 0;
-        $errors = [];
-
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if (empty($line)) {
-                continue;
-            }
-
-            // Check for duplicate
-            if (Organization::where('name', $line)->exists()) {
-                $errors[] = "'{$line}' already exists.";
-
-                continue;
-            }
-
-            Organization::create([
-                'name' => $line,
-                'type' => $this->bulkType ?: null,
+        try {
+            $this->validate([
+                'bulkText' => 'required|min:3',
             ]);
-            $imported++;
-        }
 
-        $this->importedCount = $imported;
-        $this->importErrors = $errors;
+            $lines = preg_split('/\r\n|\r|\n/', $this->bulkText);
+            $imported = 0;
+            $errors = [];
 
-        if ($imported > 0) {
-            session()->flash('message', "Imported {$imported} organization(s).");
-        }
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if (empty($line)) {
+                    continue;
+                }
 
-        if (empty($errors)) {
-            $this->closeAddModal();
+                // Check for duplicate
+                if (Organization::where('name', $line)->exists()) {
+                    $errors[] = "'{$line}' already exists.";
+
+                    continue;
+                }
+
+                Organization::create([
+                    'name' => $line,
+                    'type' => $this->bulkType ?: null,
+                ]);
+                $imported++;
+            }
+
+            $this->importedCount = $imported;
+            $this->importErrors = $errors;
+
+            if ($imported > 0) {
+                session()->flash('message', "Imported {$imported} organization(s).");
+            }
+
+            if (empty($errors)) {
+                $this->closeAddModal();
+            }
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            $this->notifyFailure('Bulk import failed.', $exception, 'bulkText');
         }
     }
 
@@ -486,35 +507,39 @@ class OrganizationIndex extends Component
 
     public function importExtractedOrgs(): void
     {
-        $imported = 0;
-        $errors = [];
+        try {
+            $imported = 0;
+            $errors = [];
 
-        foreach ($this->extractedOrgs as $org) {
-            if (!$org['selected']) {
-                continue;
+            foreach ($this->extractedOrgs as $org) {
+                if (!$org['selected']) {
+                    continue;
+                }
+                if ($org['exists']) {
+                    $errors[] = "'{$org['name']}' already exists.";
+
+                    continue;
+                }
+
+                Organization::create([
+                    'name' => $org['name'],
+                    'type' => $this->bulkType ?: null,
+                ]);
+                $imported++;
             }
-            if ($org['exists']) {
-                $errors[] = "'{$org['name']}' already exists.";
 
-                continue;
+            $this->importedCount = $imported;
+            $this->importErrors = $errors;
+
+            if ($imported > 0) {
+                session()->flash('message', "Imported {$imported} organization(s).");
             }
 
-            Organization::create([
-                'name' => $org['name'],
-                'type' => $this->bulkType ?: null,
-            ]);
-            $imported++;
-        }
-
-        $this->importedCount = $imported;
-        $this->importErrors = $errors;
-
-        if ($imported > 0) {
-            session()->flash('message', "Imported {$imported} organization(s).");
-        }
-
-        if (empty($errors)) {
-            $this->closeAddModal();
+            if (empty($errors)) {
+                $this->closeAddModal();
+            }
+        } catch (Throwable $exception) {
+            $this->notifyFailure('AI organization import failed.', $exception);
         }
     }
 
@@ -548,65 +573,113 @@ class OrganizationIndex extends Component
 
     public function importCsv(): void
     {
-        $this->validate([
-            'csvFile' => 'required|file|mimes:csv,txt|max:2048',
-        ]);
+        $handle = null;
 
-        $path = $this->csvFile->getRealPath();
-        $handle = fopen($path, 'r');
-
-        if (!$handle) {
-            $this->importErrors = ['Could not read CSV file.'];
-
-            return;
-        }
-
-        $imported = 0;
-        $errors = [];
-        $row = 0;
-
-        while (($data = fgetcsv($handle)) !== false) {
-            $row++;
-
-            // Skip header row if enabled
-            if ($this->csvHasHeader && $row === 1) {
-                continue;
-            }
-
-            $name = trim($data[0] ?? '');
-            if (empty($name)) {
-                continue;
-            }
-
-            // Check for duplicate
-            if (Organization::where('name', $name)->exists()) {
-                $errors[] = "Row {$row}: '{$name}' already exists.";
-
-                continue;
-            }
-
-            Organization::create([
-                'name' => $name,
-                'abbreviation' => trim($data[1] ?? '') ?: null,
-                'type' => trim($data[2] ?? '') ?: null,
-                'website' => trim($data[3] ?? '') ?: null,
-                'description' => trim($data[4] ?? '') ?: null,
+        try {
+            $this->validate([
+                'csvFile' => 'required|file|mimes:csv,txt|max:2048',
             ]);
-            $imported++;
+
+            $path = $this->csvFile->getRealPath();
+            $handle = fopen($path, 'r');
+
+            if (!$handle) {
+                $this->importErrors = ['Could not read CSV file.'];
+
+                return;
+            }
+
+            $imported = 0;
+            $errors = [];
+            $row = 0;
+
+            while (($data = fgetcsv($handle)) !== false) {
+                $row++;
+
+                // Skip header row if enabled
+                if ($this->csvHasHeader && $row === 1) {
+                    continue;
+                }
+
+                $name = trim($data[0] ?? '');
+                if (empty($name)) {
+                    continue;
+                }
+
+                // Check for duplicate
+                if (Organization::where('name', $name)->exists()) {
+                    $errors[] = "Row {$row}: '{$name}' already exists.";
+
+                    continue;
+                }
+
+                Organization::create([
+                    'name' => $name,
+                    'abbreviation' => trim($data[1] ?? '') ?: null,
+                    'type' => trim($data[2] ?? '') ?: null,
+                    'website' => $this->normalizeUrlInput($data[3] ?? '') ?: null,
+                    'description' => trim($data[4] ?? '') ?: null,
+                ]);
+                $imported++;
+            }
+
+            $this->importedCount = $imported;
+            $this->importErrors = $errors;
+
+            if ($imported > 0) {
+                session()->flash('message', "Imported {$imported} organization(s) from CSV.");
+            }
+
+            if (empty($errors)) {
+                $this->closeAddModal();
+            }
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            $this->notifyFailure('CSV import failed.', $exception, 'csvFile');
+        } finally {
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+        }
+    }
+
+    protected function normalizeUrlInput(?string $value): string
+    {
+        $normalized = trim((string) $value);
+
+        if ($normalized === '') {
+            return '';
         }
 
-        fclose($handle);
-
-        $this->importedCount = $imported;
-        $this->importErrors = $errors;
-
-        if ($imported > 0) {
-            session()->flash('message', "Imported {$imported} organization(s) from CSV.");
+        if (! preg_match('/^[a-z][a-z0-9+\-.]*:\/\//i', $normalized)) {
+            $normalized = 'https://'.ltrim($normalized, '/');
         }
 
-        if (empty($errors)) {
-            $this->closeAddModal();
+        return $normalized;
+    }
+
+    protected function notifyFailure(string $fallbackMessage, Throwable $exception, ?string $errorBagKey = null): void
+    {
+        report($exception);
+
+        $message = $this->buildErrorMessage($fallbackMessage, $exception);
+
+        if ($errorBagKey) {
+            $this->addError($errorBagKey, $message);
         }
+
+        $this->dispatch('notify', type: 'error', message: $message);
+    }
+
+    protected function buildErrorMessage(string $fallbackMessage, Throwable $exception): string
+    {
+        $message = trim($exception->getMessage());
+        if (! config('app.debug') || $message === '') {
+            return $fallbackMessage;
+        }
+
+        return $fallbackMessage.' '.$message;
     }
 
     public function render()

@@ -49,4 +49,9 @@ class BoxItem extends Model
     {
         return $this->hasMany(BoxProjectDocumentLink::class);
     }
+
+    public function contextLinks(): HasMany
+    {
+        return $this->hasMany(BoxItemContextLink::class);
+    }
 }

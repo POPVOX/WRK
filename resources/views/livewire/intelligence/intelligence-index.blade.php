@@ -22,6 +22,10 @@
                     class="app-tab {{ $panel === 'home' ? 'app-tab-active' : '' }}">
                     Command Center
                 </a>
+                <a href="{{ route('intelligence.files') }}" wire:navigate
+                    class="app-tab {{ $panel === 'files' ? 'app-tab-active' : '' }}">
+                    Files
+                </a>
                 <a href="{{ route('intelligence.agents') }}" wire:navigate
                     class="app-tab {{ $panel === 'agents' ? 'app-tab-active' : '' }}">
                     Agents
@@ -521,6 +525,261 @@
                     </article>
                 @endforeach
             </div>
+        </section>
+    @endif
+
+    @if($panel === 'files')
+        <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Box Files</h2>
+                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                        Browse synced Box files directly from Intelligence so staff and agents can reference shared context quickly.
+                    </p>
+                </div>
+                @if(auth()->user()?->isAdmin())
+                    <a href="{{ route('admin.integrations') }}" wire:navigate
+                        class="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                        Box integration health
+                    </a>
+                @endif
+            </div>
+
+            @if(!$boxFilesReady)
+                <div class="mt-4 rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                    Box file metadata is not available yet. Run migrations and Box metadata sync first.
+                </div>
+            @else
+                <div class="mt-4 grid gap-3 lg:grid-cols-[minmax(0,2fr)_220px_auto_auto] lg:items-end">
+                    <label class="block">
+                        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Search</span>
+                        <input type="text" wire:model.live.debounce.300ms="boxFilesSearch"
+                            placeholder="Name, path, Box ID, owner"
+                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    </label>
+                    <label class="block">
+                        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Type</span>
+                        <select wire:model.live="boxFilesType"
+                            class="mt-1 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                            <option value="all">All items</option>
+                            <option value="file">Files</option>
+                            <option value="folder">Folders</option>
+                        </select>
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                        <input type="checkbox" wire:model.live="boxFilesMarkdownOnly"
+                            class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700">
+                        Markdown only
+                    </label>
+                    <button wire:click="resetBoxFilesFilters"
+                        class="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                        Reset filters
+                    </button>
+                </div>
+
+                <div class="mt-4 flex flex-wrap items-center gap-2 text-[11px]">
+                    <span class="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                        {{ $boxFilesStats['items_total'] ?? 0 }} total items
+                    </span>
+                    <span class="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                        {{ $boxFilesStats['files_total'] ?? 0 }} files
+                    </span>
+                    <span class="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                        {{ $boxFilesStats['folders_total'] ?? 0 }} folders
+                    </span>
+                    <span class="rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                        {{ $boxFilesStats['markdown_total'] ?? 0 }} markdown files
+                    </span>
+                    <span class="rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                        Last synced {{ $boxFilesLastSyncedLabel }}
+                    </span>
+                </div>
+
+                @if($boxFilesAccessMessage !== '')
+                    <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                        {{ $boxFilesAccessMessage }}
+                    </div>
+                @endif
+
+                @if(empty($boxFiles))
+                    <div class="mt-4 rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                        No Box items match these filters yet.
+                    </div>
+                @else
+                    <div class="mt-4 space-y-3">
+                        @foreach($boxFiles as $item)
+                            <article class="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-gray-700 dark:bg-gray-900/40">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                                        {{ $item['type_label'] }}
+                                    </span>
+                                    @if($item['type'] === 'file')
+                                        <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                                            .{{ $item['extension'] }}
+                                        </span>
+                                    @endif
+                                    @if(($item['project_links_count'] ?? 0) > 0)
+                                        <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                            Linked to {{ $item['project_links_count'] }} project docs
+                                        </span>
+                                    @endif
+                                </div>
+                                <div class="mt-2 flex flex-wrap items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <a href="{{ $item['open_url'] }}" target="_blank" rel="noopener noreferrer"
+                                            class="text-sm font-semibold text-indigo-700 transition hover:underline dark:text-indigo-300">
+                                            {{ $item['name'] }}
+                                        </a>
+                                        <p class="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{{ $item['path'] }}</p>
+                                    </div>
+                                    <a href="{{ $item['open_url'] }}" target="_blank" rel="noopener noreferrer"
+                                        class="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                                        Open in Box
+                                    </a>
+                                </div>
+                                <div class="mt-3 grid gap-2 text-xs text-gray-600 dark:text-gray-300 sm:grid-cols-2 lg:grid-cols-4">
+                                    <p><span class="font-medium text-gray-700 dark:text-gray-200">Owner:</span> {{ $item['owner'] }}</p>
+                                    <p><span class="font-medium text-gray-700 dark:text-gray-200">Size:</span> {{ $item['size_label'] }}</p>
+                                    <p><span class="font-medium text-gray-700 dark:text-gray-200">Modified:</span> {{ $item['modified_at'] }}</p>
+                                    <p><span class="font-medium text-gray-700 dark:text-gray-200">Synced:</span> {{ $item['last_synced'] }}</p>
+                                </div>
+
+                                <div class="mt-4 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800/70">
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Link Context</p>
+                                    <div class="mt-2 grid gap-2 lg:grid-cols-3">
+                                        <div class="space-y-1">
+                                            <label class="text-[11px] font-medium text-gray-600 dark:text-gray-300">Project</label>
+                                            <select wire:model.defer="boxFilesLinkDrafts.{{ $item['id'] }}.project_id"
+                                                class="w-full rounded-lg border-gray-300 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                <option value="">Select project</option>
+                                                @foreach($boxFilesProjectOptions as $option)
+                                                    <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                                                @endforeach
+                                            </select>
+                                            <button wire:click="linkBoxFileToProject({{ $item['id'] }})"
+                                                class="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                                                Link Project
+                                            </button>
+                                        </div>
+
+                                        <div class="space-y-1">
+                                            <label class="text-[11px] font-medium text-gray-600 dark:text-gray-300">Meeting</label>
+                                            <select wire:model.defer="boxFilesLinkDrafts.{{ $item['id'] }}.meeting_id"
+                                                class="w-full rounded-lg border-gray-300 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                <option value="">Select meeting</option>
+                                                @foreach($boxFilesMeetingOptions as $option)
+                                                    <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                                                @endforeach
+                                            </select>
+                                            <button wire:click="linkBoxFileToMeeting({{ $item['id'] }})"
+                                                class="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                                                Link Meeting
+                                            </button>
+                                        </div>
+
+                                        <div class="space-y-1">
+                                            <label class="text-[11px] font-medium text-gray-600 dark:text-gray-300">Funder</label>
+                                            <select wire:model.defer="boxFilesLinkDrafts.{{ $item['id'] }}.funder_id"
+                                                class="w-full rounded-lg border-gray-300 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                                <option value="">Select funder</option>
+                                                @foreach($boxFilesFunderOptions as $option)
+                                                    <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                                                @endforeach
+                                            </select>
+                                            <button wire:click="linkBoxFileToFunder({{ $item['id'] }})"
+                                                class="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                                                Link Funder
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    @php
+                                        $linkedProjects = $item['context_links']['project'] ?? [];
+                                        $linkedMeetings = $item['context_links']['meeting'] ?? [];
+                                        $linkedFunders = $item['context_links']['funder'] ?? [];
+                                    @endphp
+
+                                    @if(!empty($linkedProjects) || !empty($linkedMeetings) || !empty($linkedFunders))
+                                        <div class="mt-3 flex flex-wrap gap-1.5">
+                                            @foreach($linkedProjects as $link)
+                                                <span class="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                                                    <a href="{{ $link['url'] }}" wire:navigate class="hover:underline">Project: {{ $link['label'] }}</a>
+                                                    <button wire:click="unlinkBoxFileContext({{ $item['id'] }}, 'project', {{ $link['id'] }})" class="text-indigo-600 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-100">×</button>
+                                                </span>
+                                            @endforeach
+                                            @foreach($linkedMeetings as $link)
+                                                <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                                    <a href="{{ $link['url'] }}" wire:navigate class="hover:underline">Meeting: {{ $link['label'] }}</a>
+                                                    <button wire:click="unlinkBoxFileContext({{ $item['id'] }}, 'meeting', {{ $link['id'] }})" class="text-emerald-600 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-100">×</button>
+                                                </span>
+                                            @endforeach
+                                            @foreach($linkedFunders as $link)
+                                                <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                                    <a href="{{ $link['url'] }}" wire:navigate class="hover:underline">Funder: {{ $link['label'] }}</a>
+                                                    <button wire:click="unlinkBoxFileContext({{ $item['id'] }}, 'funder', {{ $link['id'] }})" class="text-amber-600 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-100">×</button>
+                                                </span>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                </div>
+                            </article>
+                        @endforeach
+                    </div>
+                @endif
+            @endif
+        </section>
+
+        <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">File Organization Playbook (Human + Agent Ready)</h2>
+            <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                Since Box is mostly greenfield, this is the right moment to keep structure consistent so staff can find things quickly and agents can reason reliably.
+            </p>
+
+            <div class="mt-5 grid gap-5 lg:grid-cols-2">
+                <article class="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Recommended Top-Level Structure</h3>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Keep one canonical taxonomy used by all teams.</p>
+                    <pre class="mt-3 overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-100"><code>/00_Admin
+/10_Programs
+/20_Funding
+/30_Partners_and_Stakeholders
+/40_Meetings
+/50_Communications
+/60_Travel
+/90_Archive</code></pre>
+                    <p class="mt-3 text-xs text-gray-600 dark:text-gray-300">
+                        For recurring meetings, use one long-lived markdown log per series (for example: <span class="font-mono">/40_Meetings/DL_GovRel_Biweekly/notes.md</span>).
+                    </p>
+                </article>
+
+                <article class="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Operating Rules</h3>
+                    <ul class="mt-3 space-y-2 text-sm text-gray-700 dark:text-gray-200">
+                        <li>Prefer <span class="font-mono">.md</span> for notes, briefs, decisions, meeting logs, and status updates.</li>
+                        <li>Use stable filenames: <span class="font-mono">YYYY-MM-DD_topic_owner_v01.md</span>.</li>
+                        <li>Store raw source files separately from derived summaries to avoid confusion.</li>
+                        <li>Keep one canonical file per subject, then link instead of duplicating content.</li>
+                        <li>Add explicit owners and next review dates so stale files can be archived.</li>
+                        <li>Archive completed work to <span class="font-mono">/90_Archive</span> with a short final summary.</li>
+                    </ul>
+                </article>
+            </div>
+
+            <article class="mt-5 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Suggested Markdown Front Matter</h3>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">This gives agents reliable metadata for search, filtering, and summaries.</p>
+                <pre class="mt-3 overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-100"><code>---
+title: Democracy's Library Gov Rel Biweekly
+owner: marci@popvox.org
+project: POPVOX Foundation State Capacity
+organizations: [Democracy's Library]
+tags: [meeting-notes, gov-rel, follow-up]
+visibility: internal
+last_updated: 2026-03-03
+next_review: 2026-03-17
+---
+</code></pre>
+            </article>
         </section>
     @endif
 

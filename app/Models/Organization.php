@@ -55,6 +55,7 @@ class Organization extends Model
         'Government Agency',
         'Nonprofit',
         'Business',
+        'University',
         'Labor',
         'Constituent',
         'Congressional Office',

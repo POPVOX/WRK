@@ -218,13 +218,33 @@
                                         {{ $org->people_count }} {{ Str::plural('person', $org->people_count) }}
                                     </div>
                                 </div>
-
-                                @if($org->website)
-                                    <div class="mt-2 text-sm text-indigo-600 dark:text-indigo-400 truncate">
-                                        {{ $org->display_website }}
-                                    </div>
-                                @endif
                             </a>
+
+                            @if($org->website)
+                                <div class="mt-2 inline-flex max-w-full items-center gap-1 text-sm">
+                                    <a
+                                        href="{{ $org->website }}"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="truncate text-indigo-600 hover:underline dark:text-indigo-400"
+                                        onclick="event.stopPropagation()"
+                                        title="Open website"
+                                    >
+                                        {{ $org->display_website }}
+                                    </a>
+                                    <button
+                                        type="button"
+                                        class="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                                        title="Copy website URL"
+                                        x-data
+                                        x-on:click.prevent.stop="navigator.clipboard && navigator.clipboard.writeText(@js($org->website))"
+                                    >
+                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H7a2 2 0 01-2-2V7a2 2 0 012-2h7a2 2 0 012 2v1m-3 9h7a2 2 0 002-2v-7a2 2 0 00-2-2h-7a2 2 0 00-2 2v7a2 2 0 002 2z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            @endif
                         </div>
                     </div>
                     {{-- Card actions --}}
@@ -384,7 +404,32 @@
                             </td>
                             <td
                                 class="px-6 py-4 whitespace-nowrap text-sm text-indigo-600 dark:text-indigo-400 truncate max-w-xs">
-                                {{ $org->display_website ?? '-' }}
+                                @if($org->website)
+                                    <div class="inline-flex max-w-xs items-center gap-1">
+                                        <a
+                                            href="{{ $org->website }}"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="truncate hover:underline"
+                                            title="Open website"
+                                        >
+                                            {{ $org->display_website }}
+                                        </a>
+                                        <button
+                                            type="button"
+                                            class="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                                            title="Copy website URL"
+                                            x-data
+                                            x-on:click.prevent.stop="navigator.clipboard && navigator.clipboard.writeText(@js($org->website))"
+                                        >
+                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H7a2 2 0 01-2-2V7a2 2 0 012-2h7a2 2 0 012 2v1m-3 9h7a2 2 0 002-2v-7a2 2 0 00-2-2h-7a2 2 0 00-2 2v7a2 2 0 002 2z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                @else
+                                    <span class="text-gray-400">—</span>
+                                @endif
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                                 {{ $org->meetings_count }}
@@ -486,6 +531,11 @@
                     {{-- Single Organization Form --}}
                     @if($addMode === 'single')
                         <form wire:submit="saveSingleOrg" class="space-y-4">
+                            @error('orgForm')
+                                <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                    {{ $message }}
+                                </div>
+                            @enderror
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
                                 <input type="text" wire:model="orgName"
@@ -516,16 +566,18 @@
                                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Website</label>
                                 <input type="url" wire:model="orgWebsite"
                                     class="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
-                                    placeholder="https://example.com">
+                                    placeholder="example.org or https://example.org">
                                 @error('orgWebsite') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                <p class="text-xs text-gray-500 mt-1">You can enter example.org or a full URL. We auto-add https:// if missing.</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">LinkedIn
                                     URL</label>
                                 <input type="url" wire:model="orgLinkedIn"
                                     class="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
-                                    placeholder="https://linkedin.com/company/...">
-                                <p class="text-xs text-gray-500 mt-1">Logo will be automatically synced from LinkedIn</p>
+                                    placeholder="linkedin.com/company/... or https://linkedin.com/company/...">
+                                @error('orgLinkedIn') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                <p class="text-xs text-gray-500 mt-1">http(s) is optional. Logo will be automatically synced from LinkedIn.</p>
                             </div>
                             <div>
                                 <label

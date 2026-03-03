@@ -555,7 +555,20 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                     </svg>
-                                    <span class="truncate max-w-[120px]">{{ $person->email }}</span>
+                                    <a href="mailto:{{ $person->email }}" class="truncate max-w-[120px] hover:text-indigo-600 dark:hover:text-indigo-400" title="Email {{ $person->name }}">
+                                        {{ $person->email }}
+                                    </a>
+                                    <button
+                                        type="button"
+                                        class="rounded p-0.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                                        title="Copy email"
+                                        x-data
+                                        x-on:click.prevent.stop="navigator.clipboard && navigator.clipboard.writeText(@js($person->email))"
+                                    >
+                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H7a2 2 0 01-2-2V7a2 2 0 012-2h7a2 2 0 012 2v1m-3 9h7a2 2 0 002-2v-7a2 2 0 00-2-2h-7a2 2 0 00-2 2v7a2 2 0 002 2z"/>
+                                        </svg>
+                                    </button>
                                 </span>
                             @endif
                             @if(!empty($person->email_domain))
@@ -786,9 +799,22 @@
                                 </td>
                                 <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                                     @if($person->email)
-                                        <a href="mailto:{{ $person->email }}" class="hover:text-indigo-600 dark:hover:text-indigo-400">
-                                            {{ $person->email }}
-                                        </a>
+                                        <div class="inline-flex max-w-[18rem] items-center gap-1">
+                                            <a href="mailto:{{ $person->email }}" class="truncate hover:text-indigo-600 dark:hover:text-indigo-400" title="Email {{ $person->name }}">
+                                                {{ $person->email }}
+                                            </a>
+                                            <button
+                                                type="button"
+                                                class="rounded p-0.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                                                title="Copy email"
+                                                x-data
+                                                x-on:click.prevent.stop="navigator.clipboard && navigator.clipboard.writeText(@js($person->email))"
+                                            >
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H7a2 2 0 01-2-2V7a2 2 0 012-2h7a2 2 0 012 2v1m-3 9h7a2 2 0 002-2v-7a2 2 0 00-2-2h-7a2 2 0 00-2 2v7a2 2 0 002 2z"/>
+                                                </svg>
+                                            </button>
+                                        </div>
                                     @else
                                         <span class="text-gray-400">—</span>
                                     @endif

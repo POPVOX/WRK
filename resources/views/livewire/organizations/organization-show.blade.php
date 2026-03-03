@@ -19,6 +19,11 @@
                 @if($editing)
                     <!-- Edit Mode -->
                     <form wire:submit="save" class="space-y-4">
+                        @error('save')
+                            <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {{ $message }}
+                            </div>
+                        @enderror
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div class="md:col-span-2">
                                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
@@ -48,9 +53,10 @@
                             <div>
                                 <label
                                     class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Website</label>
-                                <input type="url" wire:model="website" placeholder="https://..."
+                                <input type="url" wire:model="website" placeholder="example.org or https://example.org"
                                     class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                                 @error('website') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">You can enter example.org; we auto-add https:// if missing.</p>
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
@@ -70,9 +76,10 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">LinkedIn
                                 URL</label>
-                            <input type="url" wire:model="linkedin_url" placeholder="https://linkedin.com/company/..."
+                            <input type="url" wire:model="linkedin_url" placeholder="linkedin.com/company/... or https://linkedin.com/company/..."
                                 class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                             @error('linkedin_url') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">http(s) is optional.</p>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>

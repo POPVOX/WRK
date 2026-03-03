@@ -10,6 +10,10 @@ use App\Models\AgentPromptLayer;
 use App\Models\AgentRun;
 use App\Models\AgentSuggestion;
 use App\Models\AgentTemplate;
+use App\Models\BoxAccessGrant;
+use App\Models\BoxItem;
+use App\Models\BoxItemContextLink;
+use App\Models\BoxProjectDocumentLink;
 use App\Models\Grant;
 use App\Models\Meeting;
 use App\Models\MeetingIntelNote;
@@ -22,7 +26,9 @@ use App\Models\Trip;
 use App\Services\Agents\AgentOrchestratorService;
 use App\Services\Agents\MemoryQueryService;
 use App\Services\Agents\VisibilityPolicyService;
+use App\Services\Box\BoxProjectDocumentService;
 use App\Services\Support\SupportSignalPolicyService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
@@ -58,6 +64,30 @@ class IntelligenceIndex extends Component
     public bool $meetingsIntelSlackConfigured = false;
 
     public string $meetingsIntelChannelHint = '';
+
+    public bool $boxFilesReady = false;
+
+    public string $boxFilesSearch = '';
+
+    public string $boxFilesType = 'all';
+
+    public bool $boxFilesMarkdownOnly = false;
+
+    public array $boxFilesStats = [];
+
+    public array $boxFiles = [];
+
+    public string $boxFilesLastSyncedLabel = 'Not yet synced';
+
+    public string $boxFilesAccessMessage = '';
+
+    public array $boxFilesProjectOptions = [];
+
+    public array $boxFilesMeetingOptions = [];
+
+    public array $boxFilesFunderOptions = [];
+
+    public array $boxFilesLinkDrafts = [];
 
     public array $agentDirectory = [];
 
@@ -116,6 +146,9 @@ class IntelligenceIndex extends Component
             $this->migrationMessage = 'Agent management tables are not available yet. Run migrations to enable build/direct workflows.';
             $this->agentCouncil = $this->buildAgentCouncil();
             $this->insights = $this->buildInsightStream();
+            if ($this->panel === 'files') {
+                $this->loadBoxFilesWorkspace();
+            }
             $this->generatedAt = now()->format('M j, Y g:i A');
 
             return;
@@ -136,6 +169,8 @@ class IntelligenceIndex extends Component
         if ($this->migrationReady) {
             $this->loadPermissionSnapshot();
             $this->refreshPanelData();
+        } elseif ($this->panel === 'files') {
+            $this->loadBoxFilesWorkspace();
         }
 
         $this->generatedAt = now()->format('M j, Y g:i A');
@@ -537,6 +572,236 @@ class IntelligenceIndex extends Component
         }
     }
 
+    public function updatedBoxFilesSearch(): void
+    {
+        if ($this->panel !== 'files') {
+            return;
+        }
+
+        $this->loadBoxFilesWorkspace();
+    }
+
+    public function updatedBoxFilesType(): void
+    {
+        if ($this->panel !== 'files') {
+            return;
+        }
+
+        $this->loadBoxFilesWorkspace();
+    }
+
+    public function updatedBoxFilesMarkdownOnly(): void
+    {
+        if ($this->panel !== 'files') {
+            return;
+        }
+
+        $this->loadBoxFilesWorkspace();
+    }
+
+    public function resetBoxFilesFilters(): void
+    {
+        $this->boxFilesSearch = '';
+        $this->boxFilesType = 'all';
+        $this->boxFilesMarkdownOnly = false;
+        $this->loadBoxFilesWorkspace();
+    }
+
+    public function linkBoxFileToProject(int $boxItemId): void
+    {
+        if (! Schema::hasTable('box_item_context_links')) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations to enable file context linking.');
+
+            return;
+        }
+
+        $projectId = (int) ($this->boxFilesLinkDrafts[$boxItemId]['project_id'] ?? 0);
+        if ($projectId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Select a project first.');
+
+            return;
+        }
+
+        $boxItem = $this->findScopedBoxItemForActor($boxItemId);
+        if (! $boxItem) {
+            $this->dispatch('notify', type: 'error', message: 'This Box item is not visible to your account.');
+
+            return;
+        }
+
+        $project = Project::query()->find($projectId);
+        if (! $project) {
+            $this->dispatch('notify', type: 'error', message: 'Project not found.');
+
+            return;
+        }
+
+        if (! $this->canManageProjectContextLink($project)) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to link files to this project.');
+
+            return;
+        }
+
+        BoxItemContextLink::query()->updateOrCreate(
+            [
+                'box_item_id' => $boxItem->id,
+                'link_type' => BoxItemContextLink::TYPE_PROJECT,
+                'link_id' => $project->id,
+            ],
+            [
+                'linked_by' => Auth::id(),
+                'metadata' => ['source' => 'intelligence_files'],
+            ]
+        );
+
+        $message = 'Linked to project context.';
+        if ($boxItem->box_item_type === 'file' && Schema::hasTable('box_project_document_links')) {
+            try {
+                $service = app(BoxProjectDocumentService::class);
+                $link = $service->linkItemToProject($boxItem, $project, Auth::id(), 'all');
+                $service->syncLink($link);
+                $message = 'Linked to project context and synced into project documents.';
+            } catch (\Throwable $exception) {
+                report($exception);
+                $message = 'Linked to project context. Project document sync failed, check logs.';
+            }
+        }
+
+        $this->loadBoxFilesWorkspace();
+        $this->dispatch('notify', type: 'success', message: $message);
+    }
+
+    public function linkBoxFileToMeeting(int $boxItemId): void
+    {
+        if (! Schema::hasTable('box_item_context_links')) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations to enable file context linking.');
+
+            return;
+        }
+
+        $meetingId = (int) ($this->boxFilesLinkDrafts[$boxItemId]['meeting_id'] ?? 0);
+        if ($meetingId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Select a meeting first.');
+
+            return;
+        }
+
+        $boxItem = $this->findScopedBoxItemForActor($boxItemId);
+        if (! $boxItem) {
+            $this->dispatch('notify', type: 'error', message: 'This Box item is not visible to your account.');
+
+            return;
+        }
+
+        $meeting = Meeting::query()->find($meetingId);
+        if (! $meeting) {
+            $this->dispatch('notify', type: 'error', message: 'Meeting not found.');
+
+            return;
+        }
+
+        if (! $this->canManageMeetingContextLink($meeting)) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to link files to this meeting.');
+
+            return;
+        }
+
+        BoxItemContextLink::query()->updateOrCreate(
+            [
+                'box_item_id' => $boxItem->id,
+                'link_type' => BoxItemContextLink::TYPE_MEETING,
+                'link_id' => $meeting->id,
+            ],
+            [
+                'linked_by' => Auth::id(),
+                'metadata' => ['source' => 'intelligence_files'],
+            ]
+        );
+
+        $this->loadBoxFilesWorkspace();
+        $this->dispatch('notify', type: 'success', message: 'Linked to meeting context.');
+    }
+
+    public function linkBoxFileToFunder(int $boxItemId): void
+    {
+        if (! Schema::hasTable('box_item_context_links')) {
+            $this->dispatch('notify', type: 'error', message: 'Run migrations to enable file context linking.');
+
+            return;
+        }
+
+        $funderId = (int) ($this->boxFilesLinkDrafts[$boxItemId]['funder_id'] ?? 0);
+        if ($funderId <= 0) {
+            $this->dispatch('notify', type: 'error', message: 'Select a funder first.');
+
+            return;
+        }
+
+        $boxItem = $this->findScopedBoxItemForActor($boxItemId);
+        if (! $boxItem) {
+            $this->dispatch('notify', type: 'error', message: 'This Box item is not visible to your account.');
+
+            return;
+        }
+
+        $funder = Organization::query()->where('is_funder', true)->find($funderId);
+        if (! $funder) {
+            $this->dispatch('notify', type: 'error', message: 'Funder organization not found.');
+
+            return;
+        }
+
+        BoxItemContextLink::query()->updateOrCreate(
+            [
+                'box_item_id' => $boxItem->id,
+                'link_type' => BoxItemContextLink::TYPE_FUNDER,
+                'link_id' => $funder->id,
+            ],
+            [
+                'linked_by' => Auth::id(),
+                'metadata' => ['source' => 'intelligence_files'],
+            ]
+        );
+
+        $this->loadBoxFilesWorkspace();
+        $this->dispatch('notify', type: 'success', message: 'Linked to funder context.');
+    }
+
+    public function unlinkBoxFileContext(int $boxItemId, string $linkType, int $linkId): void
+    {
+        if (! Schema::hasTable('box_item_context_links')) {
+            return;
+        }
+
+        $type = strtolower(trim($linkType));
+        if (! in_array($type, [BoxItemContextLink::TYPE_PROJECT, BoxItemContextLink::TYPE_MEETING, BoxItemContextLink::TYPE_FUNDER], true)) {
+            return;
+        }
+
+        $boxItem = $this->findScopedBoxItemForActor($boxItemId);
+        if (! $boxItem) {
+            $this->dispatch('notify', type: 'error', message: 'This Box item is not visible to your account.');
+
+            return;
+        }
+
+        BoxItemContextLink::query()
+            ->where('box_item_id', $boxItem->id)
+            ->where('link_type', $type)
+            ->where('link_id', $linkId)
+            ->delete();
+
+        if ($type === BoxItemContextLink::TYPE_PROJECT && Schema::hasTable('box_project_document_links')) {
+            BoxProjectDocumentLink::query()
+                ->where('box_item_id', $boxItem->id)
+                ->where('project_id', $linkId)
+                ->delete();
+        }
+
+        $this->loadBoxFilesWorkspace();
+        $this->dispatch('notify', type: 'success', message: 'Context link removed.');
+    }
+
     protected function resolvePanelFromRouteName(): string
     {
         $routeName = (string) (request()->route()?->getName() ?? '');
@@ -545,6 +810,7 @@ class IntelligenceIndex extends Component
             'intelligence.agents' => 'agents',
             'intelligence.create' => 'create',
             'intelligence.audit' => 'audit',
+            'intelligence.files' => 'files',
             default => 'home',
         };
     }
@@ -582,9 +848,441 @@ class IntelligenceIndex extends Component
             return;
         }
 
+        if ($this->panel === 'files') {
+            $this->pendingSuggestions = [];
+            $this->homePendingSuggestions = [];
+            $this->recentRuns = [];
+            $this->loadBoxFilesWorkspace();
+
+            return;
+        }
+
         $this->pendingSuggestions = [];
         $this->recentRuns = [];
         $this->loadHomePendingSuggestions();
+    }
+
+    protected function loadBoxFilesWorkspace(): void
+    {
+        $this->boxFilesReady = Schema::hasTable('box_items');
+        $this->boxFilesStats = [];
+        $this->boxFiles = [];
+        $this->boxFilesLastSyncedLabel = 'Not yet synced';
+        $this->boxFilesAccessMessage = '';
+
+        if (! $this->boxFilesReady) {
+            return;
+        }
+
+        $baseQuery = $this->scopedBoxItemsQuery();
+        if (! $baseQuery) {
+            return;
+        }
+
+        $this->boxFilesStats = [
+            'items_total' => (clone $baseQuery)->count(),
+            'files_total' => (clone $baseQuery)->where('box_item_type', 'file')->count(),
+            'folders_total' => (clone $baseQuery)->where('box_item_type', 'folder')->count(),
+            'markdown_total' => (clone $baseQuery)
+                ->where('box_item_type', 'file')
+                ->where(function ($query): void {
+                    $query->whereRaw('lower(name) like ?', ['%.md'])
+                        ->orWhereRaw('lower(name) like ?', ['%.markdown']);
+                })
+                ->count(),
+        ];
+
+        $lastSynced = (clone $baseQuery)->max('last_synced_at');
+        if ($lastSynced) {
+            $lastSyncedAt = Carbon::parse((string) $lastSynced);
+            $this->boxFilesLastSyncedLabel = $lastSyncedAt->format('M j, Y g:i A').' ('.$lastSyncedAt->diffForHumans().')';
+        }
+
+        $query = (clone $baseQuery)->withCount('projectDocumentLinks');
+
+        if ($this->boxFilesType === 'file') {
+            $query->where('box_item_type', 'file');
+        } elseif ($this->boxFilesType === 'folder') {
+            $query->where('box_item_type', 'folder');
+        }
+
+        $search = trim($this->boxFilesSearch);
+        if ($search !== '') {
+            $query->where(function ($searchQuery) use ($search): void {
+                $searchQuery->where('name', 'like', '%'.$search.'%')
+                    ->orWhere('path_display', 'like', '%'.$search.'%')
+                    ->orWhere('box_item_id', 'like', '%'.$search.'%')
+                    ->orWhere('owned_by_login', 'like', '%'.$search.'%');
+            });
+        }
+
+        if ($this->boxFilesMarkdownOnly) {
+            $query->where('box_item_type', 'file')
+                ->where(function ($markdownQuery): void {
+                    $markdownQuery->whereRaw('lower(name) like ?', ['%.md'])
+                        ->orWhereRaw('lower(name) like ?', ['%.markdown']);
+                });
+        }
+
+        $this->loadBoxFilesLinkOptions();
+
+        $items = $query
+            ->orderByDesc('modified_at')
+            ->orderBy('name')
+            ->limit(180)
+            ->get();
+
+        $contextLinksByItemId = [];
+        $contextLookupByType = [
+            BoxItemContextLink::TYPE_PROJECT => [],
+            BoxItemContextLink::TYPE_MEETING => [],
+            BoxItemContextLink::TYPE_FUNDER => [],
+        ];
+
+        if (Schema::hasTable('box_item_context_links') && $items->isNotEmpty()) {
+            $contextLinks = BoxItemContextLink::query()
+                ->whereIn('box_item_id', $items->pluck('id')->all())
+                ->get(['id', 'box_item_id', 'link_type', 'link_id']);
+
+            $contextLinksByItemId = $contextLinks->groupBy('box_item_id')->all();
+
+            $projectIds = $contextLinks->where('link_type', BoxItemContextLink::TYPE_PROJECT)->pluck('link_id')->map(fn ($id) => (int) $id)->filter()->unique()->values()->all();
+            $meetingIds = $contextLinks->where('link_type', BoxItemContextLink::TYPE_MEETING)->pluck('link_id')->map(fn ($id) => (int) $id)->filter()->unique()->values()->all();
+            $funderIds = $contextLinks->where('link_type', BoxItemContextLink::TYPE_FUNDER)->pluck('link_id')->map(fn ($id) => (int) $id)->filter()->unique()->values()->all();
+
+            if (! empty($projectIds)) {
+                $contextLookupByType[BoxItemContextLink::TYPE_PROJECT] = Project::query()
+                    ->whereIn('id', $projectIds)
+                    ->get(['id', 'name'])
+                    ->mapWithKeys(fn (Project $project) => [
+                        (int) $project->id => [
+                            'id' => (int) $project->id,
+                            'label' => (string) $project->name,
+                            'url' => route('projects.show', $project->id),
+                        ],
+                    ])
+                    ->all();
+            }
+
+            if (! empty($meetingIds)) {
+                $contextLookupByType[BoxItemContextLink::TYPE_MEETING] = Meeting::query()
+                    ->whereIn('id', $meetingIds)
+                    ->get(['id', 'title', 'meeting_date'])
+                    ->mapWithKeys(fn (Meeting $meeting) => [
+                        (int) $meeting->id => [
+                            'id' => (int) $meeting->id,
+                            'label' => trim(((string) ($meeting->title ?: 'Meeting #'.$meeting->id)).($meeting->meeting_date ? ' · '.$meeting->meeting_date->format('M j, Y') : '')),
+                            'url' => route('meetings.show', $meeting->id),
+                        ],
+                    ])
+                    ->all();
+            }
+
+            if (! empty($funderIds)) {
+                $contextLookupByType[BoxItemContextLink::TYPE_FUNDER] = Organization::query()
+                    ->whereIn('id', $funderIds)
+                    ->where('is_funder', true)
+                    ->get(['id', 'name'])
+                    ->mapWithKeys(fn (Organization $organization) => [
+                        (int) $organization->id => [
+                            'id' => (int) $organization->id,
+                            'label' => (string) $organization->name,
+                            'url' => route('organizations.show', $organization->id),
+                        ],
+                    ])
+                    ->all();
+            }
+        }
+
+        $this->boxFiles = $items
+            ->map(function (BoxItem $item) use ($contextLinksByItemId, $contextLookupByType): array {
+                $linksForItem = $contextLinksByItemId[$item->id] ?? null;
+
+                return $this->mapBoxItemForView($item, $linksForItem, $contextLookupByType);
+            })
+            ->values()
+            ->all();
+    }
+
+    protected function scopedBoxItemsQuery(): ?Builder
+    {
+        $query = BoxItem::query()->whereNull('trashed_at');
+
+        if (! $this->hasBoxAccessSchema()) {
+            $this->boxFilesAccessMessage = 'Box access policy tables are not available. Files are hidden until folder permissions are configured.';
+
+            $query->whereRaw('1 = 0');
+
+            return $query;
+        }
+
+        $accessibleFolderIds = $this->accessibleBoxFolderIdsForActor();
+        if (empty($accessibleFolderIds)) {
+            $this->boxFilesAccessMessage = 'No Box folder access grants found for your account yet.';
+            $query->whereRaw('1 = 0');
+
+            return $query;
+        }
+
+        $folderPaths = BoxItem::query()
+            ->whereIn('box_item_id', $accessibleFolderIds)
+            ->where('box_item_type', 'folder')
+            ->pluck('path_display')
+            ->filter(fn ($path) => is_string($path) && trim($path) !== '')
+            ->map(fn ($path) => rtrim(trim((string) $path), '/'))
+            ->unique()
+            ->values()
+            ->all();
+
+        $query->where(function (Builder $scopedQuery) use ($accessibleFolderIds, $folderPaths): void {
+            $scopedQuery->whereIn('box_item_id', $accessibleFolderIds)
+                ->orWhereIn('parent_box_folder_id', $accessibleFolderIds);
+
+            foreach ($folderPaths as $folderPath) {
+                $scopedQuery->orWhere('path_display', $folderPath)
+                    ->orWhere('path_display', 'like', $folderPath.'/%');
+            }
+        });
+
+        return $query;
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    protected function accessibleBoxFolderIdsForActor(): array
+    {
+        $actor = Auth::user();
+        if (! $actor) {
+            return [];
+        }
+
+        return BoxAccessGrant::query()
+            ->where('subject_type', 'user')
+            ->where('subject_id', (int) $actor->id)
+            ->where('state', 'applied')
+            ->whereHas('policy', fn ($policyQuery) => $policyQuery->where('active', true))
+            ->with('policy:id,box_folder_id,active')
+            ->get()
+            ->map(fn (BoxAccessGrant $grant) => trim((string) ($grant->policy?->box_folder_id ?? '')))
+            ->filter(fn (string $folderId) => $folderId !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    protected function hasBoxAccessSchema(): bool
+    {
+        return Schema::hasTable('box_access_policies')
+            && Schema::hasTable('box_access_grants');
+    }
+
+    protected function loadBoxFilesLinkOptions(): void
+    {
+        $actor = Auth::user();
+
+        $projectsQuery = Project::query()->orderBy('name');
+        if ($actor && ! $actor->isManagement() && ! $actor->isAdmin()) {
+            $projectsQuery->where(function (Builder $query) use ($actor): void {
+                $query->where('created_by', $actor->id)
+                    ->orWhereHas('staff', fn (Builder $staffQuery) => $staffQuery->where('users.id', $actor->id));
+            });
+        }
+
+        $this->boxFilesProjectOptions = $projectsQuery
+            ->limit(400)
+            ->get(['id', 'name', 'status'])
+            ->map(fn (Project $project) => [
+                'id' => $project->id,
+                'label' => trim($project->name.($project->status ? ' ('.$project->status.')' : '')),
+            ])
+            ->values()
+            ->all();
+
+        $meetingsQuery = Meeting::query()->orderByDesc('meeting_date');
+        if ($actor && ! $actor->isManagement() && ! $actor->isAdmin()) {
+            $meetingsQuery->where(function (Builder $query) use ($actor): void {
+                $query->where('user_id', $actor->id)
+                    ->orWhereHas('teamMembers', fn (Builder $teamQuery) => $teamQuery->where('users.id', $actor->id));
+            });
+        }
+
+        $this->boxFilesMeetingOptions = $meetingsQuery
+            ->limit(400)
+            ->get(['id', 'title', 'meeting_date'])
+            ->map(fn (Meeting $meeting) => [
+                'id' => $meeting->id,
+                'label' => trim(((string) ($meeting->title ?: 'Meeting #'.$meeting->id)).($meeting->meeting_date ? ' · '.$meeting->meeting_date->format('M j, Y') : '')),
+            ])
+            ->values()
+            ->all();
+
+        $this->boxFilesFunderOptions = Organization::query()
+            ->where('is_funder', true)
+            ->orderBy('name')
+            ->limit(400)
+            ->get(['id', 'name'])
+            ->map(fn (Organization $organization) => [
+                'id' => $organization->id,
+                'label' => $organization->name,
+            ])
+            ->values()
+            ->all();
+    }
+
+    protected function findScopedBoxItemForActor(int $boxItemId): ?BoxItem
+    {
+        $scopedQuery = $this->scopedBoxItemsQuery();
+        if (! $scopedQuery) {
+            return null;
+        }
+
+        return (clone $scopedQuery)->whereKey($boxItemId)->first();
+    }
+
+    protected function canManageProjectContextLink(Project $project): bool
+    {
+        $actor = Auth::user();
+        if (! $actor) {
+            return false;
+        }
+
+        if ($actor->isManagement() || $actor->isAdmin()) {
+            return true;
+        }
+
+        if ((int) $project->created_by === (int) $actor->id) {
+            return true;
+        }
+
+        return $project->staff()->where('users.id', $actor->id)->exists();
+    }
+
+    protected function canManageMeetingContextLink(Meeting $meeting): bool
+    {
+        $actor = Auth::user();
+        if (! $actor) {
+            return false;
+        }
+
+        if ($actor->isManagement() || $actor->isAdmin()) {
+            return true;
+        }
+
+        if ((int) $meeting->user_id === (int) $actor->id) {
+            return true;
+        }
+
+        return $meeting->teamMembers()->where('users.id', $actor->id)->exists();
+    }
+
+    /**
+     * @param  iterable<int,BoxItemContextLink>|null  $contextLinks
+     * @param  array<string,array<int,array{id:int,label:string,url:string}>>  $contextLookupByType
+     */
+    protected function mapBoxItemForView(
+        BoxItem $item,
+        ?iterable $contextLinks = null,
+        array $contextLookupByType = []
+    ): array
+    {
+        $extension = strtolower((string) pathinfo((string) $item->name, PATHINFO_EXTENSION));
+        $openUrl = trim((string) data_get($item->raw_payload, 'shared_link.url'));
+
+        if ($openUrl === '') {
+            $openUrl = $item->box_item_type === 'folder'
+                ? "https://app.box.com/folder/{$item->box_item_id}"
+                : "https://app.box.com/file/{$item->box_item_id}";
+        }
+
+        $path = trim((string) ($item->path_display ?? ''));
+        if ($path === '') {
+            $path = '/'.$item->name;
+        }
+
+        $projectLinks = [];
+        $meetingLinks = [];
+        $funderLinks = [];
+
+        if ($contextLinks) {
+            foreach ($contextLinks as $link) {
+                if (! $link instanceof BoxItemContextLink) {
+                    continue;
+                }
+
+                $linkId = (int) $link->link_id;
+                $linkType = (string) $link->link_type;
+                $lookup = $contextLookupByType[$linkType][$linkId] ?? null;
+                if (! is_array($lookup)) {
+                    continue;
+                }
+
+                $entry = [
+                    'id' => (int) ($lookup['id'] ?? $linkId),
+                    'label' => (string) ($lookup['label'] ?? ('#'.$linkId)),
+                    'url' => (string) ($lookup['url'] ?? ''),
+                ];
+
+                if ($linkType === BoxItemContextLink::TYPE_PROJECT) {
+                    $projectLinks[] = $entry;
+                } elseif ($linkType === BoxItemContextLink::TYPE_MEETING) {
+                    $meetingLinks[] = $entry;
+                } elseif ($linkType === BoxItemContextLink::TYPE_FUNDER) {
+                    $funderLinks[] = $entry;
+                }
+            }
+        }
+
+        if (! isset($this->boxFilesLinkDrafts[$item->id])) {
+            $this->boxFilesLinkDrafts[$item->id] = [
+                'project_id' => (string) ((int) ($projectLinks[0]['id'] ?? 0) ?: ''),
+                'meeting_id' => (string) ((int) ($meetingLinks[0]['id'] ?? 0) ?: ''),
+                'funder_id' => (string) ((int) ($funderLinks[0]['id'] ?? 0) ?: ''),
+            ];
+        }
+
+        return [
+            'id' => $item->id,
+            'box_item_id' => $item->box_item_id,
+            'name' => $item->name,
+            'type' => $item->box_item_type,
+            'type_label' => $item->box_item_type === 'folder' ? 'Folder' : 'File',
+            'extension' => $item->box_item_type === 'file' ? ($extension !== '' ? $extension : 'none') : '',
+            'path' => $path,
+            'owner' => $item->owned_by_login ?: 'Unknown owner',
+            'size_label' => $item->box_item_type === 'file' ? $this->formatBoxFileSize($item->size) : '—',
+            'modified_at' => $item->modified_at?->format('M j, Y g:i A') ?: 'Unknown',
+            'last_synced' => $item->last_synced_at?->diffForHumans() ?: 'Unknown',
+            'project_links_count' => (int) ($item->project_document_links_count ?? 0),
+            'open_url' => $openUrl,
+            'context_links' => [
+                BoxItemContextLink::TYPE_PROJECT => $projectLinks,
+                BoxItemContextLink::TYPE_MEETING => $meetingLinks,
+                BoxItemContextLink::TYPE_FUNDER => $funderLinks,
+            ],
+        ];
+    }
+
+    protected function formatBoxFileSize(?int $bytes): string
+    {
+        if ($bytes === null || $bytes < 0) {
+            return '—';
+        }
+
+        if ($bytes < 1024) {
+            return $bytes.' B';
+        }
+
+        $units = ['KB', 'MB', 'GB', 'TB'];
+        $size = $bytes / 1024;
+        $unitIndex = 0;
+
+        while ($size >= 1024 && $unitIndex < count($units) - 1) {
+            $size /= 1024;
+            $unitIndex++;
+        }
+
+        return number_format($size, $size >= 100 ? 0 : 1).' '.$units[$unitIndex];
     }
 
     protected function loadManagementSupportDigest(): void
