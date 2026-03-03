@@ -25,7 +25,8 @@
 
         $coreNav = [
             ['label' => 'WRKspace', 'route' => 'dashboard', 'active' => ['dashboard'], 'badge' => null],
-            ['label' => 'Intelligence', 'route' => 'intelligence.index', 'active' => ['intelligence.*'], 'badge' => 'AI'],
+            ['label' => 'Intelligence', 'route' => 'intelligence.index', 'active' => ['intelligence.index', 'intelligence.agents', 'intelligence.create', 'intelligence.audit'], 'badge' => 'AI'],
+            ['label' => 'Files', 'route' => 'files.index', 'active' => ['files.index', 'intelligence.files'], 'badge' => null],
             ['label' => 'Inbox', 'route' => 'communications.inbox', 'active' => ['communications.inbox'], 'badge' => null],
             ['label' => 'Notifications', 'route' => 'notifications.index', 'active' => ['notifications.index'], 'badge' => null],
             ['label' => 'Projects', 'route' => 'projects.index', 'active' => ['projects.*'], 'badge' => null],

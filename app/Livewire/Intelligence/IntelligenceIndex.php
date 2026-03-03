@@ -34,11 +34,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
-use Livewire\Attributes\Title;
 use Livewire\Component;
 
 #[Layout('layouts.app')]
-#[Title('Intelligence')]
 class IntelligenceIndex extends Component
 {
     public string $panel = 'home';
@@ -88,6 +86,10 @@ class IntelligenceIndex extends Component
     public array $boxFilesFunderOptions = [];
 
     public array $boxFilesLinkDrafts = [];
+
+    public ?int $boxFilesReviewItemId = null;
+
+    public array $boxFilesReview = [];
 
     public array $agentDirectory = [];
 
@@ -607,6 +609,25 @@ class IntelligenceIndex extends Component
         $this->loadBoxFilesWorkspace();
     }
 
+    public function reviewBoxFile(int $boxItemId): void
+    {
+        $boxItem = $this->findScopedBoxItemForActor($boxItemId);
+        if (! $boxItem) {
+            $this->dispatch('notify', type: 'error', message: 'This Box item is not visible to your account.');
+
+            return;
+        }
+
+        $this->boxFilesReviewItemId = $boxItem->id;
+        $this->boxFilesReview = $this->buildBoxFileReview($boxItem);
+    }
+
+    public function clearBoxFileReview(): void
+    {
+        $this->boxFilesReviewItemId = null;
+        $this->boxFilesReview = [];
+    }
+
     public function linkBoxFileToProject(int $boxItemId): void
     {
         if (! Schema::hasTable('box_item_context_links')) {
@@ -810,6 +831,7 @@ class IntelligenceIndex extends Component
             'intelligence.agents' => 'agents',
             'intelligence.create' => 'create',
             'intelligence.audit' => 'audit',
+            'files.index' => 'files',
             'intelligence.files' => 'files',
             default => 'home',
         };
@@ -871,11 +893,13 @@ class IntelligenceIndex extends Component
         $this->boxFilesAccessMessage = '';
 
         if (! $this->boxFilesReady) {
+            $this->clearBoxFileReview();
             return;
         }
 
         $baseQuery = $this->scopedBoxItemsQuery();
         if (! $baseQuery) {
+            $this->clearBoxFileReview();
             return;
         }
 
@@ -1002,11 +1026,19 @@ class IntelligenceIndex extends Component
             })
             ->values()
             ->all();
+
+        if ($this->boxFilesReviewItemId) {
+            $selectedItem = $items->firstWhere('id', $this->boxFilesReviewItemId);
+            if (! $selectedItem) {
+                $this->clearBoxFileReview();
+            }
+        }
     }
 
     protected function scopedBoxItemsQuery(): ?Builder
     {
         $query = BoxItem::query()->whereNull('trashed_at');
+        $actor = Auth::user();
 
         if (! $this->hasBoxAccessSchema()) {
             $this->boxFilesAccessMessage = 'Box access policy tables are not available. Files are hidden until folder permissions are configured.';
@@ -1018,6 +1050,12 @@ class IntelligenceIndex extends Component
 
         $accessibleFolderIds = $this->accessibleBoxFolderIdsForActor();
         if (empty($accessibleFolderIds)) {
+            if ($actor && ($actor->isManagement() || $actor->isAdmin())) {
+                $this->boxFilesAccessMessage = 'No Box access grants found. Showing all synced items because you are management/admin.';
+
+                return $query;
+            }
+
             $this->boxFilesAccessMessage = 'No Box folder access grants found for your account yet.';
             $query->whereRaw('1 = 0');
 
@@ -1260,6 +1298,120 @@ class IntelligenceIndex extends Component
                 BoxItemContextLink::TYPE_MEETING => $meetingLinks,
                 BoxItemContextLink::TYPE_FUNDER => $funderLinks,
             ],
+        ];
+    }
+
+    protected function buildBoxFileReview(BoxItem $item): array
+    {
+        $name = (string) $item->name;
+        $extension = strtolower((string) pathinfo($name, PATHINFO_EXTENSION));
+        $baseName = trim((string) pathinfo($name, PATHINFO_FILENAME));
+        $path = trim((string) ($item->path_display ?? ''), '/');
+        $pathSegments = $path !== '' ? array_values(array_filter(explode('/', $path))) : [];
+        $owner = trim((string) ($item->owned_by_login ?: ''));
+
+        $isFolder = $item->box_item_type === 'folder';
+        $isMarkdown = in_array($extension, ['md', 'markdown'], true);
+
+        $docType = match (true) {
+            $isFolder => 'folder_index',
+            in_array($extension, ['md', 'markdown', 'txt'], true) => 'note',
+            in_array($extension, ['doc', 'docx', 'rtf', 'odt'], true) => 'document',
+            in_array($extension, ['ppt', 'pptx', 'key'], true) => 'slides',
+            in_array($extension, ['xls', 'xlsx', 'csv'], true) => 'dataset',
+            in_array($extension, ['pdf'], true) => 'reference_pdf',
+            in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) => 'image',
+            default => 'other',
+        };
+
+        $suggestedAction = match (true) {
+            $isFolder => 'Create README.md in this folder to summarize purpose, owner, and key files.',
+            $isMarkdown => 'Already agent-ready. Add front matter if missing.',
+            in_array($extension, ['doc', 'docx', 'rtf', 'odt', 'pdf'], true) => 'Create a companion .md summary with decisions, risks, and follow-ups.',
+            in_array($extension, ['ppt', 'pptx', 'key'], true) => 'Create a slide digest .md with takeaways, asks, and owner.',
+            in_array($extension, ['xls', 'xlsx', 'csv'], true) => 'Create a data dictionary .md and note provenance + refresh cadence.',
+            default => 'Create a companion .md context file so staff and agents can search and summarize quickly.',
+        };
+
+        $score = match (true) {
+            $isFolder => 70,
+            $isMarkdown => 95,
+            in_array($extension, ['txt'], true) => 82,
+            in_array($extension, ['doc', 'docx', 'rtf', 'odt', 'pdf'], true) => 56,
+            in_array($extension, ['ppt', 'pptx', 'key'], true) => 52,
+            in_array($extension, ['xls', 'xlsx', 'csv'], true) => 48,
+            default => 60,
+        };
+
+        $recommendations = [];
+        $recommendations[] = $suggestedAction;
+
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}[_-]/', $name)) {
+            $recommendations[] = 'Consider stable naming: YYYY-MM-DD_topic_owner_v01.ext';
+        }
+        if ($owner === '') {
+            $recommendations[] = 'Set an explicit owner in metadata/front matter to avoid orphaned files.';
+        }
+        if (empty($pathSegments)) {
+            $recommendations[] = 'Move file into a canonical top-level folder (Programs, Funding, Meetings, Communications, Travel, Archive).';
+        }
+        if (in_array($docType, ['document', 'slides', 'reference_pdf'], true)) {
+            $recommendations[] = 'Capture key decisions and next steps in markdown, not only in binary files.';
+        }
+        if ($docType === 'dataset') {
+            $recommendations[] = 'Document column meanings, update cadence, and source-of-truth owner.';
+        }
+
+        $suggestedTitle = trim((string) preg_replace('/[_-]+/', ' ', $baseName));
+        if ($suggestedTitle === '') {
+            $suggestedTitle = $name;
+        }
+
+        $normalizedTags = array_values(array_filter(array_map(
+            static function (string $segment): string {
+                $slug = strtolower((string) preg_replace('/[^a-z0-9]+/', '-', $segment));
+                return trim($slug, '-');
+            },
+            $pathSegments
+        )));
+        $normalizedTags = array_values(array_unique(array_slice($normalizedTags, 0, 6)));
+        $tagList = empty($normalizedTags) ? '[]' : '['.implode(', ', $normalizedTags).']';
+        $ownerValue = $owner !== '' ? $owner : 'owner@popvox.org';
+
+        $frontMatter = implode("\n", [
+            '---',
+            'title: '.$suggestedTitle,
+            'owner: '.$ownerValue,
+            'doc_type: '.$docType,
+            'source_box_item_id: '.$item->box_item_id,
+            'source_file: '.$name,
+            'tags: '.$tagList,
+            'last_updated: '.now()->format('Y-m-d'),
+            'review_cycle_days: 30',
+            '---',
+        ])."\n";
+
+        $markdownTemplate = "# {$suggestedTitle}\n\n"
+            ."## Summary\n- \n\n"
+            ."## Key Points\n- \n\n"
+            ."## Decisions\n- \n\n"
+            ."## Follow-ups\n- [ ] \n\n"
+            ."## Source\n"
+            ."- Box item: {$item->box_item_id}\n"
+            ."- Original file: {$name}\n";
+
+        return [
+            'item_id' => $item->id,
+            'item_name' => $name,
+            'item_type' => $item->box_item_type,
+            'extension' => $extension !== '' ? $extension : 'none',
+            'path' => '/'.$path,
+            'doc_type' => $docType,
+            'readiness_score' => $score,
+            'suggested_action' => $suggestedAction,
+            'recommendations' => $recommendations,
+            'front_matter' => $frontMatter,
+            'markdown_template' => $markdownTemplate,
         ];
     }
 
@@ -2455,6 +2607,6 @@ class IntelligenceIndex extends Component
             'activeAgentCount' => collect($this->agentCouncil)->where('status', 'active')->count(),
             'watchAgentCount' => collect($this->agentCouncil)->where('status', 'watch')->count(),
             'selectedAgent' => $this->selectedAgent(),
-        ]);
+        ])->title($this->panel === 'files' ? 'Files' : 'Intelligence');
     }
 }

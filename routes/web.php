@@ -32,6 +32,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard
     Route::get('/dashboard', Dashboard::class)->name('dashboard');
 
+    // Files workspace (Box)
+    Route::get('/files', IntelligenceIndex::class)->name('files.index');
+
     // Intelligence
     Route::get('/intelligence', IntelligenceIndex::class)->name('intelligence.index');
     Route::get('/intelligence/files', IntelligenceIndex::class)->name('intelligence.files');

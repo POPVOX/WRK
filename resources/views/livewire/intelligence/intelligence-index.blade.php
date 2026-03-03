@@ -2,10 +2,17 @@
     <div class="flex flex-col gap-4">
         <div class="app-page-head">
             <div>
-                <h1 class="app-page-title">Intelligence</h1>
-                <p class="app-page-lead">
-                    Agent command center for approvals, specialist operations, and auditable runs.
-                </p>
+                @if($panel === 'files')
+                    <h1 class="app-page-title">Files</h1>
+                    <p class="app-page-lead">
+                        Box files workspace for search, context linking, and AI-ready document hygiene.
+                    </p>
+                @else
+                    <h1 class="app-page-title">Intelligence</h1>
+                    <p class="app-page-lead">
+                        Agent command center for approvals, specialist operations, and auditable runs.
+                    </p>
+                @endif
             </div>
             <div class="inline-flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-600 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
                 <span>Last refreshed {{ $generatedAt }}</span>
@@ -17,29 +24,33 @@
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-2">
-            <nav class="app-tabset">
-                <a href="{{ route('intelligence.index') }}" wire:navigate
-                    class="app-tab {{ $panel === 'home' ? 'app-tab-active' : '' }}">
-                    Command Center
-                </a>
-                <a href="{{ route('intelligence.files') }}" wire:navigate
-                    class="app-tab {{ $panel === 'files' ? 'app-tab-active' : '' }}">
-                    Files
-                </a>
-                <a href="{{ route('intelligence.agents') }}" wire:navigate
-                    class="app-tab {{ $panel === 'agents' ? 'app-tab-active' : '' }}">
-                    Agents
-                </a>
-            </nav>
-            <div class="app-link-group">
-                <a href="{{ route('intelligence.create') }}" wire:navigate class="hover:text-gray-900 dark:hover:text-gray-100">Create</a>
-                <span>•</span>
-                <a href="{{ route('intelligence.audit') }}" wire:navigate class="hover:text-gray-900 dark:hover:text-gray-100">Audit</a>
-            </div>
+            @if($panel === 'files')
+                <div class="app-link-group">
+                    <a href="{{ route('intelligence.index') }}" wire:navigate class="hover:text-gray-900 dark:hover:text-gray-100">Intelligence</a>
+                    <span>•</span>
+                    <a href="{{ route('intelligence.agents') }}" wire:navigate class="hover:text-gray-900 dark:hover:text-gray-100">Agents</a>
+                </div>
+            @else
+                <nav class="app-tabset">
+                    <a href="{{ route('intelligence.index') }}" wire:navigate
+                        class="app-tab {{ $panel === 'home' ? 'app-tab-active' : '' }}">
+                        Command Center
+                    </a>
+                    <a href="{{ route('intelligence.agents') }}" wire:navigate
+                        class="app-tab {{ $panel === 'agents' ? 'app-tab-active' : '' }}">
+                        Agents
+                    </a>
+                </nav>
+                <div class="app-link-group">
+                    <a href="{{ route('intelligence.create') }}" wire:navigate class="hover:text-gray-900 dark:hover:text-gray-100">Create</a>
+                    <span>•</span>
+                    <a href="{{ route('intelligence.audit') }}" wire:navigate class="hover:text-gray-900 dark:hover:text-gray-100">Audit</a>
+                </div>
+            @endif
         </div>
     </div>
 
-    @if(!$migrationReady)
+    @if(!$migrationReady && $panel !== 'files')
         <section class="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100">
             <h2 class="text-lg font-semibold">Agent stack not initialized</h2>
             <p class="mt-2 text-sm">{{ $migrationMessage }}</p>
@@ -47,7 +58,7 @@
         </section>
     @endif
 
-    @if($migrationReady)
+    @if($migrationReady && $panel !== 'files')
         <section class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div class="flex flex-wrap items-center gap-2 text-xs">
                 <span class="rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
@@ -534,7 +545,7 @@
                 <div>
                     <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Box Files</h2>
                     <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                        Browse synced Box files directly from Intelligence so staff and agents can reference shared context quickly.
+                        Browse synced Box files directly from WRK so staff and agents can reference shared context quickly.
                     </p>
                 </div>
                 @if(auth()->user()?->isAdmin())
@@ -632,10 +643,16 @@
                                         </a>
                                         <p class="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{{ $item['path'] }}</p>
                                     </div>
-                                    <a href="{{ $item['open_url'] }}" target="_blank" rel="noopener noreferrer"
-                                        class="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
-                                        Open in Box
-                                    </a>
+                                    <div class="inline-flex items-center gap-2">
+                                        <button wire:click="reviewBoxFile({{ $item['id'] }})"
+                                            class="rounded-lg border border-indigo-300 px-2.5 py-1 text-xs font-medium text-indigo-700 transition hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-900/30">
+                                            Review + Convert
+                                        </button>
+                                        <a href="{{ $item['open_url'] }}" target="_blank" rel="noopener noreferrer"
+                                            class="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                                            Open in Box
+                                        </a>
+                                    </div>
                                 </div>
                                 <div class="mt-3 grid gap-2 text-xs text-gray-600 dark:text-gray-300 sm:grid-cols-2 lg:grid-cols-4">
                                     <p><span class="font-medium text-gray-700 dark:text-gray-200">Owner:</span> {{ $item['owner'] }}</p>
@@ -728,6 +745,71 @@
                 @endif
             @endif
         </section>
+
+        @if(!empty($boxFilesReview))
+            <section class="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-6 shadow-sm dark:border-indigo-800 dark:bg-indigo-900/20">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">File Readiness Review</h2>
+                        <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                            {{ $boxFilesReview['item_name'] ?? 'Selected file' }} · {{ strtoupper($boxFilesReview['extension'] ?? 'n/a') }} · {{ $boxFilesReview['doc_type'] ?? 'other' }}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200">
+                            Readiness {{ $boxFilesReview['readiness_score'] ?? 0 }}/100
+                        </span>
+                        <button wire:click="clearBoxFileReview"
+                            class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-4 rounded-xl border border-indigo-200 bg-white p-4 dark:border-indigo-700 dark:bg-gray-800">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">Suggested action</p>
+                    <p class="mt-1 text-sm text-gray-700 dark:text-gray-200">{{ $boxFilesReview['suggested_action'] ?? '' }}</p>
+
+                    @if(!empty($boxFilesReview['recommendations']))
+                        <ul class="mt-3 space-y-1 text-sm text-gray-700 dark:text-gray-200">
+                            @foreach($boxFilesReview['recommendations'] as $recommendation)
+                                <li>- {{ $recommendation }}</li>
+                            @endforeach
+                        </ul>
+                    @endif
+                </div>
+
+                <div class="mt-4 grid gap-4 xl:grid-cols-2">
+                    <article class="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+                        x-data>
+                        <div class="flex items-center justify-between gap-2">
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Front matter draft</h3>
+                            <button type="button"
+                                x-on:click="navigator.clipboard && navigator.clipboard.writeText($refs.frontMatter.value)"
+                                class="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                                Copy
+                            </button>
+                        </div>
+                        <textarea x-ref="frontMatter" readonly rows="12"
+                            class="mt-2 w-full rounded-lg border-gray-300 bg-gray-50 font-mono text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">{{ $boxFilesReview['front_matter'] ?? '' }}</textarea>
+                    </article>
+
+                    <article class="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+                        x-data>
+                        <div class="flex items-center justify-between gap-2">
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Markdown companion template</h3>
+                            <button type="button"
+                                x-on:click="navigator.clipboard && navigator.clipboard.writeText($refs.markdownTemplate.value)"
+                                class="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+                                Copy
+                            </button>
+                        </div>
+                        <textarea x-ref="markdownTemplate" readonly rows="12"
+                            class="mt-2 w-full rounded-lg border-gray-300 bg-gray-50 font-mono text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">{{ $boxFilesReview['markdown_template'] ?? '' }}</textarea>
+                    </article>
+                </div>
+            </section>
+        @endif
 
         <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">File Organization Playbook (Human + Agent Ready)</h2>
