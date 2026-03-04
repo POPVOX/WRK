@@ -1049,7 +1049,12 @@ class IntelligenceIndex extends Component
         }
 
         $accessibleFolderIds = $this->accessibleBoxFolderIdsForActor();
-        if (empty($accessibleFolderIds)) {
+        $projectScope = $this->projectScopedBoxFilters();
+        $projectFolderIds = $projectScope['folder_ids'];
+        $projectFolderPaths = $projectScope['folder_paths'];
+        $projectLinkedItemIds = $projectScope['linked_item_ids'];
+
+        if (empty($accessibleFolderIds) && empty($projectFolderIds) && empty($projectLinkedItemIds)) {
             if ($actor && ($actor->isManagement() || $actor->isAdmin())) {
                 $this->boxFilesAccessMessage = 'No Box access grants found. Showing all synced items because you are management/admin.';
 
@@ -1062,8 +1067,77 @@ class IntelligenceIndex extends Component
             return $query;
         }
 
-        $folderPaths = BoxItem::query()
-            ->whereIn('box_item_id', $accessibleFolderIds)
+        $grantFolderPaths = $this->resolveBoxFolderPaths($accessibleFolderIds);
+
+        $query->where(function (Builder $scopedQuery) use ($accessibleFolderIds, $grantFolderPaths, $projectFolderIds, $projectFolderPaths, $projectLinkedItemIds): void {
+            $hasAnyScope = false;
+
+            if (! empty($accessibleFolderIds)) {
+                $hasAnyScope = true;
+                $scopedQuery->where(function (Builder $folderQuery) use ($accessibleFolderIds, $grantFolderPaths): void {
+                    $folderQuery->whereIn('box_item_id', $accessibleFolderIds)
+                        ->orWhereIn('parent_box_folder_id', $accessibleFolderIds);
+
+                    foreach ($grantFolderPaths as $folderPath) {
+                        $folderQuery->orWhere('path_display', $folderPath)
+                            ->orWhere('path_display', 'like', $folderPath.'/%');
+                    }
+                });
+            }
+
+            if (! empty($projectFolderIds)) {
+                if ($hasAnyScope) {
+                    $scopedQuery->orWhere(function (Builder $folderQuery) use ($projectFolderIds, $projectFolderPaths): void {
+                        $folderQuery->whereIn('box_item_id', $projectFolderIds)
+                            ->orWhereIn('parent_box_folder_id', $projectFolderIds);
+
+                        foreach ($projectFolderPaths as $folderPath) {
+                            $folderQuery->orWhere('path_display', $folderPath)
+                                ->orWhere('path_display', 'like', $folderPath.'/%');
+                        }
+                    });
+                } else {
+                    $hasAnyScope = true;
+                    $scopedQuery->where(function (Builder $folderQuery) use ($projectFolderIds, $projectFolderPaths): void {
+                        $folderQuery->whereIn('box_item_id', $projectFolderIds)
+                            ->orWhereIn('parent_box_folder_id', $projectFolderIds);
+
+                        foreach ($projectFolderPaths as $folderPath) {
+                            $folderQuery->orWhere('path_display', $folderPath)
+                                ->orWhere('path_display', 'like', $folderPath.'/%');
+                        }
+                    });
+                }
+            }
+
+            if (! empty($projectLinkedItemIds)) {
+                if ($hasAnyScope) {
+                    $scopedQuery->orWhereIn('id', $projectLinkedItemIds);
+                } else {
+                    $scopedQuery->whereIn('id', $projectLinkedItemIds);
+                }
+            }
+        });
+
+        if (empty($accessibleFolderIds) && (! empty($projectFolderIds) || ! empty($projectLinkedItemIds))) {
+            $this->boxFilesAccessMessage = 'Showing project files across all projects. Other Box folders still require explicit access grants.';
+        }
+
+        return $query;
+    }
+
+    /**
+     * @param  array<int,string>  $folderIds
+     * @return array<int,string>
+     */
+    protected function resolveBoxFolderPaths(array $folderIds): array
+    {
+        if (empty($folderIds)) {
+            return [];
+        }
+
+        return BoxItem::query()
+            ->whereIn('box_item_id', $folderIds)
             ->where('box_item_type', 'folder')
             ->pluck('path_display')
             ->filter(fn ($path) => is_string($path) && trim($path) !== '')
@@ -1071,18 +1145,41 @@ class IntelligenceIndex extends Component
             ->unique()
             ->values()
             ->all();
+    }
 
-        $query->where(function (Builder $scopedQuery) use ($accessibleFolderIds, $folderPaths): void {
-            $scopedQuery->whereIn('box_item_id', $accessibleFolderIds)
-                ->orWhereIn('parent_box_folder_id', $accessibleFolderIds);
+    /**
+     * @return array{folder_ids: array<int,string>, folder_paths: array<int,string>, linked_item_ids: array<int,int>}
+     */
+    protected function projectScopedBoxFilters(): array
+    {
+        $projectFolderIds = [];
+        if (Schema::hasColumn('projects', 'box_folder_id')) {
+            $projectFolderIds = Project::query()
+                ->whereNotNull('box_folder_id')
+                ->pluck('box_folder_id')
+                ->map(fn ($id) => trim((string) $id))
+                ->filter(fn (string $id) => $id !== '')
+                ->unique()
+                ->values()
+                ->all();
+        }
 
-            foreach ($folderPaths as $folderPath) {
-                $scopedQuery->orWhere('path_display', $folderPath)
-                    ->orWhere('path_display', 'like', $folderPath.'/%');
-            }
-        });
+        $linkedItemIds = [];
+        if (Schema::hasTable('box_project_document_links')) {
+            $linkedItemIds = BoxProjectDocumentLink::query()
+                ->pluck('box_item_id')
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn (int $id) => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+        }
 
-        return $query;
+        return [
+            'folder_ids' => $projectFolderIds,
+            'folder_paths' => $this->resolveBoxFolderPaths($projectFolderIds),
+            'linked_item_ids' => $linkedItemIds,
+        ];
     }
 
     /**

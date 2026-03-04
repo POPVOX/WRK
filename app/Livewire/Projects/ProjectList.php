@@ -25,7 +25,7 @@ class ProjectList extends Component
 
     public string $sortBy = 'date'; // 'date', 'alpha', 'lead', 'status'
 
-    public string $viewMode = 'grid'; // 'grid', 'list', 'tree', 'timeline'
+    public string $viewMode = 'list'; // 'grid', 'list', 'tree', 'timeline'
 
     // Hierarchy filter: 'roots' (parent projects only), 'all' (flat list)
     public string $hierarchyFilter = 'roots';

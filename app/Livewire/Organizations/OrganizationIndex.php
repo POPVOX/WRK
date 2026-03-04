@@ -22,7 +22,7 @@ class OrganizationIndex extends Component
 
     public string $filterType = '';
 
-    public string $viewMode = 'card'; // 'card' or 'table'
+    public string $viewMode = 'table'; // 'card' or 'table'
 
     // Add Organization Modal
     public bool $showAddModal = false;

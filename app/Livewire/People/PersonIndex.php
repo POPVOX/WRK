@@ -34,7 +34,7 @@ class PersonIndex extends Component
 
     public string $filterEmailDomain = '';
 
-    public string $viewMode = 'card'; // 'card' or 'table'
+    public string $viewMode = 'table'; // 'card' or 'table'
 
     public string $sortBy = 'name';
 
@@ -554,7 +554,7 @@ class PersonIndex extends Component
         $this->filterEmailDomain = $f['filterEmailDomain'] ?? '';
         $this->sortBy = $f['sortBy'] ?? 'name';
         $this->sortDirection = $f['sortDirection'] ?? 'asc';
-        $this->viewMode = $f['viewMode'] ?? 'card';
+        $this->viewMode = $f['viewMode'] ?? 'table';
         $this->resetPage();
     }
 
