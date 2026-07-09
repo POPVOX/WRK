@@ -165,7 +165,14 @@ class KnowledgeBase extends Component
         }
 
         $ids = collect($ftsRows)->pluck('doc_id')->unique()->values();
-        $snippetMap = collect($ftsRows)->keyBy('doc_id')->map(fn ($r) => $r->snip)->all();
+        // Escape indexed content; only the FTS highlight <mark> tags may render as HTML
+        $snippetMap = collect($ftsRows)->keyBy('doc_id')->map(function ($r) {
+            return $r->snip === null ? null : str_replace(
+                ['&lt;mark&gt;', '&lt;/mark&gt;'],
+                ['<mark>', '</mark>'],
+                e($r->snip)
+            );
+        })->all();
 
         if ($ids->isEmpty()) {
             $this->isSearching = false;

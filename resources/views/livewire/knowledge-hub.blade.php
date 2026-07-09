@@ -37,7 +37,7 @@
                             </div>
                             <div class="flex-1">
                                 <div class="bg-gray-100 dark:bg-gray-700 px-4 py-3 rounded-2xl rounded-tl-md prose prose-sm dark:prose-invert max-w-none">
-                                    {!! \Illuminate\Support\Str::markdown($aiAnswer) !!}
+                                    {!! \Illuminate\Support\Str::markdown($aiAnswer, ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}
                                 </div>
 
                                 {{-- Sources --}}

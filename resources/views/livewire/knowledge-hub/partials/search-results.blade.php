@@ -38,7 +38,7 @@
             {{-- AI Answer --}}
             @if($aiAnswer)
                 <div class="prose prose-sm dark:prose-invert max-w-none mb-6">
-                    {!! \Str::markdown($aiAnswer) !!}
+                    {!! \Str::markdown($aiAnswer, ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}
                 </div>
 
                 @if($searchResults && count($searchResults) > 0)

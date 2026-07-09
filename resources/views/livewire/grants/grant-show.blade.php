@@ -825,7 +825,7 @@
                                         </button>
                                     </div>
                                     <div id="report-content" class="prose prose-sm dark:prose-invert max-w-none">
-                                        {!! \Illuminate\Support\Str::markdown($generatedReport) !!}
+                                        {!! \Illuminate\Support\Str::markdown($generatedReport, ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}
                                     </div>
                                 </div>
                             @endif

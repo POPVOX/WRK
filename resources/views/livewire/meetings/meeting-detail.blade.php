@@ -260,7 +260,7 @@
                             @else
                                 @if($meeting->prep_notes)
                                     <div class="prose prose-purple dark:prose-invert max-w-none text-sm">
-                                        {!! \Str::markdown($meeting->prep_notes) !!}
+                                        {!! \Str::markdown($meeting->prep_notes, ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}
                                     </div>
                                 @else
                                     <p class="text-purple-500 dark:text-purple-400 text-sm italic">No prep notes yet. Click "AI
@@ -1110,7 +1110,7 @@
                                 </div>
                             @elseif(isset($prepAnalysis['raw']))
                                 <div class="prose prose-sm dark:prose-invert max-w-none">
-                                    {!! \Str::markdown($prepAnalysis['raw']) !!}
+                                    {!! \Str::markdown($prepAnalysis['raw'], ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}
                                 </div>
                             @else
                                 <div class="space-y-6 max-h-[60vh] overflow-y-auto pr-2">

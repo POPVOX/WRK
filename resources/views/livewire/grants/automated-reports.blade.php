@@ -104,7 +104,7 @@
                         <div class="flex {{ $message['role'] === 'user' ? 'justify-end' : 'justify-start' }}">
                             <div class="max-w-[85%] {{ $message['role'] === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white' }} rounded-lg px-4 py-2">
                                 <div class="prose prose-sm dark:prose-invert max-w-none">
-                                    {!! \Illuminate\Support\Str::markdown($message['content']) !!}
+                                    {!! \Illuminate\Support\Str::markdown($message['content'], ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}
                                 </div>
                             </div>
                         </div>
@@ -516,7 +516,7 @@
                             </div>
                         </div>
                         <div class="p-6 prose prose-sm dark:prose-invert max-w-none">
-                            {!! \Illuminate\Support\Str::markdown($generatedReport) !!}
+                            {!! \Illuminate\Support\Str::markdown($generatedReport, ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}
                         </div>
                     </div>
                 @endif
