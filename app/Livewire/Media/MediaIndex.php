@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -811,16 +812,31 @@ PROMPT;
 
     public function saveClip(): void
     {
-        $this->validate([
-            'clipForm.title' => 'required|string|max:255',
-            'clipForm.url' => [
-                'required',
-                'url',
-                Rule::unique('press_clips', 'url')->ignore($this->editingId),
-            ],
-            'clipForm.outlet_name' => 'required|string|max:255',
-            'clipForm.published_at' => 'required|date',
-        ]);
+        try {
+            $this->validate([
+                'clipForm.title' => 'required|string|max:255',
+                'clipForm.url' => [
+                    'required',
+                    'url',
+                    Rule::unique('press_clips', 'url')->ignore($this->editingId),
+                ],
+                'clipForm.outlet_name' => 'required|string|max:255',
+                'clipForm.published_at' => 'required|date',
+            ], [
+                'clipForm.title.required' => 'Title is required.',
+                'clipForm.url.required' => 'Article URL is required.',
+                'clipForm.url.url' => 'Article URL must be a valid URL.',
+                'clipForm.url.unique' => 'That article URL is already logged as a press clip.',
+                'clipForm.outlet_name.required' => 'Outlet is required.',
+                'clipForm.published_at.required' => 'Published date is required.',
+                'clipForm.published_at.date' => 'Published date must be a valid date.',
+            ]);
+        } catch (ValidationException $exception) {
+            $this->setErrorBag($exception->validator->errors());
+            $this->dispatch('notify', type: 'error', message: $exception->validator->errors()->first() ?: 'Please complete required fields before saving.');
+
+            return;
+        }
 
         try {
             DB::transaction(function (): void {

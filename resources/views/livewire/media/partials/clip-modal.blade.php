@@ -96,6 +96,8 @@
                                 Date *</label>
                             <input wire:model="clipForm.published_at" type="date"
                                 class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+                            @error('clipForm.published_at') <span class="text-red-500 text-xs">{{ $message }}</span>
+                            @enderror
                         </div>
                     </div>
 
@@ -225,6 +227,11 @@
 
             {{-- Footer --}}
             <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                @if($errors->has('clipForm.title') || $errors->has('clipForm.url') || $errors->has('clipForm.outlet_name') || $errors->has('clipForm.published_at'))
+                    <p class="mr-auto text-sm text-red-600 dark:text-red-400">
+                        {{ $errors->first('clipForm.title') ?: $errors->first('clipForm.url') ?: $errors->first('clipForm.outlet_name') ?: $errors->first('clipForm.published_at') }}
+                    </p>
+                @endif
                 <button wire:click="closeModal"
                     class="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800">
                     Cancel
