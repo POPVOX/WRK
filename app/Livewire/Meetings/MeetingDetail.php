@@ -506,6 +506,12 @@ class MeetingDetail extends Component
 
     public function deleteMeeting()
     {
+        if (\Illuminate\Support\Facades\Gate::denies('delete', $this->meeting)) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to delete this meeting.');
+
+            return;
+        }
+
         $this->meeting->delete();
 
         session()->flash('success', 'Meeting deleted successfully.');

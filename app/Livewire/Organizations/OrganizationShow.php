@@ -200,6 +200,12 @@ class OrganizationShow extends Component
 
     public function delete()
     {
+        if (\Illuminate\Support\Facades\Gate::denies('delete', $this->organization)) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to delete this organization.');
+
+            return;
+        }
+
         try {
             // Detach relationships
             $this->organization->meetings()->detach();

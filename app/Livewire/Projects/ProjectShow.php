@@ -312,6 +312,12 @@ class ProjectShow extends Component
 
     public function deleteProject()
     {
+        if (\Illuminate\Support\Facades\Gate::denies('delete', $this->project)) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to delete this project.');
+
+            return;
+        }
+
         try {
             $filePaths = DB::transaction(function (): array {
                 $project = Project::query()
@@ -1290,7 +1296,15 @@ class ProjectShow extends Component
 
     public function deleteNote(int $noteId)
     {
-        ProjectNote::findOrFail($noteId)->delete();
+        $note = $this->project->notes()->findOrFail($noteId);
+
+        if (\Illuminate\Support\Facades\Gate::denies('delete', $note)) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to delete this note.');
+
+            return;
+        }
+
+        $note->delete();
         $this->project->refresh();
         $this->dispatch('notify', type: 'success', message: 'Note deleted.');
     }

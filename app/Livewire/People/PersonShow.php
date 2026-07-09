@@ -244,6 +244,12 @@ class PersonShow extends Component
 
     public function delete()
     {
+        if (\Illuminate\Support\Facades\Gate::denies('delete', $this->person)) {
+            $this->dispatch('notify', type: 'error', message: 'You do not have permission to delete this contact.');
+
+            return;
+        }
+
         $this->person->meetings()->detach();
         $this->person->delete();
 

@@ -10,7 +10,7 @@ use Livewire\Livewire;
 test('project show delete action removes project, unparents children, and redirects', function () {
     Storage::fake('public');
 
-    $user = User::factory()->create();
+    $user = User::factory()->admin()->create();
     $project = Project::factory()->create();
     $child = Project::factory()->create(['parent_project_id' => $project->id]);
 
