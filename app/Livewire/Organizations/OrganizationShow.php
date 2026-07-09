@@ -350,10 +350,10 @@ class OrganizationShow extends Component
     public function uploadAttachment()
     {
         $this->validate([
-            'newAttachment' => 'required|file|max:10240', // 10MB max
+            'newAttachment' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,md,csv,png,jpg,jpeg,gif,webp|max:10240', // 10MB max
         ]);
 
-        $path = $this->newAttachment->store('attachments/organizations', 'public');
+        $path = $this->newAttachment->store('attachments/organizations', \App\Support\PrivateFiles::DISK);
 
         $this->organization->attachments()->create([
             'uploaded_by' => auth()->id(),
@@ -374,7 +374,7 @@ class OrganizationShow extends Component
     {
         $attachment = ProfileAttachment::find($attachmentId);
         if ($attachment && $attachment->attachable_id === $this->organization->id) {
-            \Storage::disk('public')->delete($attachment->path);
+            \App\Support\PrivateFiles::delete($attachment->path);
             $attachment->delete();
             $this->dispatch('notify', type: 'success', message: 'Document deleted.');
         }

@@ -453,10 +453,10 @@ class PersonShow extends Component
     public function uploadAttachment()
     {
         $this->validate([
-            'newAttachment' => 'required|file|max:10240', // 10MB max
+            'newAttachment' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,md,csv,png,jpg,jpeg,gif,webp|max:10240', // 10MB max
         ]);
 
-        $path = $this->newAttachment->store('attachments/people', 'public');
+        $path = $this->newAttachment->store('attachments/people', \App\Support\PrivateFiles::DISK);
 
         $this->person->attachments()->create([
             'uploaded_by' => auth()->id(),
@@ -477,7 +477,7 @@ class PersonShow extends Component
     {
         $attachment = ProfileAttachment::find($attachmentId);
         if ($attachment && $attachment->attachable_id === $this->person->id) {
-            \Storage::disk('public')->delete($attachment->path);
+            \App\Support\PrivateFiles::delete($attachment->path);
             $attachment->delete();
             $this->dispatch('notify', type: 'success', message: 'Document deleted.');
         }

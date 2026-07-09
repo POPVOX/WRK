@@ -85,14 +85,14 @@ class MeetingList extends Component
     protected function applyCommonFilters($query)
     {
         return $query
-            ->when($this->search, fn($q) => $q->where('title', 'like', "%{$this->search}%"))
-            ->when($this->organization, fn($q) => $q->whereHas('organizations', fn($o) => $o->where('organizations.id', $this->organization)))
-            ->when($this->issue, fn($q) => $q->whereHas('issues', fn($i) => $i->where('issues.id', $this->issue)))
-            ->when($this->teamMember, fn($q) => $q->whereHas('teamMembers', fn($t) => $t->where('users.id', $this->teamMember)))
-            ->when($this->scope === 'mine' && !$this->teamMember, function ($q) {
+            ->when($this->search, fn ($q) => $q->where('title', 'like', "%{$this->search}%"))
+            ->when($this->organization, fn ($q) => $q->whereHas('organizations', fn ($o) => $o->where('organizations.id', $this->organization)))
+            ->when($this->issue, fn ($q) => $q->whereHas('issues', fn ($i) => $i->where('issues.id', $this->issue)))
+            ->when($this->teamMember, fn ($q) => $q->whereHas('teamMembers', fn ($t) => $t->where('users.id', $this->teamMember)))
+            ->when($this->scope === 'mine' && ! $this->teamMember, function ($q) {
                 $q->where(function ($mine) {
                     $mine->where('user_id', auth()->id())
-                        ->orWhereHas('teamMembers', fn($t) => $t->where('users.id', auth()->id()));
+                        ->orWhereHas('teamMembers', fn ($t) => $t->where('users.id', auth()->id()));
                 });
             });
     }
@@ -181,7 +181,7 @@ class MeetingList extends Component
             $this->dispatch('notify', type: 'success', message: "{$createdCount} meetings imported!");
         }
 
-        if (!empty($result['errors'])) {
+        if (! empty($result['errors'])) {
             $this->importError = implode("\n", $result['errors']);
         }
     }
@@ -190,7 +190,7 @@ class MeetingList extends Component
     {
         $meeting = Meeting::find($id);
 
-        if (!$meeting) {
+        if (! $meeting) {
             $this->dispatch('notify', type: 'error', message: 'Meeting not found.');
 
             return;
@@ -205,7 +205,7 @@ class MeetingList extends Component
         // Delete attachments
         foreach ($meeting->attachments as $attachment) {
             if ($attachment->file_path) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete($attachment->file_path);
+                \App\Support\PrivateFiles::delete($attachment->file_path);
             }
             $attachment->delete();
         }
@@ -219,8 +219,8 @@ class MeetingList extends Component
     // Stats for section headers
     public function getStatsProperty()
     {
-        $scopeFilter = fn($q) => $this->scope === 'mine'
-            ? $q->whereHas('teamMembers', fn($t) => $t->where('users.id', auth()->id()))
+        $scopeFilter = fn ($q) => $this->scope === 'mine'
+            ? $q->whereHas('teamMembers', fn ($t) => $t->where('users.id', auth()->id()))
             : $q;
 
         return [
@@ -261,10 +261,10 @@ class MeetingList extends Component
         $this->applyCommonFilters($query);
 
         // Period filter
-        $query->when($this->completedPeriod === 'week', fn($q) => $q->where('meeting_date', '>=', now()->subWeek()))
-            ->when($this->completedPeriod === 'month', fn($q) => $q->where('meeting_date', '>=', now()->subMonth()))
-            ->when($this->completedPeriod === 'quarter', fn($q) => $q->where('meeting_date', '>=', now()->subQuarter()))
-            ->when($this->completedPeriod === 'year', fn($q) => $q->where('meeting_date', '>=', now()->subYear()));
+        $query->when($this->completedPeriod === 'week', fn ($q) => $q->where('meeting_date', '>=', now()->subWeek()))
+            ->when($this->completedPeriod === 'month', fn ($q) => $q->where('meeting_date', '>=', now()->subMonth()))
+            ->when($this->completedPeriod === 'quarter', fn ($q) => $q->where('meeting_date', '>=', now()->subQuarter()))
+            ->when($this->completedPeriod === 'year', fn ($q) => $q->where('meeting_date', '>=', now()->subYear()));
 
         return $query->paginate(15, pageName: 'completed');
     }
@@ -301,7 +301,7 @@ class MeetingList extends Component
 
         $query->orderBy('meeting_date');
 
-        return $query->get()->groupBy(fn($m) => $m->meeting_date->format('Y-m'));
+        return $query->get()->groupBy(fn ($m) => $m->meeting_date->format('Y-m'));
     }
 
     public function render()

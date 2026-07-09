@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\GoogleAuthController;
 use App\Http\Controllers\Admin\AgentPromptPreviewController;
+use App\Http\Controllers\GoogleAuthController;
 use App\Http\Controllers\Webhooks\BoxWebhookController;
 use App\Http\Controllers\Webhooks\SlackWebhookController;
 use App\Livewire\Communications\InboxIndex;
@@ -31,6 +31,11 @@ Route::post('/webhooks/slack', [SlackWebhookController::class, 'handle'])
 Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard
     Route::get('/dashboard', Dashboard::class)->name('dashboard');
+
+    // Authenticated document downloads (files live on the private disk)
+    Route::get('/files/download/{type}/{id}', \App\Http\Controllers\FileDownloadController::class)
+        ->whereNumber('id')
+        ->name('files.download');
 
     // Files workspace (Box)
     Route::get('/files', IntelligenceIndex::class)->name('files.index');
@@ -127,7 +132,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Funders & Grants (record-focused view)
     Route::get('/funders', \App\Livewire\Grants\GrantIndex::class)->name('grants.index');
     Route::get('/funders/{grant}', \App\Livewire\Grants\GrantShow::class)->name('grants.show');
-
 
     // API routes
     Route::get('/api/mentions/search', [\App\Http\Controllers\Api\MentionSearchController::class, 'search'])->name('api.mentions.search');

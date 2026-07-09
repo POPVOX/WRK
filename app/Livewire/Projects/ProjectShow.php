@@ -337,7 +337,7 @@ class ProjectShow extends Component
             });
 
             foreach ($filePaths as $path) {
-                Storage::disk('public')->delete($path);
+                \App\Support\PrivateFiles::delete($path);
             }
 
             $this->dispatch('notify', type: 'success', message: 'Project deleted.');
@@ -440,6 +440,7 @@ class ProjectShow extends Component
                     str_contains($heading, 'note'), str_contains($heading, 'context') => 'notes',
                     default => 'notes',
                 };
+
                 continue;
             }
 
@@ -450,15 +451,18 @@ class ProjectShow extends Component
 
                 if (preg_match('/^[-*]\s+(.*)$/', $trimmed, $bullet)) {
                     $sections[$current][] = trim($bullet[1]);
+
                     continue;
                 }
 
                 if (preg_match('/^\d+\.\s+(.*)$/', $trimmed, $numbered)) {
                     $sections[$current][] = trim($numbered[1]);
+
                     continue;
                 }
 
                 $sections[$current][] = $trimmed;
+
                 continue;
             }
 
@@ -1200,7 +1204,7 @@ class ProjectShow extends Component
         if ($this->documentType === 'link') {
             $rules['documentUrl'] = 'required|url';
         } else {
-            $rules['documentFile'] = 'required|file|max:10240'; // 10MB max
+            $rules['documentFile'] = 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,md,csv,png,jpg,jpeg,gif,webp|max:10240'; // 10MB max
         }
 
         $this->validate($rules);
@@ -1216,7 +1220,7 @@ class ProjectShow extends Component
         if ($this->documentType === 'link') {
             $data['url'] = $this->documentUrl;
         } else {
-            $path = $this->documentFile->store('project-documents', 'public');
+            $path = $this->documentFile->store('project-documents', \App\Support\PrivateFiles::DISK);
             $data['file_path'] = $path;
             $data['mime_type'] = $this->documentFile->getMimeType();
             $data['file_size'] = $this->documentFile->getSize();
@@ -1252,7 +1256,7 @@ class ProjectShow extends Component
             ->delete();
 
         if ($document->file_path) {
-            \Illuminate\Support\Facades\Storage::disk('public')->delete($document->file_path);
+            \App\Support\PrivateFiles::delete($document->file_path);
         }
 
         $document->delete();
@@ -1676,13 +1680,13 @@ PROMPT;
 
             $fileName = \Illuminate\Support\Str::limit($sanitizedBaseName, 120, '').'.'.$ext;
             $dir = 'project_uploads/'.$this->project->id;
-            $storedPath = $this->uploadFile->storeAs($dir, $fileName, 'public');
+            $storedPath = $this->uploadFile->storeAs($dir, $fileName, \App\Support\PrivateFiles::DISK);
 
             if (! is_string($storedPath) || $storedPath === '') {
                 throw new \RuntimeException('Upload storage returned an empty path.');
             }
 
-            $fullPath = Storage::disk('public')->path($storedPath);
+            $fullPath = Storage::disk(\App\Support\PrivateFiles::DISK)->path($storedPath);
             $hash = DocumentSafety::hashFile($fullPath);
             $size = @filesize($fullPath) ?: null;
             $mime = @mime_content_type($fullPath) ?: null;
@@ -1710,7 +1714,7 @@ PROMPT;
             }
         } catch (\Throwable $exception) {
             if ($storedPath) {
-                Storage::disk('public')->delete($storedPath);
+                \App\Support\PrivateFiles::delete($storedPath);
             }
 
             Log::error('Project document upload failed', [

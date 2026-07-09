@@ -39,15 +39,15 @@ class IndexDocumentContent implements ShouldQueue
         if ($doc->type === 'file') {
             // Only index text-like files for now
             if (in_array(strtolower($doc->file_type), ['md', 'markdown', 'txt'], true) && $doc->file_path) {
-                // Support both base_path files and public storage files
+                // Support base_path files plus private/public storage files
                 $fullBase = base_path($doc->file_path);
-                $publicDiskPath = Storage::disk('public')->path($doc->file_path);
+                $diskPath = \App\Support\PrivateFiles::absolutePath($doc->file_path);
                 $candidate = null;
 
                 if (is_file($fullBase) && is_readable($fullBase)) {
                     $candidate = $fullBase;
-                } elseif (is_file($publicDiskPath) && is_readable($publicDiskPath)) {
-                    $candidate = $publicDiskPath;
+                } elseif ($diskPath !== null && is_readable($diskPath)) {
+                    $candidate = $diskPath;
                 }
 
                 if ($candidate) {

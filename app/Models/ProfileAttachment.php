@@ -44,7 +44,7 @@ class ProfileAttachment extends Model
      */
     public function getUrlAttribute(): string
     {
-        return asset('storage/'.$this->path);
+        return route('files.download', ['type' => 'profile-attachment', 'id' => $this->id]);
     }
 
     /**

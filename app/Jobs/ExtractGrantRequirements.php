@@ -26,10 +26,10 @@ class ExtractGrantRequirements implements ShouldQueue
             return;
         }
 
-        // Read the file content
-        $fullPath = storage_path('app/public/'.$document->file_path);
-        if (! file_exists($fullPath)) {
-            Log::warning("ExtractGrantRequirements: File not found at {$fullPath}");
+        // Read the file content (private disk, falling back to legacy public disk)
+        $fullPath = \App\Support\PrivateFiles::absolutePath($document->file_path);
+        if ($fullPath === null) {
+            Log::warning("ExtractGrantRequirements: File not found for {$document->file_path}");
 
             return;
         }

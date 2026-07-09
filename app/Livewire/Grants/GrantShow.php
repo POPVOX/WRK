@@ -173,9 +173,9 @@ class GrantShow extends Component
 
         $ext = strtolower($this->uploadFile->getClientOriginalExtension());
         $fileName = \Illuminate\Support\Str::slug($this->uploadTitle).'-'.time().'.'.$ext;
-        $path = $this->uploadFile->storeAs('grant_documents/'.$this->grant->id, $fileName, 'public');
+        $path = $this->uploadFile->storeAs('grant_documents/'.$this->grant->id, $fileName, \App\Support\PrivateFiles::DISK);
 
-        $fullPath = Storage::disk('public')->path($path);
+        $fullPath = Storage::disk(\App\Support\PrivateFiles::DISK)->path($path);
 
         GrantDocument::create([
             'grant_id' => $this->grant->id,
@@ -207,8 +207,8 @@ class GrantShow extends Component
         $fileName = \Illuminate\Support\Str::slug($this->uploadTitle).'-'.time().'.txt';
         $path = 'grant_documents/'.$this->grant->id.'/'.$fileName;
 
-        Storage::disk('public')->put($path, $this->pasteContent);
-        $fullPath = Storage::disk('public')->path($path);
+        Storage::disk(\App\Support\PrivateFiles::DISK)->put($path, $this->pasteContent);
+        $fullPath = Storage::disk(\App\Support\PrivateFiles::DISK)->path($path);
 
         GrantDocument::create([
             'grant_id' => $this->grant->id,
@@ -291,8 +291,8 @@ class GrantShow extends Component
     {
         $document = GrantDocument::where('grant_id', $this->grant->id)->findOrFail($documentId);
 
-        if ($document->file_path && Storage::disk('public')->exists($document->file_path)) {
-            Storage::disk('public')->delete($document->file_path);
+        if ($document->file_path) {
+            \App\Support\PrivateFiles::delete($document->file_path);
         }
 
         $document->delete();

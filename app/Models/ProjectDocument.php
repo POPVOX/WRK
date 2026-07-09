@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Support\Facades\Storage;
 
 class ProjectDocument extends Model
 {
@@ -97,7 +96,7 @@ class ProjectDocument extends Model
         }
 
         if ($this->file_path) {
-            return Storage::url($this->file_path);
+            return route('files.download', ['type' => 'project-document', 'id' => $this->id]);
         }
 
         return null;

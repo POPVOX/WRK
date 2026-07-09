@@ -265,7 +265,7 @@ class MeetingCapture extends Component
 
     public function toggleExtractionPause()
     {
-        $this->extractionPaused = !$this->extractionPaused;
+        $this->extractionPaused = ! $this->extractionPaused;
         if ($this->extractionPaused) {
             $this->dispatch('notify', type: 'info', message: 'AI extraction paused. Click again to resume.');
         } else {
@@ -388,7 +388,7 @@ class MeetingCapture extends Component
 
         // Handle file uploads (only for new attachments)
         foreach ($this->attachments as $file) {
-            $path = $file->store("meetings/{$meeting->id}/attachments", 'public');
+            $path = $file->store("meetings/{$meeting->id}/attachments", \App\Support\PrivateFiles::DISK);
 
             // Determine file type
             $mimeType = $file->getMimeType();

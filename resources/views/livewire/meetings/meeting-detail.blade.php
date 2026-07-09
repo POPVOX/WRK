@@ -579,7 +579,7 @@
                                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Attachments</h3>
                                 <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
                                     @foreach($meeting->attachments as $attachment)
-                                        <a href="{{ Storage::url($attachment->file_path) }}" target="_blank"
+                                        <a href="{{ route('files.download', ['type' => 'meeting-attachment', 'id' => $attachment->id]) }}" target="_blank"
                                             class="block p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition">
                                             <div class="flex items-center">
                                                 @if($attachment->file_type === 'image')

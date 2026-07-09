@@ -51,7 +51,7 @@ class GrantDocument extends Model
             return null;
         }
 
-        return asset('storage/'.$this->file_path);
+        return route('files.download', ['type' => 'grant-document', 'id' => $this->id]);
     }
 
     public function getFileSizeFormatted(): string
