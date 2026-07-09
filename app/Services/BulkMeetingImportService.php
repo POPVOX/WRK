@@ -5,8 +5,8 @@ namespace App\Services;
 use App\Models\Meeting;
 use App\Models\Organization;
 use App\Models\Person;
+use App\Support\AI\AnthropicClient;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Http;
 
 class BulkMeetingImportService
 {
@@ -16,12 +16,7 @@ class BulkMeetingImportService
     public function extractMeetings(string $rawText): array
     {
         try {
-            $response = Http::withHeaders([
-                'x-api-key' => config('services.anthropic.api_key'),
-                'anthropic-version' => '2023-06-01',
-                'Content-Type' => 'application/json',
-            ])->post('https://api.anthropic.com/v1/messages', [
-                'model' => 'claude-sonnet-4-20250514',
+            $response = AnthropicClient::send([
                 'max_tokens' => 4000,
                 'messages' => [
                     [
@@ -31,7 +26,7 @@ class BulkMeetingImportService
                 ],
             ]);
 
-            $content = $response->json('content.0.text');
+            $content = data_get($response, 'content.0.text');
 
             if (! $content) {
                 return ['error' => 'No response from AI', 'meetings' => []];

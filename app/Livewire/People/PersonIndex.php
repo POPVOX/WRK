@@ -2,8 +2,8 @@
 
 namespace App\Livewire\People;
 
-use App\Models\ContactView;
 use App\Models\ContactList;
+use App\Models\ContactView;
 use App\Models\Organization;
 use App\Models\Person;
 use App\Models\User;
@@ -90,11 +90,17 @@ class PersonIndex extends Component
 
     // Inline editing
     public ?int $editingPersonId = null;
+
     public string $editName = '';
+
     public string $editTitle = '';
+
     public string $editEmail = '';
+
     public string $editPhone = '';
+
     public ?int $editOrgId = null;
+
     public string $editLinkedIn = '';
 
     // Modal tabs and AI extraction
@@ -153,8 +159,9 @@ class PersonIndex extends Component
     public function startEditing(int $personId): void
     {
         $person = Person::find($personId);
-        if (!$person)
+        if (! $person) {
             return;
+        }
 
         $this->editingPersonId = $personId;
         $this->editName = $person->name;
@@ -179,8 +186,9 @@ class PersonIndex extends Component
     public function saveInlineEdit(): void
     {
         $person = Person::find($this->editingPersonId);
-        if (!$person) {
+        if (! $person) {
             $this->cancelEditing();
+
             return;
         }
 
@@ -209,12 +217,14 @@ class PersonIndex extends Component
     public function updateField(int $personId, string $field, $value): void
     {
         $person = Person::find($personId);
-        if (!$person)
+        if (! $person) {
             return;
+        }
 
         $allowedFields = ['name', 'title', 'email', 'phone', 'organization_id', 'linkedin_url'];
-        if (!in_array($field, $allowedFields))
+        if (! in_array($field, $allowedFields)) {
             return;
+        }
 
         $person->$field = $value ?: null;
         $person->save();
@@ -262,7 +272,7 @@ class PersonIndex extends Component
 
     public function applyBulkOwner(): void
     {
-        if (!$this->bulkOwnerId || empty($this->selected)) {
+        if (! $this->bulkOwnerId || empty($this->selected)) {
             return;
         }
         Person::whereIn('id', $this->selected)->update(['owner_id' => $this->bulkOwnerId]);
@@ -271,11 +281,11 @@ class PersonIndex extends Component
 
     public function applyBulkOrganization(): void
     {
-        if (!$this->bulkOrgId || empty($this->selected)) {
+        if (! $this->bulkOrgId || empty($this->selected)) {
             return;
         }
 
-        if (!Organization::whereKey($this->bulkOrgId)->exists()) {
+        if (! Organization::whereKey($this->bulkOrgId)->exists()) {
             return;
         }
 
@@ -292,7 +302,7 @@ class PersonIndex extends Component
         }
         $people = Person::whereIn('id', $this->selected)->get();
         foreach ($people as $p) {
-            $tags = collect($p->tags ?? [])->merge([$tag])->map(fn($t) => trim($t))->filter()->unique()->values()->all();
+            $tags = collect($p->tags ?? [])->merge([$tag])->map(fn ($t) => trim($t))->filter()->unique()->values()->all();
             $p->tags = $tags;
             $p->save();
         }
@@ -414,7 +424,7 @@ class PersonIndex extends Component
     public function deletePerson(int $id): void
     {
         $person = Person::find($id);
-        if (!$person) {
+        if (! $person) {
             return;
         }
         $person->delete(); // soft delete — sets deleted_at
@@ -449,7 +459,7 @@ class PersonIndex extends Component
 
     public function toggleTrashed(): void
     {
-        $this->showTrashed = !$this->showTrashed;
+        $this->showTrashed = ! $this->showTrashed;
         $this->clearSelection();
         $this->resetPage();
     }
@@ -457,7 +467,7 @@ class PersonIndex extends Component
     public function restorePerson(int $id): void
     {
         $person = Person::onlyTrashed()->find($id);
-        if (!$person) {
+        if (! $person) {
             return;
         }
         $person->restore();
@@ -479,7 +489,7 @@ class PersonIndex extends Component
     public function permanentlyDeletePerson(int $id): void
     {
         $person = Person::onlyTrashed()->find($id);
-        if (!$person) {
+        if (! $person) {
             return;
         }
         $person->meetings()->detach();
@@ -543,7 +553,7 @@ class PersonIndex extends Component
     public function loadView(int $id): void
     {
         $v = ContactView::where('user_id', Auth::id())->find($id);
-        if (!$v) {
+        if (! $v) {
             return;
         }
         $f = (array) ($v->filters ?? []);
@@ -587,12 +597,12 @@ class PersonIndex extends Component
 
         $path = $this->importFile->getRealPath();
         $fh = fopen($path, 'r');
-        if (!$fh) {
+        if (! $fh) {
             return;
         }
 
         $header = fgetcsv($fh);
-        if (!$header) {
+        if (! $header) {
             fclose($fh);
 
             return;
@@ -615,7 +625,7 @@ class PersonIndex extends Component
             }
 
             $email = $data['email'] ?? null;
-            if (!$email && empty($data['name'])) {
+            if (! $email && empty($data['name'])) {
                 $skipped++;
 
                 continue;
@@ -623,21 +633,21 @@ class PersonIndex extends Component
 
             // Organization
             $orgId = null;
-            if (!empty($data['organization'])) {
+            if (! empty($data['organization'])) {
                 $org = Organization::firstOrCreate(['name' => $data['organization']], ['name' => $data['organization']]);
                 $orgId = $org->id;
             }
 
             // Tags
             $tags = [];
-            if (!empty($data['tags'])) {
+            if (! empty($data['tags'])) {
                 $parts = preg_split('/[|,]/', (string) $data['tags']);
-                $tags = collect($parts)->map(fn($t) => trim($t))->filter()->unique()->values()->all();
+                $tags = collect($parts)->map(fn ($t) => trim($t))->filter()->unique()->values()->all();
             }
 
             // Owner by email
             $ownerId = null;
-            if (!empty($data['owner_email'])) {
+            if (! empty($data['owner_email'])) {
                 $owner = User::where('email', $data['owner_email'])->first();
                 $ownerId = $owner?->id;
             }
@@ -695,33 +705,28 @@ class PersonIndex extends Component
         $this->isExtracting = true;
 
         try {
-            $response = \Illuminate\Support\Facades\Http::withHeaders([
-                'x-api-key' => config('services.anthropic.api_key'),
-                'anthropic-version' => '2023-06-01',
-                'Content-Type' => 'application/json',
-            ])->post('https://api.anthropic.com/v1/messages', [
-                        'model' => 'claude-sonnet-4-20250514',
-                        'max_tokens' => 2000,
-                        'system' => $this->getExtractionSystemPrompt(),
-                        'messages' => [
-                            [
-                                'role' => 'user',
-                                'content' => "Extract people/contacts from this text:\n\n{$this->bulkText}",
-                            ],
-                        ],
-                    ]);
+            $response = \App\Support\AI\AnthropicClient::send([
+                'max_tokens' => 2000,
+                'system' => $this->getExtractionSystemPrompt(),
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => "Extract people/contacts from this text:\n\n{$this->bulkText}",
+                    ],
+                ],
+            ]);
 
-            $content = $response->json('content.0.text');
+            $content = data_get($response, 'content.0.text');
 
             if ($content) {
                 $this->parseExtractedPeople($content);
                 $this->showExtractedPreview = true;
-                $this->dispatch('notify', type: 'success', message: 'Extracted ' . count($this->extractedPeople) . ' people. Review and confirm.');
+                $this->dispatch('notify', type: 'success', message: 'Extracted '.count($this->extractedPeople).' people. Review and confirm.');
             } else {
                 $this->dispatch('notify', type: 'error', message: 'Could not extract people. Please try again.');
             }
         } catch (\Exception $e) {
-            \Log::error('People AI extraction error: ' . $e->getMessage());
+            \Log::error('People AI extraction error: '.$e->getMessage());
             $this->dispatch('notify', type: 'error', message: 'Error during extraction. Please try again.');
         }
 
@@ -795,7 +800,7 @@ PROMPT;
 
             // Find or create organization
             $orgId = null;
-            if (!empty($personData['organization'])) {
+            if (! empty($personData['organization'])) {
                 $org = Organization::firstOrCreate(
                     ['name' => $personData['organization']],
                     ['name' => $personData['organization']]
@@ -829,7 +834,7 @@ PROMPT;
 
     public function toggleAddPersonForm()
     {
-        $this->showAddPersonForm = !$this->showAddPersonForm;
+        $this->showAddPersonForm = ! $this->showAddPersonForm;
         $this->resetPersonForm();
         $this->resetModalState();
     }
@@ -867,7 +872,7 @@ PROMPT;
 
         // Create org from name if provided and no org selected
         $orgId = $this->newPersonOrgId;
-        if (!$orgId && $this->newOrgName) {
+        if (! $orgId && $this->newOrgName) {
             $org = Organization::firstOrCreate(
                 ['name' => trim($this->newOrgName)],
                 ['name' => trim($this->newOrgName)]

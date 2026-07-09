@@ -9,7 +9,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class AnalyzeGrantForAutomation implements ShouldQueue
@@ -57,20 +56,16 @@ class AnalyzeGrantForAutomation implements ShouldQueue
         $prompt = $this->buildPrompt($grant, $extractedData);
 
         try {
-            $response = Http::withHeaders([
-                'x-api-key' => $apiKey,
-                'anthropic-version' => '2023-06-01',
-                'content-type' => 'application/json',
-            ])->timeout(120)->post('https://api.anthropic.com/v1/messages', [
-                'model' => config('ai.model', 'claude-sonnet-4-20250514'),
+            $response = \App\Support\AI\AnthropicClient::send([
+                'timeout' => 120,
                 'max_tokens' => 8000,
                 'messages' => [
                     ['role' => 'user', 'content' => $prompt],
                 ],
             ]);
 
-            if ($response->successful()) {
-                $result = $response->json('content.0.text', '');
+            if (! ($response['error'] ?? false)) {
+                $result = data_get($response, 'content.0.text', '');
                 $schemaData = $this->parseSchemaResponse($result);
 
                 if (empty($schemaData) || isset($schemaData['error'])) {
@@ -92,7 +87,7 @@ class AnalyzeGrantForAutomation implements ShouldQueue
 
                 return $schema;
             } else {
-                Log::error('AnalyzeGrantForAutomation: API error - '.$response->body());
+                Log::error('AnalyzeGrantForAutomation: API error - '.($response['body'] ?? ''));
 
                 return null;
             }
@@ -264,4 +259,3 @@ PROMPT;
         return $decoded;
     }
 }
-

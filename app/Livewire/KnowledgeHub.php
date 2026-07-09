@@ -9,7 +9,7 @@ use App\Models\Meeting;
 use App\Models\Organization;
 use App\Models\Person;
 use App\Models\Project;
-use Illuminate\Support\Facades\Http;
+use App\Support\AI\AnthropicClient;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -175,12 +175,8 @@ class KnowledgeHub extends Component
         }
 
         try {
-            $response = Http::withHeaders([
-                'x-api-key' => $apiKey,
-                'anthropic-version' => '2023-06-01',
-                'Content-Type' => 'application/json',
-            ])->timeout(30)->post('https://api.anthropic.com/v1/messages', [
-                'model' => 'claude-sonnet-4-20250514',
+            $response = AnthropicClient::send([
+                'timeout' => 30,
                 'max_tokens' => 1500,
                 'system' => "You are a helpful assistant for POPVOX Foundation staff. Answer questions based on the organizational knowledge provided. Be concise but thorough. If the context doesn't contain enough information, say so. Cite specific meetings, projects, or people when relevant.",
                 'messages' => [
@@ -191,8 +187,8 @@ class KnowledgeHub extends Component
                 ],
             ]);
 
-            if ($response->successful()) {
-                $this->aiAnswer = $response->json()['content'][0]['text'] ?? 'No response generated.';
+            if (! ($response['error'] ?? false)) {
+                $this->aiAnswer = $response['content'][0]['text'] ?? 'No response generated.';
                 // Also do a regular search to show sources
                 $this->performSearch();
             } else {

@@ -9,7 +9,6 @@ use App\Services\Notifications\WorkspaceNotificationService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Support\Facades\Http;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
@@ -401,12 +400,7 @@ PROMPT;
         $this->isExtracting = true;
 
         try {
-            $response = Http::withHeaders([
-                'x-api-key' => config('services.anthropic.api_key'),
-                'anthropic-version' => '2023-06-01',
-                'Content-Type' => 'application/json',
-            ])->post('https://api.anthropic.com/v1/messages', [
-                'model' => 'claude-sonnet-4-20250514',
+            $response = \App\Support\AI\AnthropicClient::send([
                 'max_tokens' => 1500,
                 'system' => $this->getExtractionSystemPrompt(),
                 'messages' => [
@@ -417,7 +411,7 @@ PROMPT;
                 ],
             ]);
 
-            $content = (string) ($response->json('content.0.text') ?? '');
+            $content = (string) data_get($response, 'content.0.text', '');
             $parsed = $content !== '' && $this->parseExtractedData($content);
 
             if ($parsed) {
@@ -733,6 +727,7 @@ PROMPT;
             $this->saveError = 'Could not create project. Please try again.';
             $this->addError('save', $this->saveError);
             $this->dispatch('notify', type: 'error', message: 'Could not create project. Please try again.');
+
             return null;
         } finally {
             $lock->release();

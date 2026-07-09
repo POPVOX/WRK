@@ -7,7 +7,6 @@ use App\Models\TeamMessageReaction;
 use App\Models\TeamResource;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -221,12 +220,8 @@ class TeamHub extends Component
                 'content' => $this->aiQuery,
             ];
 
-            $response = Http::withHeaders([
-                'x-api-key' => config('services.anthropic.api_key'),
-                'anthropic-version' => '2023-06-01',
-                'Content-Type' => 'application/json',
-            ])->timeout(60)->post('https://api.anthropic.com/v1/messages', [
-                'model' => 'claude-sonnet-4-20250514',
+            $response = \App\Support\AI\AnthropicClient::send([
+                'timeout' => 60,
                 'max_tokens' => 2000,
                 'system' => $this->getHandbookSystemPrompt($handbookContent),
                 'messages' => [
@@ -234,9 +229,8 @@ class TeamHub extends Component
                 ],
             ]);
 
-            if ($response->successful()) {
-                $data = $response->json();
-                $this->aiResponse = $data['content'][0]['text'] ?? 'No response generated.';
+            if (! ($response['error'] ?? false)) {
+                $this->aiResponse = $response['content'][0]['text'] ?? 'No response generated.';
 
                 $this->chatHistory[] = [
                     'role' => 'assistant',

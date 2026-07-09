@@ -93,15 +93,22 @@ class MeetingDetail extends Component
 
     // Agenda Management
     public string $agendaNotes = '';
+
     public bool $showAddAgendaItem = false;
+
     public string $newAgendaTitle = '';
+
     public string $newAgendaDescription = '';
+
     public ?int $newAgendaDuration = null;
+
     public ?int $newAgendaPresenter = null;
+
     public ?int $editingAgendaItemId = null;
 
     // Team thread + recurring journal
     public string $threadMessage = '';
+
     public string $seriesJournalEntry = '';
 
     public function mount(Meeting $meeting)
@@ -294,7 +301,7 @@ class MeetingDetail extends Component
         $meetingTitle = $this->meeting->title ?: 'this meeting';
         $meetingDate = optional($this->meeting->meeting_date)->format('F j');
 
-        $this->threadMessage = "Sorry to miss {$meetingTitle}".($meetingDate ? " ({$meetingDate})" : '').". Please drop key updates and follow-ups here and tag me if anything needs my input.";
+        $this->threadMessage = "Sorry to miss {$meetingTitle}".($meetingDate ? " ({$meetingDate})" : '').'. Please drop key updates and follow-ups here and tag me if anything needs my input.';
         $this->postThreadMessage();
     }
 
@@ -614,12 +621,8 @@ class MeetingDetail extends Component
         $meetingContext = $this->buildMeetingContext();
 
         try {
-            $response = \Http::withHeaders([
-                'x-api-key' => $apiKey,
-                'anthropic-version' => '2023-06-01',
-                'Content-Type' => 'application/json',
-            ])->timeout(60)->post('https://api.anthropic.com/v1/messages', [
-                'model' => 'claude-sonnet-4-20250514',
+            $response = \App\Support\AI\AnthropicClient::send([
+                'timeout' => 60,
                 'max_tokens' => 2000,
                 'system' => 'You are an executive assistant helping prepare for a meeting. Analyze the provided material and context to create a comprehensive meeting prep brief. Return a JSON object with the following structure:
 {
@@ -642,8 +645,8 @@ class MeetingDetail extends Component
                 ],
             ]);
 
-            if ($response->successful()) {
-                $content = $response->json()['content'][0]['text'] ?? '';
+            if (! ($response['error'] ?? false)) {
+                $content = $response['content'][0]['text'] ?? '';
                 // Try to parse JSON from the response
                 if (preg_match('/\{[\s\S]*\}/', $content, $matches)) {
                     $this->prepAnalysis = json_decode($matches[0], true) ?? ['raw' => $content];
@@ -799,7 +802,7 @@ class MeetingDetail extends Component
 
     public function toggleAddAgendaItem(): void
     {
-        $this->showAddAgendaItem = !$this->showAddAgendaItem;
+        $this->showAddAgendaItem = ! $this->showAddAgendaItem;
         $this->resetAgendaForm();
     }
 
@@ -875,7 +878,9 @@ class MeetingDetail extends Component
     public function reorderAgendaItem(int $itemId, string $direction): void
     {
         $item = \App\Models\MeetingAgendaItem::find($itemId);
-        if (!$item || $item->meeting_id !== $this->meeting->id) return;
+        if (! $item || $item->meeting_id !== $this->meeting->id) {
+            return;
+        }
 
         $items = $this->meeting->agendaItems()->orderBy('order')->get();
         $currentIndex = $items->search(fn ($i) => $i->id === $itemId);

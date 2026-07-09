@@ -2,14 +2,12 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Http;
+use App\Support\AI\AnthropicClient;
 use Illuminate\Support\Facades\Log;
 
 class MeetingAIService
 {
     protected ?string $apiKey;
-
-    protected string $baseUrl = 'https://api.anthropic.com/v1';
 
     public function __construct()
     {
@@ -64,12 +62,7 @@ Meeting notes:
 Respond with ONLY valid JSON, no markdown code blocks or explanation.
 PROMPT;
 
-            $response = Http::withHeaders([
-                'x-api-key' => $this->apiKey,
-                'anthropic-version' => '2023-06-01',
-                'Content-Type' => 'application/json',
-            ])->post("{$this->baseUrl}/messages", [
-                'model' => 'claude-sonnet-4-20250514',
+            $response = AnthropicClient::send([
                 'max_tokens' => 1024,
                 'messages' => [
                     [
@@ -79,13 +72,13 @@ PROMPT;
                 ],
             ]);
 
-            if (! $response->successful()) {
-                Log::error('Anthropic API error: '.$response->body());
+            if ($response['error'] ?? false) {
+                Log::error('Anthropic API error: '.($response['body'] ?? ''));
 
                 return $this->getEmptyExtraction();
             }
 
-            $content = $response->json('content.0.text', '');
+            $content = data_get($response, 'content.0.text', '');
 
             // Parse JSON response
             $data = json_decode($content, true);

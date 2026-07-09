@@ -5,12 +5,12 @@ namespace App\Jobs;
 use App\Models\Grant;
 use App\Models\Project;
 use App\Models\ProjectDocument;
+use App\Support\AI\AnthropicClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -42,24 +42,20 @@ class GenerateGrantReport implements ShouldQueue
         }
 
         try {
-            $response = Http::withHeaders([
-                'x-api-key' => $apiKey,
-                'anthropic-version' => '2023-06-01',
-                'content-type' => 'application/json',
-            ])->timeout(180)->post('https://api.anthropic.com/v1/messages', [
-                'model' => config('ai.model', 'claude-sonnet-4-20250514'),
+            $response = AnthropicClient::send([
+                'timeout' => 180,
                 'max_tokens' => 8000,
                 'messages' => [
                     ['role' => 'user', 'content' => $prompt],
                 ],
             ]);
 
-            if ($response->successful()) {
-                $report = $response->json('content.0.text', '');
+            if (! ($response['error'] ?? false)) {
+                $report = data_get($response, 'content.0.text', '');
                 $this->saveReport($grant->id, $report);
                 Log::info("GenerateGrantReport: Successfully generated report for grant {$grant->id}");
             } else {
-                Log::error('GenerateGrantReport: API error - '.$response->body());
+                Log::error('GenerateGrantReport: API error - '.($response['body'] ?? ''));
                 $this->saveReport($grant->id, 'Error generating report. Please try again.');
             }
         } catch (\Exception $e) {

@@ -17,7 +17,12 @@ class AnthropicClient
 
     public const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
 
-    public static function request(): PendingRequest
+    public static function defaultModel(): string
+    {
+        return config('ai.model', self::DEFAULT_MODEL);
+    }
+
+    public static function request(?int $timeout = null): PendingRequest
     {
         $apiKey = config('services.anthropic.api_key') ?: env('ANTHROPIC_API_KEY');
 
@@ -25,21 +30,24 @@ class AnthropicClient
             'x-api-key' => $apiKey,
             'anthropic-version' => self::API_VERSION,
             'Content-Type' => 'application/json',
-        ])->timeout(self::DEFAULT_TIMEOUT)->retry(2, 500);
+        ])->timeout($timeout ?? self::DEFAULT_TIMEOUT)->retry(2, 500);
     }
 
     /**
      * Send a message to Anthropic with standard logging.
      *
-     * @param  array{messages: array<int, array{role:string,content:string}>, system?:string, max_tokens?:int, model?:string}  $payload
+     * @param  array{messages: array<int, array{role:string,content:string}>, system?:string, max_tokens?:int, model?:string, timeout?:int}  $payload
      */
     public static function send(array $payload): array
     {
-        $model = $payload['model'] ?? self::DEFAULT_MODEL;
+        $timeout = $payload['timeout'] ?? null;
+        unset($payload['timeout']);
+
+        $model = $payload['model'] ?? self::defaultModel();
         $baseKey = 'metrics:ai';
 
         $start = microtime(true);
-        $res = self::request()->post(self::API_URL, array_merge([
+        $res = self::request($timeout)->post(self::API_URL, array_merge([
             'model' => $model,
             'max_tokens' => $payload['max_tokens'] ?? 2000,
         ], $payload));
@@ -47,21 +55,28 @@ class AnthropicClient
         $durationMs = (int) round((microtime(true) - $start) * 1000);
 
         if ($res->successful()) {
+            $json = $res->json();
+            $inputTokens = (int) data_get($json, 'usage.input_tokens', 0);
+            $outputTokens = (int) data_get($json, 'usage.output_tokens', 0);
             $log = [
                 'model' => $model,
                 'status' => $res->status(),
                 'duration_ms' => $durationMs,
+                'input_tokens' => $inputTokens,
+                'output_tokens' => $outputTokens,
             ];
             Log::info('Anthropic request success', $log);
             if (config('ai.metrics.enabled', true)) {
                 Cache::increment("{$baseKey}:success");
                 Cache::increment("{$baseKey}:count");
                 Cache::increment("{$baseKey}:latency_ms_total", $durationMs);
+                Cache::increment("{$baseKey}:input_tokens_total", $inputTokens);
+                Cache::increment("{$baseKey}:output_tokens_total", $outputTokens);
                 Cache::put("{$baseKey}:last_success_at", now()->toIso8601String(), 3600);
                 Log::info('metric.ai_request', $log + ['outcome' => 'success']);
             }
 
-            return $res->json();
+            return $json;
         }
 
         $log = [

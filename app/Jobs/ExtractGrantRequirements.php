@@ -9,7 +9,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class ExtractGrantRequirements implements ShouldQueue
@@ -53,20 +52,16 @@ class ExtractGrantRequirements implements ShouldQueue
         $prompt = $this->buildPrompt($content, $document->grant->name);
 
         try {
-            $response = Http::withHeaders([
-                'x-api-key' => $apiKey,
-                'anthropic-version' => '2023-06-01',
-                'content-type' => 'application/json',
-            ])->timeout(120)->post('https://api.anthropic.com/v1/messages', [
-                'model' => config('ai.model', 'claude-sonnet-4-20250514'),
+            $response = \App\Support\AI\AnthropicClient::send([
+                'timeout' => 120,
                 'max_tokens' => 4000,
                 'messages' => [
                     ['role' => 'user', 'content' => $prompt],
                 ],
             ]);
 
-            if ($response->successful()) {
-                $result = $response->json('content.0.text', '');
+            if (! ($response['error'] ?? false)) {
+                $result = data_get($response, 'content.0.text', '');
                 $extracted = $this->parseExtraction($result);
 
                 // Update document with extracted data
@@ -81,7 +76,7 @@ class ExtractGrantRequirements implements ShouldQueue
 
                 Log::info("ExtractGrantRequirements: Successfully processed document {$document->id}");
             } else {
-                Log::error('ExtractGrantRequirements: API error - '.$response->body());
+                Log::error('ExtractGrantRequirements: API error - '.($response['body'] ?? ''));
             }
         } catch (\Exception $e) {
             Log::error('ExtractGrantRequirements: '.$e->getMessage());
