@@ -36,8 +36,12 @@ class MeetingAIService
     /**
      * Extract structured meeting data from text using Claude.
      */
-    public function extractMeetingData(string $text): array
-    {
+    public function extractMeetingData(
+        string $text,
+        ?string $model = null,
+        int $timeout = 90,
+        int $maxTokens = 1600,
+    ): array {
         if (! config('ai.enabled')) {
             throw new MeetingExtractionException(
                 'disabled',
@@ -79,8 +83,9 @@ Respond with ONLY valid JSON, no markdown code blocks or explanation.
 PROMPT;
 
         $response = AnthropicClient::send([
-            'max_tokens' => 1600,
-            'timeout' => 90,
+            'model' => $model ?? AnthropicClient::defaultModel(),
+            'max_tokens' => $maxTokens,
+            'timeout' => $timeout,
             'attempts' => 1,
             'messages' => [
                 [

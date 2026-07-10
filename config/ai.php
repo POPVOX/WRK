@@ -3,6 +3,7 @@
 return [
     'enabled' => env('AI_FEATURES_ENABLED', true),
     'model' => env('AI_MODEL', 'claude-sonnet-4-6'),
+    'meeting_extraction_model' => env('AI_MEETING_EXTRACTION_MODEL', 'claude-haiku-4-5-20251001'),
     'timeout' => env('AI_HTTP_TIMEOUT', 120),
     // Basic per-action soft limits, enforced in Livewire (not middleware)
     'limits' => [

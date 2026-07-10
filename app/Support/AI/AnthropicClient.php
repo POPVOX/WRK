@@ -24,9 +24,14 @@ class AnthropicClient
 
     public static function defaultModel(): string
     {
-        $configuredModel = (string) config('ai.model', self::DEFAULT_MODEL);
+        return self::resolveModel((string) config('ai.model', self::DEFAULT_MODEL));
+    }
 
-        return self::RETIRED_MODEL_REPLACEMENTS[$configuredModel] ?? $configuredModel;
+    public static function resolveModel(?string $model): string
+    {
+        $model = $model ?: self::DEFAULT_MODEL;
+
+        return self::RETIRED_MODEL_REPLACEMENTS[$model] ?? $model;
     }
 
     public static function request(?int $timeout = null, int $attempts = 2): PendingRequest
@@ -52,14 +57,13 @@ class AnthropicClient
         unset($payload['timeout']);
         unset($payload['attempts']);
 
-        $model = $payload['model'] ?? self::defaultModel();
+        $model = self::resolveModel($payload['model'] ?? self::defaultModel());
+        $payload['model'] = $model;
+        $payload['max_tokens'] = $payload['max_tokens'] ?? 2000;
         $baseKey = 'metrics:ai';
 
         $start = microtime(true);
-        $res = self::request($timeout, $attempts)->post(self::API_URL, array_merge([
-            'model' => $model,
-            'max_tokens' => $payload['max_tokens'] ?? 2000,
-        ], $payload));
+        $res = self::request($timeout, $attempts)->post(self::API_URL, $payload);
 
         $durationMs = (int) round((microtime(true) - $start) * 1000);
 

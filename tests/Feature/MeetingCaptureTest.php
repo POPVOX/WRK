@@ -6,6 +6,7 @@ use App\Models\Organization;
 use App\Models\Person;
 use App\Models\User;
 use App\Support\AI\AnthropicClient;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -84,14 +85,14 @@ test('meeting capture extracts current notes into reviewable fields and relation
     $component->assertSet('selectedPeople', [$person->id]);
 
     Http::assertSent(fn ($request): bool => $request->url() === AnthropicClient::API_URL
-        && $request['model'] === AnthropicClient::defaultModel()
+        && $request['model'] === config('ai.meeting_extraction_model')
         && str_contains($request['messages'][0]['content'], $notes));
 });
 
 test('meeting extraction replaces the retired Sonnet 4 model configured in an environment', function () {
     config()->set('services.anthropic.api_key', 'test-anthropic-key');
     config()->set('ai.enabled', true);
-    config()->set('ai.model', 'claude-sonnet-4-20250514');
+    config()->set('ai.meeting_extraction_model', 'claude-sonnet-4-20250514');
 
     Http::fake([
         AnthropicClient::API_URL => Http::response([
@@ -117,7 +118,7 @@ test('meeting extraction replaces the retired Sonnet 4 model configured in an en
         ->assertSet('title', 'Model migration check')
         ->assertSet('extractionMessageType', 'success');
 
-    Http::assertSent(fn ($request): bool => $request['model'] === 'claude-sonnet-4-6');
+    expect(Http::recorded()->map(fn ($pair) => $pair[0]['model'])->all())->toBe(['claude-sonnet-4-6']);
 });
 
 test('meeting capture keeps notes and reports provider failures truthfully', function () {
@@ -152,8 +153,10 @@ test('meeting capture uses action-synchronized models for notes and relationship
         ->assertDontSee('wire:model.live.debounce.500ms="raw_notes"', false);
 });
 
-test('meeting capture queues extraction instead of holding the browser request open', function () {
+test('meeting capture falls back to the queue when the quick provider connection times out', function () {
     Queue::fake();
+    config()->set('services.anthropic.api_key', 'test-anthropic-key');
+    Http::fake(fn () => throw new ConnectionException('Provider connection timed out.'));
     $user = User::factory()->create();
     $notes = str_repeat('Detailed meeting note. ', 4000);
 
@@ -163,14 +166,13 @@ test('meeting capture queues extraction instead of holding the browser request o
         ->call('extractWithAI')
         ->assertSet('isExtracting', true)
         ->assertSet('extractionMessageType', 'info')
-        ->assertSee('AI extraction is running in the background')
+        ->assertSee('continuing in the background')
         ->assertSee('wire:poll.2s="checkExtractionStatus"', false)
         ->assertSee('Extracting in background...');
 
     Queue::assertPushed(\App\Jobs\ExtractMeetingNotes::class, fn ($job): bool => $job->userId === $user->id
         && strlen($job->notes) < strlen($notes)
         && str_contains($job->notes, 'Middle of exceptionally long notes omitted'));
-    Http::assertNothingSent();
 });
 
 test('meeting capture parses JSON from a later AI text block', function () {

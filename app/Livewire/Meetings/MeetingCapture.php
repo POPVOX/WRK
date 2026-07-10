@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Meetings;
 
+use App\Exceptions\MeetingExtractionException;
 use App\Jobs\ExtractMeetingNotes;
 use App\Models\Issue;
 use App\Models\Meeting;
@@ -10,6 +11,7 @@ use App\Models\Organization;
 use App\Models\Person;
 use App\Models\User;
 use App\Services\MeetingAIService;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
@@ -315,9 +317,56 @@ class MeetingCapture extends Component
         }
 
         $this->isExtracting = true;
+        $this->extractionMessage = null;
+
+        try {
+            $extractedData = app(MeetingAIService::class)->extractMeetingData(
+                $this->raw_notes,
+                (string) config('ai.meeting_extraction_model'),
+                35,
+                1200,
+            );
+            $this->applyExtractedData($extractedData);
+            $this->setExtractionMessage(
+                'success',
+                'AI extraction complete. Review the highlighted details and relationships below before saving.'
+            );
+            $this->dispatch('notify', type: 'success', message: 'Fields populated from AI extraction. Review and edit as needed.');
+            $this->isExtracting = false;
+
+            return;
+        } catch (ConnectionException $exception) {
+            \Log::warning('Interactive meeting extraction exceeded its connection window; queueing fallback', [
+                'user_id' => Auth::id(),
+                'exception' => $exception,
+            ]);
+        } catch (MeetingExtractionException $exception) {
+            $this->isExtracting = false;
+            $this->setExtractionMessage('error', $exception->getMessage());
+            $this->dispatch('notify', type: 'error', message: $exception->getMessage());
+
+            return;
+        } catch (\Throwable $exception) {
+            \Log::error('Interactive meeting extraction failed', [
+                'user_id' => Auth::id(),
+                'exception' => $exception,
+            ]);
+            $this->isExtracting = false;
+            $message = 'AI extraction failed while processing the notes. Your notes were kept; please retry or check Admin → Metrics.';
+            $this->setExtractionMessage('error', $message);
+            $this->dispatch('notify', type: 'error', message: $message);
+
+            return;
+        }
+
+        $this->queueExtractionInBackground();
+    }
+
+    protected function queueExtractionInBackground(): void
+    {
         $this->extractionRequestId = (string) Str::uuid();
         $this->extractionNotesHash = hash('sha256', $this->raw_notes);
-        $this->setExtractionMessage('info', 'AI extraction is running in the background. You can keep this page open while it finishes.');
+        $this->setExtractionMessage('info', 'The quick extraction is taking longer than expected, so it is continuing in the background.');
 
         Cache::put($this->extractionCacheKey(), [
             'status' => 'pending',
@@ -346,7 +395,7 @@ class MeetingCapture extends Component
             return;
         }
 
-        // The test/local sync queue may already have completed the job.
+        // The test/local sync queue may already have completed the fallback job.
         $this->checkExtractionStatus();
     }
 
