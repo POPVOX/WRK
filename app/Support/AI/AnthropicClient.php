@@ -37,7 +37,7 @@ class AnthropicClient
             'x-api-key' => $apiKey,
             'anthropic-version' => self::API_VERSION,
             'Content-Type' => 'application/json',
-        ])->timeout($timeout ?? self::DEFAULT_TIMEOUT)->retry(2, 500);
+        ])->timeout($timeout ?? self::DEFAULT_TIMEOUT)->retry(2, 500, null, false);
     }
 
     /**

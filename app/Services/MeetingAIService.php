@@ -2,12 +2,11 @@
 
 namespace App\Services;
 
+use App\Exceptions\MeetingExtractionException;
 use App\Support\AI\AnthropicClient;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use RuntimeException;
-use UnexpectedValueException;
 
 class MeetingAIService
 {
@@ -38,13 +37,19 @@ class MeetingAIService
     public function extractMeetingData(string $text): array
     {
         if (! config('ai.enabled')) {
-            throw new RuntimeException('AI extraction is disabled.');
+            throw new MeetingExtractionException(
+                'disabled',
+                'AI extraction is disabled in production. Ask an administrator to enable AI features.'
+            );
         }
 
         if (empty($this->apiKey)) {
             Log::error('Anthropic API key not configured');
 
-            throw new RuntimeException('AI extraction is not configured.');
+            throw new MeetingExtractionException(
+                'not_configured',
+                'Anthropic is not configured in production. Ask an administrator to add the API key.'
+            );
         }
 
         $prompt = <<<PROMPT
@@ -86,11 +91,14 @@ PROMPT;
                 'body' => Str::limit((string) ($response['body'] ?? ''), 500),
             ]);
 
-            throw new RuntimeException('The AI provider rejected the extraction request.');
+            throw $this->providerException($response);
         }
 
         if (($response['stop_reason'] ?? null) === 'max_tokens') {
-            throw new UnexpectedValueException('The AI response was truncated before extraction completed.');
+            throw new MeetingExtractionException(
+                'truncated',
+                'The AI response was incomplete. Try extracting a shorter set of notes.'
+            );
         }
 
         $contentBlocks = collect($response['content'] ?? [])
@@ -102,7 +110,10 @@ PROMPT;
             ->values();
 
         if ($contentBlocks->isEmpty()) {
-            throw new UnexpectedValueException('The AI provider returned an empty extraction.');
+            throw new MeetingExtractionException(
+                'empty_response',
+                'The AI returned no usable text. Please retry the extraction.'
+            );
         }
 
         $data = null;
@@ -118,7 +129,10 @@ PROMPT;
         }
 
         if (! is_array($data)) {
-            throw new UnexpectedValueException('The AI provider returned invalid structured data.');
+            throw new MeetingExtractionException(
+                'invalid_response',
+                'The AI returned an unreadable result. Please retry the extraction.'
+            );
         }
 
         $normalized = [
@@ -139,10 +153,54 @@ PROMPT;
             && $normalized['issues'] === []
             && $normalized['key_ask'] === ''
             && $normalized['commitments_made'] === '') {
-            throw new UnexpectedValueException('The AI provider did not identify any meeting information.');
+            throw new MeetingExtractionException(
+                'no_information',
+                'The AI could not identify meeting details in these notes. Add a little more context and retry.'
+            );
         }
 
         return $normalized;
+    }
+
+    protected function providerException(array $response): MeetingExtractionException
+    {
+        $status = (int) ($response['status'] ?? 0);
+        $body = json_decode((string) ($response['body'] ?? ''), true);
+        $providerMessage = Str::lower((string) data_get($body, 'error.message', ''));
+
+        if (str_contains($providerMessage, 'credit balance')
+            || str_contains($providerMessage, 'billing')
+            || str_contains($providerMessage, 'payment')) {
+            return new MeetingExtractionException(
+                'billing',
+                'The Anthropic account needs billing attention. Ask an administrator to check its credit balance.'
+            );
+        }
+
+        return match (true) {
+            in_array($status, [401, 403], true) => new MeetingExtractionException(
+                'credentials',
+                'Anthropic rejected the production API credentials. Ask an administrator to update the API key.'
+            ),
+            $status === 404 => new MeetingExtractionException(
+                'model_unavailable',
+                'The configured Anthropic model is unavailable in production. Ask an administrator to review the AI model setting.'
+            ),
+            $status === 429 => new MeetingExtractionException(
+                'rate_limited',
+                'Anthropic is rate-limiting requests right now. Wait a minute and retry.'
+            ),
+            $status >= 500 => new MeetingExtractionException(
+                'provider_unavailable',
+                'Anthropic is temporarily unavailable. Please retry in a few minutes.'
+            ),
+            default => new MeetingExtractionException(
+                'provider_rejected',
+                $status > 0
+                    ? "Anthropic rejected the extraction request (HTTP {$status}). Ask an administrator to check Admin → Metrics."
+                    : 'The AI provider could not complete the extraction. Please retry.'
+            ),
+        };
     }
 
     protected function decodeJsonObject(string $content): ?array

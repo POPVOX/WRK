@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Meetings;
 
+use App\Exceptions\MeetingExtractionException;
 use App\Models\Issue;
 use App\Models\Meeting;
 use App\Models\MeetingAttachment;
@@ -366,14 +367,14 @@ class MeetingCapture extends Component
                 'user_id' => Auth::id(),
                 'exception' => $exception,
             ]);
-            $this->setExtractionMessage(
-                'error',
-                'AI extraction failed. Your notes were kept; please retry. If it fails again, check Admin → Integrations.'
-            );
+            $message = $exception instanceof MeetingExtractionException
+                ? $exception->getMessage()
+                : 'AI extraction failed while applying the result. Your notes were kept; please retry or check Admin → Metrics.';
+            $this->setExtractionMessage('error', $message);
             $this->dispatch(
                 'notify',
                 type: 'error',
-                message: 'AI extraction failed. Your notes were kept; please try again or check Admin → Integrations.'
+                message: $message
             );
         } finally {
             $this->isExtracting = false;

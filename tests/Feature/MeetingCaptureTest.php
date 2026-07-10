@@ -135,7 +135,7 @@ test('meeting capture keeps notes and reports provider failures truthfully', fun
         ->assertSet('raw_notes', $notes)
         ->assertSet('aiSummary', null)
         ->assertSet('extractionMessageType', 'error')
-        ->assertSee('AI extraction failed. Your notes were kept')
+        ->assertSee('Anthropic is temporarily unavailable')
         ->assertSet('isExtracting', false)
         ->assertDispatched('notify', fn (string $name, array $params): bool => $params['type'] === 'error');
 });
@@ -203,6 +203,32 @@ test('meeting capture reports a truncated AI response instead of appearing succe
         ->call('extractWithAI')
         ->assertSet('aiSummary', null)
         ->assertSet('extractionMessageType', 'error')
-        ->assertSee('AI extraction failed. Your notes were kept')
+        ->assertSee('The AI response was incomplete')
         ->assertDispatched('notify', fn (string $name, array $params): bool => $params['type'] === 'error');
+});
+
+test('meeting capture explains production billing failures safely', function () {
+    config()->set('services.anthropic.api_key', 'test-anthropic-key');
+    config()->set('ai.enabled', true);
+
+    Http::fake([
+        AnthropicClient::API_URL => Http::response([
+            'type' => 'error',
+            'error' => [
+                'type' => 'invalid_request_error',
+                'message' => 'Your credit balance is too low to access the Anthropic API.',
+            ],
+        ], 400),
+    ]);
+
+    Livewire::actingAs(User::factory()->create())
+        ->test(MeetingCapture::class)
+        ->set('raw_notes', 'Notes that should be extracted.')
+        ->call('extractWithAI')
+        ->assertSet('extractionMessageType', 'error')
+        ->assertSee('Anthropic account needs billing attention')
+        ->assertDontSee('credit balance is too low')
+        ->assertDispatched('notify', fn (string $name, array $params): bool => $params['type'] === 'error');
+
+    expect(cache('metrics:ai:last_error_status'))->toBe(400);
 });
