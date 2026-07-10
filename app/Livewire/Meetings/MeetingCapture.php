@@ -513,9 +513,23 @@ class MeetingCapture extends Component
         $this->acceptSuggestedRelationship('organization', $name, true);
     }
 
+    public function acceptSuggestedOrganizationByKey(string $key): void
+    {
+        if ($name = $this->suggestedNameByKey($this->suggestedOrganizations, $key)) {
+            $this->acceptSuggestedOrganization($name);
+        }
+    }
+
     public function acceptSuggestedPerson(string $name): void
     {
         $this->acceptSuggestedRelationship('person', $name, true);
+    }
+
+    public function acceptSuggestedPersonByKey(string $key): void
+    {
+        if ($name = $this->suggestedNameByKey($this->suggestedPeople, $key)) {
+            $this->acceptSuggestedPerson($name);
+        }
     }
 
     public function acceptSuggestedIssue(string $name): void
@@ -523,9 +537,23 @@ class MeetingCapture extends Component
         $this->acceptSuggestedRelationship('issue', $name, true);
     }
 
+    public function acceptSuggestedIssueByKey(string $key): void
+    {
+        if ($name = $this->suggestedNameByKey($this->suggestedIssues, $key)) {
+            $this->acceptSuggestedIssue($name);
+        }
+    }
+
     public function rejectSuggestedOrganization(string $name): void
     {
         $this->suggestedOrganizations = $this->removeSuggestedName($this->suggestedOrganizations, $name);
+    }
+
+    public function rejectSuggestedOrganizationByKey(string $key): void
+    {
+        if ($name = $this->suggestedNameByKey($this->suggestedOrganizations, $key)) {
+            $this->rejectSuggestedOrganization($name);
+        }
     }
 
     public function rejectSuggestedPerson(string $name): void
@@ -533,9 +561,23 @@ class MeetingCapture extends Component
         $this->suggestedPeople = $this->removeSuggestedName($this->suggestedPeople, $name);
     }
 
+    public function rejectSuggestedPersonByKey(string $key): void
+    {
+        if ($name = $this->suggestedNameByKey($this->suggestedPeople, $key)) {
+            $this->rejectSuggestedPerson($name);
+        }
+    }
+
     public function rejectSuggestedIssue(string $name): void
     {
         $this->suggestedIssues = $this->removeSuggestedName($this->suggestedIssues, $name);
+    }
+
+    public function rejectSuggestedIssueByKey(string $key): void
+    {
+        if ($name = $this->suggestedNameByKey($this->suggestedIssues, $key)) {
+            $this->rejectSuggestedIssue($name);
+        }
     }
 
     public function acceptAllSuggestedOrganizations(): void
@@ -636,6 +678,17 @@ class MeetingCapture extends Component
             ->reject(fn (string $candidate): bool => Str::lower($candidate) === $normalized)
             ->values()
             ->all();
+    }
+
+    protected function suggestedNameByKey(array $names, string $key): ?string
+    {
+        foreach ($names as $name) {
+            if (hash_equals(sha1($name), $key)) {
+                return $name;
+            }
+        }
+
+        return null;
     }
 
     protected function extractionCacheKey(): string

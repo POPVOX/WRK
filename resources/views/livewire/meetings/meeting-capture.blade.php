@@ -311,12 +311,13 @@
                                 </div>
                                 <div class="flex flex-wrap gap-2">
                                     @foreach($suggestedOrganizations as $name)
-                                        <span class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-3 pr-1 text-sm text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-200">
+                                        <span wire:key="suggested-organization-{{ sha1($name) }}"
+                                            class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-3 pr-1 text-sm text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-200">
                                             {{ $name }}
-                                            <button type="button" wire:click="acceptSuggestedOrganization(@js($name))"
+                                            <button type="button" wire:click="acceptSuggestedOrganizationByKey('{{ sha1($name) }}')"
                                                 aria-label="Accept {{ $name }}" title="Accept"
                                                 class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300">✓</button>
-                                            <button type="button" wire:click="rejectSuggestedOrganization(@js($name))"
+                                            <button type="button" wire:click="rejectSuggestedOrganizationByKey('{{ sha1($name) }}')"
                                                 aria-label="Reject {{ $name }}" title="Reject"
                                                 class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 font-bold text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300">×</button>
                                         </span>
@@ -370,12 +371,13 @@
                                 </div>
                                 <div class="flex flex-wrap gap-2">
                                     @foreach($suggestedPeople as $name)
-                                        <span class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-3 pr-1 text-sm text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-200">
+                                        <span wire:key="suggested-person-{{ sha1($name) }}"
+                                            class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-3 pr-1 text-sm text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-200">
                                             {{ $name }}
-                                            <button type="button" wire:click="acceptSuggestedPerson(@js($name))"
+                                            <button type="button" wire:click="acceptSuggestedPersonByKey('{{ sha1($name) }}')"
                                                 aria-label="Accept {{ $name }}" title="Accept"
                                                 class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300">✓</button>
-                                            <button type="button" wire:click="rejectSuggestedPerson(@js($name))"
+                                            <button type="button" wire:click="rejectSuggestedPersonByKey('{{ sha1($name) }}')"
                                                 aria-label="Reject {{ $name }}" title="Reject"
                                                 class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 font-bold text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300">×</button>
                                         </span>
@@ -429,12 +431,13 @@
                                 </div>
                                 <div class="flex flex-wrap gap-2">
                                     @foreach($suggestedIssues as $name)
-                                        <span class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-3 pr-1 text-sm text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-200">
+                                        <span wire:key="suggested-issue-{{ sha1($name) }}"
+                                            class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-3 pr-1 text-sm text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-200">
                                             {{ $name }}
-                                            <button type="button" wire:click="acceptSuggestedIssue(@js($name))"
+                                            <button type="button" wire:click="acceptSuggestedIssueByKey('{{ sha1($name) }}')"
                                                 aria-label="Accept {{ $name }}" title="Accept"
                                                 class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300">✓</button>
-                                            <button type="button" wire:click="rejectSuggestedIssue(@js($name))"
+                                            <button type="button" wire:click="rejectSuggestedIssueByKey('{{ sha1($name) }}')"
                                                 aria-label="Reject {{ $name }}" title="Reject"
                                                 class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 font-bold text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300">×</button>
                                         </span>
