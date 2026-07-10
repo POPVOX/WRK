@@ -3,6 +3,7 @@
 namespace App\Livewire\Admin;
 
 use App\Models\AttentionFeedback;
+use App\Services\Attention\AttentionItemService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
@@ -71,6 +72,24 @@ class AttentionPilotInsights extends Component
             ->sortByDesc('total')
             ->values();
 
+        $ruleStats = $ratings
+            ->groupBy(fn (AttentionFeedback $item) => $item->rule_key ?: 'legacy_'.$item->source_type)
+            ->map(function ($items, string $ruleKey): array {
+                $useful = $items->where('response', AttentionFeedback::RESPONSE_USEFUL)->count();
+                $total = $items->count();
+
+                return [
+                    'rule_key' => $ruleKey,
+                    'label' => AttentionItemService::RULE_LABELS[$ruleKey] ?? str($ruleKey)->replace('_', ' ')->title()->toString(),
+                    'total' => $total,
+                    'useful' => $useful,
+                    'not_relevant' => $total - $useful,
+                    'useful_rate' => $total > 0 ? (int) round(($useful / $total) * 100) : 0,
+                ];
+            })
+            ->sortByDesc('total')
+            ->values();
+
         return view('livewire.admin.attention-pilot-insights', [
             'totalRatings' => $ratings->count(),
             'usefulCount' => $usefulCount,
@@ -80,6 +99,8 @@ class AttentionPilotInsights extends Component
             'missingCount' => $missing->count(),
             'missingSignals' => $missing->take(50),
             'categoryStats' => $categoryStats,
+            'ruleStats' => $ruleStats,
+            'ruleLabels' => AttentionItemService::RULE_LABELS,
             'recentRatings' => $ratings->take(50),
         ]);
     }

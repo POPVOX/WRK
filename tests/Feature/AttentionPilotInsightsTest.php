@@ -28,6 +28,7 @@ test('attention pilot insights aggregate ratings and missing signals', function 
         'item_key' => 'action-10',
         'source_type' => 'action',
         'source_id' => 10,
+        'rule_key' => 'action_due_soon',
         'category' => 'tasks',
         'response' => AttentionFeedback::RESPONSE_USEFUL,
     ]);
@@ -36,6 +37,7 @@ test('attention pilot insights aggregate ratings and missing signals', function 
         'item_key' => 'meeting-prep-20',
         'source_type' => 'meeting',
         'source_id' => 20,
+        'rule_key' => 'meeting_prep_missing',
         'category' => 'meetings',
         'response' => AttentionFeedback::RESPONSE_NOT_RELEVANT,
     ]);
@@ -50,6 +52,8 @@ test('attention pilot insights aggregate ratings and missing signals', function 
         ->assertSee('50%')
         ->assertSee('Pilot Staffer')
         ->assertSee('Surface decisions that still need a follow-up owner.')
+        ->assertSee('Assigned action due soon')
+        ->assertSee('Upcoming meeting missing preparation')
         ->assertSee('action-10')
         ->assertSee('meeting-prep-20');
 });

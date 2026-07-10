@@ -50,6 +50,7 @@ class NeedsYou extends Component
             [
                 'source_type' => $item['source_type'],
                 'source_id' => $item['source_id'],
+                'rule_key' => $item['rule_key'],
                 'category' => $item['category'],
                 'response' => $response,
             ],

@@ -18,6 +18,7 @@ class AttentionFeedback extends Model
         'item_key',
         'source_type',
         'source_id',
+        'rule_key',
         'category',
         'response',
         'note',

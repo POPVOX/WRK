@@ -29,6 +29,7 @@ test('staff can rate a surfaced item and change their rating', function () {
         'item_key' => 'action-'.$action->id,
         'source_type' => 'action',
         'source_id' => $action->id,
+        'rule_key' => 'action_due_soon',
         'category' => 'tasks',
         'response' => AttentionFeedback::RESPONSE_NOT_RELEVANT,
     ]);

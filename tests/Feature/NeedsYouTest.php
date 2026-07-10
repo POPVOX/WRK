@@ -38,6 +38,14 @@ test('attention service combines current work and respects user and grant visibi
         'status' => Action::STATUS_PENDING,
         'due_date' => today(),
     ]);
+    $futureHighPriorityAction = Action::create([
+        'title' => 'Strategic high-priority action',
+        'description' => 'Strategic high-priority action',
+        'assigned_to' => $user->id,
+        'status' => Action::STATUS_PENDING,
+        'priority' => Action::PRIORITY_HIGH,
+        'due_date' => today()->addDays(30),
+    ]);
 
     $projectTask = ProjectTask::create([
         'project_id' => $project->id,
@@ -126,6 +134,12 @@ test('attention service combines current work and respects user and grant visibi
 
     expect($items->pluck('title'))->not->toContain('Restricted report');
     expect($items->first()['bucket'])->toBe('now');
+    $futureHighPriorityItem = $items->firstWhere('id', 'action-'.$futureHighPriorityAction->id);
+    expect($futureHighPriorityItem['rule_key'])->toBe('action_high_priority');
+    expect($futureHighPriorityItem['why'])->toBe('This is assigned to you and marked high priority.');
+    expect($items->first())
+        ->toHaveKey('rule_key')
+        ->toHaveKey('why');
 });
 
 test('needs you page requires authentication and renders the attention queue', function () {
@@ -146,6 +160,8 @@ test('needs you page requires authentication and renders the attention queue', f
         ->assertOk()
         ->assertSee('Needs You')
         ->assertSee('Prepare board materials')
+        ->assertSee('Why this is here:')
+        ->assertSee('This is assigned to you and due today.')
         ->assertSee('Read-only pilot');
 });
 

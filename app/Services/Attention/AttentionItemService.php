@@ -14,6 +14,20 @@ use Illuminate\Support\Collection;
 
 class AttentionItemService
 {
+    public const RULE_LABELS = [
+        'action_overdue' => 'Assigned action overdue',
+        'action_due_soon' => 'Assigned action due soon',
+        'action_high_priority' => 'Assigned high-priority action',
+        'project_task_overdue' => 'Project task overdue',
+        'project_task_due_soon' => 'Project task due soon',
+        'project_task_high_priority' => 'High-priority project task',
+        'meeting_prep_missing' => 'Upcoming meeting missing preparation',
+        'meeting_notes_missing' => 'Recent meeting missing notes',
+        'grant_report_overdue' => 'Grant report overdue',
+        'grant_report_due_soon' => 'Grant report due soon',
+        'agent_approval_pending' => 'Agent suggestion awaiting review',
+    ];
+
     /**
      * Build the read-only attention queue for a staff member.
      *
@@ -27,6 +41,8 @@ class AttentionItemService
      *     context:?string,
      *     due_label:?string,
      *     due_at:?string,
+     *     rule_key:string,
+     *     why:string,
      *     url:string,
      *     action_label:string,
      *     source_type:string,
@@ -80,6 +96,8 @@ class AttentionItemService
                     summary: $action->notes ?: 'An assigned action is ready for your attention.',
                     context: $context,
                     dueAt: $action->due_date,
+                    ruleKey: $this->taskRuleKey('action', $action->due_date),
+                    why: $this->taskWhy($action->due_date),
                     url: $url,
                     actionLabel: $action->meeting ? 'Open meeting' : ($action->project ? 'Open project' : 'Open WRKspace'),
                     sourceType: 'action',
@@ -111,6 +129,8 @@ class AttentionItemService
                 summary: $task->description ?: 'A project task is ready for your attention.',
                 context: $task->project?->name,
                 dueAt: $task->due_date,
+                ruleKey: $this->taskRuleKey('project_task', $task->due_date),
+                why: $this->taskWhy($task->due_date),
                 url: route('projects.show', $task->project),
                 actionLabel: 'Open project',
                 sourceType: 'project_task',
@@ -145,6 +165,8 @@ class AttentionItemService
                     summary: 'This upcoming meeting does not have preparation notes yet.',
                     context: $context !== '' ? $context : null,
                     dueAt: $meeting->meeting_date,
+                    ruleKey: 'meeting_prep_missing',
+                    why: 'You own or are on this upcoming meeting, and preparation notes are empty.',
                     url: route('meetings.show', $meeting),
                     actionLabel: 'Prepare meeting',
                     sourceType: 'meeting',
@@ -178,6 +200,8 @@ class AttentionItemService
                     summary: 'This recent meeting still needs notes, decisions, or follow-up captured.',
                     context: $context !== '' ? $context : null,
                     dueAt: $meeting->meeting_date,
+                    ruleKey: 'meeting_notes_missing',
+                    why: 'You own or are on this recent meeting, and meeting notes are empty.',
                     url: route('meetings.show', $meeting),
                     actionLabel: 'Add meeting notes',
                     sourceType: 'meeting',
@@ -210,6 +234,10 @@ class AttentionItemService
                     summary: 'A grant reporting requirement is approaching or overdue.',
                     context: collect([$requirement->grant?->name, $requirement->grant?->funder?->name])->filter()->implode(' · '),
                     dueAt: $requirement->due_date,
+                    ruleKey: $daysUntil < 0 ? 'grant_report_overdue' : 'grant_report_due_soon',
+                    why: $daysUntil < 0
+                        ? 'A reporting requirement on a grant visible to you is overdue.'
+                        : 'A reporting requirement on a grant visible to you is due within 45 days.',
                     url: route('grants.show', $requirement->grant),
                     actionLabel: 'Open grant',
                     sourceType: 'reporting_requirement',
@@ -246,6 +274,8 @@ class AttentionItemService
                 summary: $suggestion->reasoning ?: 'An agent has prepared a proposed action for review.',
                 context: $suggestion->agent?->name,
                 dueAt: $suggestion->created_at,
+                ruleKey: 'agent_approval_pending',
+                why: 'A pending agent suggestion is within your review scope.',
                 url: route('intelligence.index'),
                 actionLabel: 'Review suggestion',
                 sourceType: 'agent_suggestion',
@@ -281,6 +311,33 @@ class AttentionItemService
         }
 
         return 'medium';
+    }
+
+    protected function taskRuleKey(string $prefix, ?CarbonInterface $dueAt): string
+    {
+        if ($dueAt?->lt(today())) {
+            return $prefix.'_overdue';
+        }
+        if ($dueAt?->lte(today()->addDays(7))) {
+            return $prefix.'_due_soon';
+        }
+
+        return $prefix.'_high_priority';
+    }
+
+    protected function taskWhy(?CarbonInterface $dueAt): string
+    {
+        if ($dueAt?->lt(today())) {
+            return 'This is assigned to you and overdue.';
+        }
+        if ($dueAt?->isToday()) {
+            return 'This is assigned to you and due today.';
+        }
+        if ($dueAt?->lte(today()->addDays(7))) {
+            return 'This is assigned to you and due within 7 days.';
+        }
+
+        return 'This is assigned to you and marked high priority.';
     }
 
     protected function meetingLabel(Meeting $meeting): string
@@ -325,6 +382,8 @@ class AttentionItemService
         string $summary,
         ?string $context,
         ?CarbonInterface $dueAt,
+        string $ruleKey,
+        string $why,
         string $url,
         string $actionLabel,
         string $sourceType,
@@ -341,6 +400,8 @@ class AttentionItemService
             'context' => $context ?: null,
             'due_label' => $dueLabel ?? $this->dueLabel($dueAt),
             'due_at' => $dueAt?->toIso8601String(),
+            'rule_key' => $ruleKey,
+            'why' => $why,
             'url' => $url,
             'action_label' => $actionLabel,
             'source_type' => $sourceType,
