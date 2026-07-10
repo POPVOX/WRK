@@ -7,6 +7,7 @@ use App\Models\MeetingAttachment;
 use App\Models\ProfileAttachment;
 use App\Models\ProjectDocument;
 use App\Support\PrivateFiles;
+use Illuminate\Support\Facades\Gate;
 
 class FileDownloadController extends Controller
 {
@@ -28,13 +29,15 @@ class FileDownloadController extends Controller
     private function projectDocument(int $id): array
     {
         $document = ProjectDocument::findOrFail($id);
+        Gate::authorize('view', $document);
 
         return [$document->file_path, $document->title.($document->file_path ? '.'.pathinfo($document->file_path, PATHINFO_EXTENSION) : null)];
     }
 
     private function grantDocument(int $id): array
     {
-        $document = GrantDocument::findOrFail($id);
+        $document = GrantDocument::with('grant')->findOrFail($id);
+        Gate::authorize('view', $document);
 
         return [$document->file_path, $document->title.($document->file_type ? '.'.$document->file_type : null)];
     }

@@ -124,7 +124,7 @@
                                         Open
                                     </a>
                                 @else
-                                    <a href="{{ route('projects.workspace', ['project' => $r['project_id']]) . '?doc=' . $r['id'] }}"
+                                    <a href="{{ route('files.download', ['type' => 'project-document', 'id' => $r['id']]) }}" target="_blank"
                                        class="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-medium">
                                         View
                                     </a>

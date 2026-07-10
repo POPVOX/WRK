@@ -203,6 +203,8 @@ class ProjectShow extends Component
 
     public function mount(Project $project)
     {
+        $user = Auth::user();
+
         $this->project = $project->load([
             'meetings.organizations',
             'organizations',
@@ -213,7 +215,7 @@ class ProjectShow extends Component
             'questions',
             'createdBy',
             'staff',
-            'documents.uploadedBy',
+            'documents' => fn ($query) => $query->visibleTo($user)->with('uploadedBy'),
             'boxDocumentLinks.boxItem',
             'boxDocumentLinks.projectDocument',
             'notes.user',
@@ -1248,7 +1250,7 @@ class ProjectShow extends Component
 
     public function deleteDocument(int $documentId)
     {
-        $document = ProjectDocument::findOrFail($documentId);
+        $document = $this->project->documents()->findOrFail($documentId);
 
         BoxProjectDocumentLink::query()
             ->where('project_id', $this->project->id)
@@ -2054,6 +2056,7 @@ PROMPT;
             ->get();
 
         $projectDocuments = $this->project->documents()
+            ->visibleTo(Auth::user())
             ->with(['uploadedBy', 'boxLink'])
             ->orderBy('created_at', 'desc')
             ->get();

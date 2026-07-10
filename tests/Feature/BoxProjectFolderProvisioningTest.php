@@ -139,6 +139,10 @@ test('ensure box project folder reuses an existing folder when box returns name 
 test('box provision project folders command queues missing projects by default', function () {
     Queue::fake();
 
+    config()->set('services.box.access_token', null);
+    config()->set('services.box.projects_folder_id', null);
+    config()->set('services.box.auto_provision_project_folders', false);
+
     $projectA = Project::factory()->create();
     $projectB = Project::factory()->create();
     $projectWithFolder = Project::factory()->create([

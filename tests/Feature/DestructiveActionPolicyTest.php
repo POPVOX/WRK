@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\User;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Livewire\Livewire;
 
 test('staff cannot delete a project they did not create', function () {
@@ -103,4 +104,29 @@ test('staff cannot delete a meeting they do not own', function () {
         ->assertRedirect(route('meetings.index'));
 
     expect(Meeting::find($meeting->id))->toBeNull();
+});
+
+test('meeting action deletion is scoped to the open meeting', function () {
+    $user = User::factory()->create();
+    $openMeeting = Meeting::create([
+        'user_id' => $user->id,
+        'title' => 'Open Meeting',
+        'meeting_date' => now()->toDateString(),
+    ]);
+    $otherMeeting = Meeting::create([
+        'user_id' => $user->id,
+        'title' => 'Other Meeting',
+        'meeting_date' => now()->toDateString(),
+    ]);
+    $otherAction = $otherMeeting->actions()->create([
+        'description' => 'Must remain attached to the other meeting',
+        'assigned_to' => $user->id,
+    ]);
+
+    expect(fn () => Livewire::actingAs($user)
+        ->test(MeetingDetail::class, ['meeting' => $openMeeting])
+        ->call('deleteAction', $otherAction->id))
+        ->toThrow(ModelNotFoundException::class);
+
+    $this->assertDatabaseHas('actions', ['id' => $otherAction->id, 'deleted_at' => null]);
 });

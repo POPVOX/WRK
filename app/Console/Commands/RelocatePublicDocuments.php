@@ -29,6 +29,7 @@ class RelocatePublicDocuments extends Command
         $public = Storage::disk('public');
         $private = Storage::disk(PrivateFiles::DISK);
         $moved = 0;
+        $failed = 0;
 
         foreach ($this->directories as $directory) {
             foreach ($public->allFiles($directory) as $path) {
@@ -39,18 +40,53 @@ class RelocatePublicDocuments extends Command
                     continue;
                 }
 
-                if (! $private->exists($path)) {
-                    $private->writeStream($path, $public->readStream($path));
+                $sourceSize = $public->size($path);
+
+                if ($private->exists($path)) {
+                    if ($private->size($path) !== $sourceSize) {
+                        $this->error("not moved (destination differs): {$path}");
+                        $failed++;
+
+                        continue;
+                    }
+                } else {
+                    $stream = $public->readStream($path);
+                    if (! is_resource($stream)) {
+                        $this->error("not moved (source could not be read): {$path}");
+                        $failed++;
+
+                        continue;
+                    }
+
+                    try {
+                        $written = $private->writeStream($path, $stream);
+                    } finally {
+                        fclose($stream);
+                    }
+
+                    if (! $written || ! $private->exists($path) || $private->size($path) !== $sourceSize) {
+                        $private->delete($path);
+                        $this->error("not moved (destination verification failed): {$path}");
+                        $failed++;
+
+                        continue;
+                    }
                 }
 
-                $public->delete($path);
+                if (! $public->delete($path) || $public->exists($path)) {
+                    $this->error("copied but source could not be removed: {$path}");
+                    $failed++;
+
+                    continue;
+                }
+
                 $moved++;
                 $this->line("moved: {$path}");
             }
         }
 
-        $this->info(($this->option('dry-run') ? 'Would move ' : 'Moved ')."{$moved} file(s).");
+        $this->info(($this->option('dry-run') ? 'Would move ' : 'Moved ')."{$moved} file(s); {$failed} failed.");
 
-        return self::SUCCESS;
+        return $failed === 0 ? self::SUCCESS : self::FAILURE;
     }
 }

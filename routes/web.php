@@ -32,6 +32,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard
     Route::get('/dashboard', Dashboard::class)->name('dashboard');
 
+    // Unified attention queue
+    Route::get('/needs-you', \App\Livewire\NeedsYou::class)->name('needs-you.index');
+
     // Authenticated document downloads (files live on the private disk)
     Route::get('/files/download/{type}/{id}', \App\Http\Controllers\FileDownloadController::class)
         ->whereNumber('id')

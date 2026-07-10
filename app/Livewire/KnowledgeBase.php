@@ -182,6 +182,7 @@ class KnowledgeBase extends Component
 
         // Apply filters via Eloquent
         $docsQuery = ProjectDocument::with(['project'])
+            ->visibleTo(Auth::user())
             ->whereIn('id', $ids)
             ->where('is_knowledge_base', true);
 

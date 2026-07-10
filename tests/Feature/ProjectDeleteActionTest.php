@@ -4,6 +4,7 @@ use App\Livewire\Projects\ProjectShow;
 use App\Models\Project;
 use App\Models\ProjectDocument;
 use App\Models\User;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
@@ -46,4 +47,22 @@ test('project show header delete button dispatches a global event instead of wir
         ->assertOk()
         ->assertSee('request-project-delete', false)
         ->assertDontSee('wire:click="deleteProject"', false);
+});
+
+test('project document deletion is scoped to the open project', function () {
+    $user = User::factory()->create();
+    $openProject = Project::factory()->create();
+    $otherProject = Project::factory()->create();
+    $otherDocument = ProjectDocument::factory()->create([
+        'project_id' => $otherProject->id,
+        'type' => 'file',
+        'file_path' => 'project-documents/other.txt',
+    ]);
+
+    expect(fn () => Livewire::actingAs($user)
+        ->test(ProjectShow::class, ['project' => $openProject])
+        ->call('deleteDocument', $otherDocument->id))
+        ->toThrow(ModelNotFoundException::class);
+
+    $this->assertDatabaseHas('project_documents', ['id' => $otherDocument->id]);
 });

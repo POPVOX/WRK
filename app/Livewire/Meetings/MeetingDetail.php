@@ -437,7 +437,7 @@ class MeetingDetail extends Component
 
     public function deleteAction(int $actionId)
     {
-        Action::destroy($actionId);
+        $this->meeting->actions()->findOrFail($actionId)->delete();
         $this->meeting->refresh();
     }
 

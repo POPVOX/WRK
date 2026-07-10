@@ -8,7 +8,6 @@ return new class extends Migration
     public function up(): void
     {
         Schema::dropIfExists('requirement_reminders');
-        Schema::dropIfExists('reporting_requirements');
         Schema::dropIfExists('legislative_reports');
     }
 
@@ -17,4 +16,3 @@ return new class extends Migration
         // Tables were removed - no rollback
     }
 };
-
