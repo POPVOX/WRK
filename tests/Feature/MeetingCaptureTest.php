@@ -79,6 +79,12 @@ test('meeting capture extracts current notes into reviewable fields and relation
         ->assertSet('isExtracting', false)
         ->assertDispatched('notify');
 
+    $component
+        ->assertSet('suggestedOrganizations', ['Open Parliament Lab'])
+        ->assertSet('suggestedPeople', ['Jordan Lee'])
+        ->call('acceptSuggestedOrganization', 'Open Parliament Lab')
+        ->call('acceptSuggestedPerson', 'Jordan Lee');
+
     $organization = Organization::query()->where('name', 'Open Parliament Lab')->firstOrFail();
     $person = Person::query()->where('name', 'Jordan Lee')->firstOrFail();
     $component->assertSet('selectedOrganizations', [$organization->id]);
@@ -301,17 +307,36 @@ test('meeting capture applies a full set of extracted parliamentary relationship
         ], 200),
     ]);
 
-    Livewire::actingAs(User::factory()->create())
+    $component = Livewire::actingAs(User::factory()->create())
         ->test(MeetingCapture::class)
         ->set('raw_notes', 'National Assembly of Zambia meeting notes.')
         ->call('extractWithAI')
         ->assertSet('title', 'National Assembly of Zambia ICT Integration Discussion')
         ->assertSet('aiSummary', 'Parliamentary staff discussed integrated research and AI tools.')
-        ->assertCount('selectedOrganizations', count($organizations))
-        ->assertCount('selectedPeople', count($people))
+        ->assertSet('selectedOrganizations', [])
+        ->assertSet('selectedPeople', [])
+        ->assertSet('selectedIssues', [])
+        ->assertSet('suggestedOrganizations', $organizations)
+        ->assertSet('suggestedPeople', $people)
+        ->assertSet('suggestedIssues', $issues)
+        ->assertSet('extractionMessageType', 'success')
+        ->assertSee('AI suggestions — accept or reject')
+        ->assertSee('Accept all')
+        ->assertSee('acceptSuggestedOrganization', false)
+        ->assertSee('rejectSuggestedOrganization', false)
+        ->call('rejectSuggestedOrganization', 'Commonwealth')
+        ->call('acceptAllSuggestedOrganizations')
+        ->call('acceptSuggestedPerson', 'Kelezo Lusaka')
+        ->call('rejectSuggestedPerson', 'Elvis Chipuka')
+        ->call('acceptAllSuggestedPeople')
+        ->call('acceptAllSuggestedIssues')
+        ->assertCount('selectedOrganizations', count($organizations) - 1)
+        ->assertCount('selectedPeople', count($people) - 1)
         ->assertCount('selectedIssues', count($issues))
-        ->assertSet('unlinkedOrganizations', [])
-        ->assertSet('unlinkedPeople', [])
-        ->assertSet('unlinkedIssues', [])
-        ->assertSet('extractionMessageType', 'success');
+        ->assertSet('suggestedOrganizations', [])
+        ->assertSet('suggestedPeople', [])
+        ->assertSet('suggestedIssues', []);
+
+    expect(Organization::query()->where('name', 'Commonwealth')->exists())->toBeFalse();
+    expect(Person::query()->where('name', 'Elvis Chipuka')->exists())->toBeFalse();
 });

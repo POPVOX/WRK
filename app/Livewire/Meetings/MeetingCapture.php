@@ -88,11 +88,11 @@ class MeetingCapture extends Component
 
     public ?string $extractionNotesHash = null;
 
-    public array $unlinkedOrganizations = [];
+    public array $suggestedOrganizations = [];
 
-    public array $unlinkedPeople = [];
+    public array $suggestedPeople = [];
 
-    public array $unlinkedIssues = [];
+    public array $suggestedIssues = [];
 
     // Editing mode
     public ?Meeting $editingMeeting = null;
@@ -462,10 +462,6 @@ class MeetingCapture extends Component
 
     protected function applyExtractedData(array $extractedData): void
     {
-        $this->unlinkedOrganizations = [];
-        $this->unlinkedPeople = [];
-        $this->unlinkedIssues = [];
-
         // Auto-fill title if empty
         if (empty($this->title) && ! empty($extractedData['suggested_title'])) {
             $this->title = $extractedData['suggested_title'];
@@ -482,79 +478,164 @@ class MeetingCapture extends Component
         $this->keyAsk = $extractedData['key_ask'] ?? null;
         $this->commitmentsMade = $extractedData['commitments_made'] ?? null;
 
-        // Auto-fill organizations
-        foreach ($extractedData['organizations'] ?? [] as $name) {
-            try {
-                $org = $this->findOrCreateOrganization($name);
-                if (! in_array($org->id, $this->selectedOrganizations)) {
-                    $this->selectedOrganizations[] = $org->id;
-                }
-            } catch (\Throwable $exception) {
-                $this->recordUnlinkedRelationship('organization', $name, $exception);
-            }
-        }
-
-        // Auto-fill people
-        foreach ($extractedData['people'] ?? [] as $name) {
-            try {
-                $person = $this->findOrCreatePerson($name);
-                if (! in_array($person->id, $this->selectedPeople)) {
-                    $this->selectedPeople[] = $person->id;
-                }
-            } catch (\Throwable $exception) {
-                $this->recordUnlinkedRelationship('person', $name, $exception);
-            }
-        }
-
-        // Auto-fill issues
-        foreach ($extractedData['issues'] ?? [] as $name) {
-            try {
-                $issue = $this->findOrCreateIssue($name);
-                if (! in_array($issue->id, $this->selectedIssues)) {
-                    $this->selectedIssues[] = $issue->id;
-                }
-            } catch (\Throwable $exception) {
-                $this->recordUnlinkedRelationship('issue', $name, $exception);
-            }
-        }
+        // Relationships remain proposals until the user accepts them.
+        $this->suggestedOrganizations = $this->suggestedNamesNotSelected(
+            $extractedData['organizations'] ?? [],
+            Organization::class,
+            $this->selectedOrganizations,
+        );
+        $this->suggestedPeople = $this->suggestedNamesNotSelected(
+            $extractedData['people'] ?? [],
+            Person::class,
+            $this->selectedPeople,
+        );
+        $this->suggestedIssues = $this->suggestedNamesNotSelected(
+            $extractedData['issues'] ?? [],
+            Issue::class,
+            $this->selectedIssues,
+        );
     }
 
     protected function reportExtractionApplied(): void
     {
-        $unlinkedCount = count($this->unlinkedOrganizations)
-            + count($this->unlinkedPeople)
-            + count($this->unlinkedIssues);
-
-        if ($unlinkedCount > 0) {
-            $message = "AI details extracted, but {$unlinkedCount} relationship ".Str::plural('suggestion', $unlinkedCount).' could not be linked automatically. Review the highlighted names below.';
-            $this->setExtractionMessage('warning', $message);
-            $this->dispatch('notify', type: 'warning', message: $message);
-
-            return;
-        }
-
-        $message = 'AI extraction complete. Review the highlighted details and relationships below before saving.';
+        $suggestionCount = count($this->suggestedOrganizations)
+            + count($this->suggestedPeople)
+            + count($this->suggestedIssues);
+        $message = $suggestionCount > 0
+            ? "AI extraction complete. Review and accept or reject {$suggestionCount} relationship ".Str::plural('suggestion', $suggestionCount).' below.'
+            : 'AI extraction complete. Review the highlighted details before saving.';
         $this->setExtractionMessage('success', $message);
         $this->dispatch('notify', type: 'success', message: $message);
     }
 
-    protected function recordUnlinkedRelationship(string $type, mixed $name, \Throwable $exception): void
+    public function acceptSuggestedOrganization(string $name): void
     {
-        $name = $this->normalizeRelationshipName($name);
-        if ($name !== '') {
-            match ($type) {
-                'organization' => $this->unlinkedOrganizations[] = $name,
-                'person' => $this->unlinkedPeople[] = $name,
-                'issue' => $this->unlinkedIssues[] = $name,
-            };
+        $this->acceptSuggestedRelationship('organization', $name, true);
+    }
+
+    public function acceptSuggestedPerson(string $name): void
+    {
+        $this->acceptSuggestedRelationship('person', $name, true);
+    }
+
+    public function acceptSuggestedIssue(string $name): void
+    {
+        $this->acceptSuggestedRelationship('issue', $name, true);
+    }
+
+    public function rejectSuggestedOrganization(string $name): void
+    {
+        $this->suggestedOrganizations = $this->removeSuggestedName($this->suggestedOrganizations, $name);
+    }
+
+    public function rejectSuggestedPerson(string $name): void
+    {
+        $this->suggestedPeople = $this->removeSuggestedName($this->suggestedPeople, $name);
+    }
+
+    public function rejectSuggestedIssue(string $name): void
+    {
+        $this->suggestedIssues = $this->removeSuggestedName($this->suggestedIssues, $name);
+    }
+
+    public function acceptAllSuggestedOrganizations(): void
+    {
+        $this->acceptAllSuggestedRelationships('organization', $this->suggestedOrganizations);
+    }
+
+    public function acceptAllSuggestedPeople(): void
+    {
+        $this->acceptAllSuggestedRelationships('person', $this->suggestedPeople);
+    }
+
+    public function acceptAllSuggestedIssues(): void
+    {
+        $this->acceptAllSuggestedRelationships('issue', $this->suggestedIssues);
+    }
+
+    protected function acceptAllSuggestedRelationships(string $type, array $names): void
+    {
+        $accepted = 0;
+        foreach ($names as $name) {
+            $accepted += $this->acceptSuggestedRelationship($type, $name, false) ? 1 : 0;
         }
 
-        \Log::error('Extracted meeting relationship could not be linked', [
-            'user_id' => Auth::id(),
-            'relationship_type' => $type,
-            'relationship_name' => $name,
-            'exception' => $exception,
-        ]);
+        if ($accepted > 0) {
+            $this->dispatch('notify', type: 'success', message: "Accepted {$accepted} ".Str::plural('suggestion', $accepted).'.');
+        }
+    }
+
+    protected function acceptSuggestedRelationship(string $type, mixed $name, bool $notify): bool
+    {
+        $name = $this->normalizeRelationshipName($name);
+        if ($name === '') {
+            return false;
+        }
+
+        try {
+            if ($type === 'organization') {
+                $model = $this->findOrCreateOrganization($name);
+                if (! in_array($model->id, $this->selectedOrganizations)) {
+                    $this->selectedOrganizations[] = $model->id;
+                }
+                $this->suggestedOrganizations = $this->removeSuggestedName($this->suggestedOrganizations, $name);
+            } elseif ($type === 'person') {
+                $model = $this->findOrCreatePerson($name);
+                if (! in_array($model->id, $this->selectedPeople)) {
+                    $this->selectedPeople[] = $model->id;
+                }
+                $this->suggestedPeople = $this->removeSuggestedName($this->suggestedPeople, $name);
+            } else {
+                $model = $this->findOrCreateIssue($name);
+                if (! in_array($model->id, $this->selectedIssues)) {
+                    $this->selectedIssues[] = $model->id;
+                }
+                $this->suggestedIssues = $this->removeSuggestedName($this->suggestedIssues, $name);
+            }
+
+            if ($notify) {
+                $this->dispatch('notify', type: 'success', message: "Accepted {$name}.");
+            }
+
+            return true;
+        } catch (\Throwable $exception) {
+            \Log::error('Meeting relationship suggestion could not be accepted', [
+                'user_id' => Auth::id(),
+                'relationship_type' => $type,
+                'relationship_name' => $name,
+                'exception' => $exception,
+            ]);
+            $this->dispatch('notify', type: 'error', message: "Could not accept {$name}. Please retry or check Admin → Metrics.");
+
+            return false;
+        }
+    }
+
+    protected function suggestedNamesNotSelected(array $names, string $modelClass, array $selectedIds): array
+    {
+        $selectedNames = $modelClass::query()
+            ->whereKey($selectedIds)
+            ->pluck('name')
+            ->map(fn (string $name): string => Str::lower($name))
+            ->all();
+
+        return collect($names)
+            ->map(fn (mixed $name): string => $this->normalizeRelationshipName($name))
+            ->filter()
+            ->reject(fn (string $name): bool => in_array(Str::lower($name), $selectedNames, true))
+            ->unique(fn (string $name): string => Str::lower($name))
+            ->values()
+            ->all();
+    }
+
+    protected function removeSuggestedName(array $names, mixed $name): array
+    {
+        $normalized = Str::lower($this->normalizeRelationshipName($name));
+
+        return collect($names)
+            ->reject(fn (string $candidate): bool => Str::lower($candidate) === $normalized)
+            ->values()
+            ->all();
     }
 
     protected function extractionCacheKey(): string

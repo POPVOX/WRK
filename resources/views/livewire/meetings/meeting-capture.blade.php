@@ -302,9 +302,26 @@
                                 </span>
                             @endforeach
                         </div>
-                        @if($unlinkedOrganizations)
-                            <div class="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-                                <span class="font-semibold">AI suggestions not linked:</span> {{ implode(', ', $unlinkedOrganizations) }}
+                        @if($suggestedOrganizations)
+                            <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
+                                <div class="mb-2 flex items-center justify-between gap-3">
+                                    <span class="text-xs font-semibold text-amber-900 dark:text-amber-200">AI suggestions — accept or reject</span>
+                                    <button type="button" wire:click="acceptAllSuggestedOrganizations"
+                                        class="text-xs font-semibold text-amber-800 underline hover:no-underline dark:text-amber-300">Accept all</button>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    @foreach($suggestedOrganizations as $name)
+                                        <span class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-3 pr-1 text-sm text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-200">
+                                            {{ $name }}
+                                            <button type="button" wire:click="acceptSuggestedOrganization(@js($name))"
+                                                aria-label="Accept {{ $name }}" title="Accept"
+                                                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300">✓</button>
+                                            <button type="button" wire:click="rejectSuggestedOrganization(@js($name))"
+                                                aria-label="Reject {{ $name }}" title="Reject"
+                                                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 font-bold text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300">×</button>
+                                        </span>
+                                    @endforeach
+                                </div>
                             </div>
                         @endif
                     </div>
@@ -344,9 +361,26 @@
                                 </span>
                             @endforeach
                         </div>
-                        @if($unlinkedPeople)
-                            <div class="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-                                <span class="font-semibold">AI suggestions not linked:</span> {{ implode(', ', $unlinkedPeople) }}
+                        @if($suggestedPeople)
+                            <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
+                                <div class="mb-2 flex items-center justify-between gap-3">
+                                    <span class="text-xs font-semibold text-amber-900 dark:text-amber-200">AI suggestions — accept or reject</span>
+                                    <button type="button" wire:click="acceptAllSuggestedPeople"
+                                        class="text-xs font-semibold text-amber-800 underline hover:no-underline dark:text-amber-300">Accept all</button>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    @foreach($suggestedPeople as $name)
+                                        <span class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-3 pr-1 text-sm text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-200">
+                                            {{ $name }}
+                                            <button type="button" wire:click="acceptSuggestedPerson(@js($name))"
+                                                aria-label="Accept {{ $name }}" title="Accept"
+                                                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300">✓</button>
+                                            <button type="button" wire:click="rejectSuggestedPerson(@js($name))"
+                                                aria-label="Reject {{ $name }}" title="Reject"
+                                                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 font-bold text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300">×</button>
+                                        </span>
+                                    @endforeach
+                                </div>
                             </div>
                         @endif
                     </div>
@@ -386,9 +420,26 @@
                                 </span>
                             @endforeach
                         </div>
-                        @if($unlinkedIssues)
-                            <div class="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-                                <span class="font-semibold">AI suggestions not linked:</span> {{ implode(', ', $unlinkedIssues) }}
+                        @if($suggestedIssues)
+                            <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
+                                <div class="mb-2 flex items-center justify-between gap-3">
+                                    <span class="text-xs font-semibold text-amber-900 dark:text-amber-200">AI suggestions — accept or reject</span>
+                                    <button type="button" wire:click="acceptAllSuggestedIssues"
+                                        class="text-xs font-semibold text-amber-800 underline hover:no-underline dark:text-amber-300">Accept all</button>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    @foreach($suggestedIssues as $name)
+                                        <span class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-3 pr-1 text-sm text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-200">
+                                            {{ $name }}
+                                            <button type="button" wire:click="acceptSuggestedIssue(@js($name))"
+                                                aria-label="Accept {{ $name }}" title="Accept"
+                                                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300">✓</button>
+                                            <button type="button" wire:click="rejectSuggestedIssue(@js($name))"
+                                                aria-label="Reject {{ $name }}" title="Reject"
+                                                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 font-bold text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300">×</button>
+                                        </span>
+                                    @endforeach
+                                </div>
                             </div>
                         @endif
                     </div>
