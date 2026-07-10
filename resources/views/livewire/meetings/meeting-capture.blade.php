@@ -302,6 +302,11 @@
                                 </span>
                             @endforeach
                         </div>
+                        @if($unlinkedOrganizations)
+                            <div class="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                                <span class="font-semibold">AI suggestions not linked:</span> {{ implode(', ', $unlinkedOrganizations) }}
+                            </div>
+                        @endif
                     </div>
 
                     <!-- People -->
@@ -339,6 +344,11 @@
                                 </span>
                             @endforeach
                         </div>
+                        @if($unlinkedPeople)
+                            <div class="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                                <span class="font-semibold">AI suggestions not linked:</span> {{ implode(', ', $unlinkedPeople) }}
+                            </div>
+                        @endif
                     </div>
 
                     <!-- Issues -->
@@ -376,6 +386,11 @@
                                 </span>
                             @endforeach
                         </div>
+                        @if($unlinkedIssues)
+                            <div class="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                                <span class="font-semibold">AI suggestions not linked:</span> {{ implode(', ', $unlinkedIssues) }}
+                            </div>
+                        @endif
                     </div>
 
                     <!-- Attachments -->

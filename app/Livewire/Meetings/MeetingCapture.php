@@ -88,6 +88,12 @@ class MeetingCapture extends Component
 
     public ?string $extractionNotesHash = null;
 
+    public array $unlinkedOrganizations = [];
+
+    public array $unlinkedPeople = [];
+
+    public array $unlinkedIssues = [];
+
     // Editing mode
     public ?Meeting $editingMeeting = null;
 
@@ -327,11 +333,7 @@ class MeetingCapture extends Component
                 1200,
             );
             $this->applyExtractedData($extractedData);
-            $this->setExtractionMessage(
-                'success',
-                'AI extraction complete. Review the highlighted details and relationships below before saving.'
-            );
-            $this->dispatch('notify', type: 'success', message: 'Fields populated from AI extraction. Review and edit as needed.');
+            $this->reportExtractionApplied();
             $this->isExtracting = false;
 
             return;
@@ -444,11 +446,7 @@ class MeetingCapture extends Component
 
         try {
             $this->applyExtractedData($extractedData);
-            $this->setExtractionMessage(
-                'success',
-                'AI extraction complete. Review the highlighted details and relationships below before saving.'
-            );
-            $this->dispatch('notify', type: 'success', message: 'Fields populated from AI extraction. Review and edit as needed.');
+            $this->reportExtractionApplied();
         } catch (\Throwable $exception) {
             \Log::error('Meeting AI extraction result could not be applied', [
                 'user_id' => Auth::id(),
@@ -464,6 +462,10 @@ class MeetingCapture extends Component
 
     protected function applyExtractedData(array $extractedData): void
     {
+        $this->unlinkedOrganizations = [];
+        $this->unlinkedPeople = [];
+        $this->unlinkedIssues = [];
+
         // Auto-fill title if empty
         if (empty($this->title) && ! empty($extractedData['suggested_title'])) {
             $this->title = $extractedData['suggested_title'];
@@ -474,36 +476,85 @@ class MeetingCapture extends Component
             $this->meeting_date = $extractedData['suggested_date'];
         }
 
+        // Apply narrative fields before relationships so a relationship problem
+        // never hides an otherwise successful extraction.
+        $this->aiSummary = $extractedData['ai_summary'] ?? null;
+        $this->keyAsk = $extractedData['key_ask'] ?? null;
+        $this->commitmentsMade = $extractedData['commitments_made'] ?? null;
+
         // Auto-fill organizations
-        foreach ($extractedData['organizations'] as $name) {
-            $org = $this->findOrCreateOrganization($name);
-            if (! in_array($org->id, $this->selectedOrganizations)) {
-                $this->selectedOrganizations[] = $org->id;
+        foreach ($extractedData['organizations'] ?? [] as $name) {
+            try {
+                $org = $this->findOrCreateOrganization($name);
+                if (! in_array($org->id, $this->selectedOrganizations)) {
+                    $this->selectedOrganizations[] = $org->id;
+                }
+            } catch (\Throwable $exception) {
+                $this->recordUnlinkedRelationship('organization', $name, $exception);
             }
         }
 
         // Auto-fill people
-        foreach ($extractedData['people'] as $name) {
-            $person = $this->findOrCreatePerson($name);
-            if (! in_array($person->id, $this->selectedPeople)) {
-                $this->selectedPeople[] = $person->id;
+        foreach ($extractedData['people'] ?? [] as $name) {
+            try {
+                $person = $this->findOrCreatePerson($name);
+                if (! in_array($person->id, $this->selectedPeople)) {
+                    $this->selectedPeople[] = $person->id;
+                }
+            } catch (\Throwable $exception) {
+                $this->recordUnlinkedRelationship('person', $name, $exception);
             }
         }
 
         // Auto-fill issues
-        foreach ($extractedData['issues'] as $name) {
-            $issue = Issue::query()
-                ->whereRaw('LOWER(name) = LOWER(?)', [$name])
-                ->first() ?? Issue::create(['name' => $name]);
-            if (! in_array($issue->id, $this->selectedIssues)) {
-                $this->selectedIssues[] = $issue->id;
+        foreach ($extractedData['issues'] ?? [] as $name) {
+            try {
+                $issue = $this->findOrCreateIssue($name);
+                if (! in_array($issue->id, $this->selectedIssues)) {
+                    $this->selectedIssues[] = $issue->id;
+                }
+            } catch (\Throwable $exception) {
+                $this->recordUnlinkedRelationship('issue', $name, $exception);
             }
         }
+    }
 
-        // Store AI-generated text fields
-        $this->aiSummary = $extractedData['ai_summary'] ?? null;
-        $this->keyAsk = $extractedData['key_ask'] ?? null;
-        $this->commitmentsMade = $extractedData['commitments_made'] ?? null;
+    protected function reportExtractionApplied(): void
+    {
+        $unlinkedCount = count($this->unlinkedOrganizations)
+            + count($this->unlinkedPeople)
+            + count($this->unlinkedIssues);
+
+        if ($unlinkedCount > 0) {
+            $message = "AI details extracted, but {$unlinkedCount} relationship ".Str::plural('suggestion', $unlinkedCount).' could not be linked automatically. Review the highlighted names below.';
+            $this->setExtractionMessage('warning', $message);
+            $this->dispatch('notify', type: 'warning', message: $message);
+
+            return;
+        }
+
+        $message = 'AI extraction complete. Review the highlighted details and relationships below before saving.';
+        $this->setExtractionMessage('success', $message);
+        $this->dispatch('notify', type: 'success', message: $message);
+    }
+
+    protected function recordUnlinkedRelationship(string $type, mixed $name, \Throwable $exception): void
+    {
+        $name = $this->normalizeRelationshipName($name);
+        if ($name !== '') {
+            match ($type) {
+                'organization' => $this->unlinkedOrganizations[] = $name,
+                'person' => $this->unlinkedPeople[] = $name,
+                'issue' => $this->unlinkedIssues[] = $name,
+            };
+        }
+
+        \Log::error('Extracted meeting relationship could not be linked', [
+            'user_id' => Auth::id(),
+            'relationship_type' => $type,
+            'relationship_name' => $name,
+            'exception' => $exception,
+        ]);
     }
 
     protected function extractionCacheKey(): string
@@ -532,18 +583,27 @@ class MeetingCapture extends Component
     {
         $normalizedName = $this->normalizeRelationshipName($name);
 
-        return Organization::query()
+        return Organization::withoutEvents(fn (): Organization => Organization::query()
             ->whereRaw('LOWER(name) = LOWER(?)', [$normalizedName])
-            ->first() ?? Organization::create(['name' => $normalizedName]);
+            ->first() ?? Organization::create(['name' => $normalizedName]));
     }
 
     protected function findOrCreatePerson(mixed $name): Person
     {
         $normalizedName = $this->normalizeRelationshipName($name);
 
-        return Person::query()
+        return Person::withoutEvents(fn (): Person => Person::query()
             ->whereRaw('LOWER(name) = LOWER(?)', [$normalizedName])
-            ->first() ?? Person::create(['name' => $normalizedName]);
+            ->first() ?? Person::create(['name' => $normalizedName]));
+    }
+
+    protected function findOrCreateIssue(mixed $name): Issue
+    {
+        $normalizedName = $this->normalizeRelationshipName($name);
+
+        return Issue::query()
+            ->whereRaw('LOWER(name) = LOWER(?)', [$normalizedName])
+            ->first() ?? Issue::create(['name' => $normalizedName]);
     }
 
     public function save()

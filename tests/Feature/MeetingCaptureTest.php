@@ -256,3 +256,62 @@ test('meeting capture explains production billing failures safely', function () 
 
     expect(cache('metrics:ai:last_error_status'))->toBe(400);
 });
+
+test('meeting capture applies a full set of extracted parliamentary relationships', function () {
+    config()->set('services.anthropic.api_key', 'test-anthropic-key');
+    config()->set('ai.enabled', true);
+
+    $organizations = [
+        'National Assembly of Zambia',
+        'Committee Department',
+        'Research Department',
+        'Parliamentary Budget Office',
+        'ICT Services',
+        'Commonwealth',
+        'IPU ICT hub',
+    ];
+    $people = ['Kelezo Lusaka', 'Clive Lelembo', 'John Mushomi', 'Elvis Chipuka'];
+    $issues = [
+        'Parliamentary oversight of the Executive',
+        'ICT integration in committees',
+        'Bill review processes',
+        'AI applications in parliamentary analysis',
+        'Budget analysis and public finance management',
+        'Information management and analysis',
+        'Integration of researchers and budget analysts',
+        'Shared platform for information-sharing',
+        'Cost concerns for new systems',
+        'Formalization of collaborative relationships',
+    ];
+
+    Http::fake([
+        AnthropicClient::API_URL => Http::response([
+            'content' => [['type' => 'text', 'text' => json_encode([
+                'suggested_title' => 'National Assembly of Zambia ICT Integration Discussion',
+                'organizations' => $organizations,
+                'people' => $people,
+                'issues' => $issues,
+                'key_ask' => 'Formalize the relationship through an MOU.',
+                'commitments_made' => 'Follow up on an MOU and clerk introduction.',
+                'suggested_date' => null,
+                'ai_summary' => 'Parliamentary staff discussed integrated research and AI tools.',
+            ])]],
+            'stop_reason' => 'end_turn',
+            'usage' => ['input_tokens' => 400, 'output_tokens' => 250],
+        ], 200),
+    ]);
+
+    Livewire::actingAs(User::factory()->create())
+        ->test(MeetingCapture::class)
+        ->set('raw_notes', 'National Assembly of Zambia meeting notes.')
+        ->call('extractWithAI')
+        ->assertSet('title', 'National Assembly of Zambia ICT Integration Discussion')
+        ->assertSet('aiSummary', 'Parliamentary staff discussed integrated research and AI tools.')
+        ->assertCount('selectedOrganizations', count($organizations))
+        ->assertCount('selectedPeople', count($people))
+        ->assertCount('selectedIssues', count($issues))
+        ->assertSet('unlinkedOrganizations', [])
+        ->assertSet('unlinkedPeople', [])
+        ->assertSet('unlinkedIssues', [])
+        ->assertSet('extractionMessageType', 'success');
+});
