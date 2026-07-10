@@ -72,13 +72,42 @@ class Metrics extends Component
     {
         $connected = null;
         $stale = null;
+        $failed = null;
+        $active = null;
+        $neverSynced = null;
+        $queuedJobs = null;
+        $failedJobs = null;
+        $latestSuccess = null;
+        $problemUsers = [];
 
         try {
-            $connected = DB::table('users')->whereNotNull('google_refresh_token')->count();
+            $connected = DB::table('users')->whereNotNull('google_access_token')->count();
             $stale = DB::table('users')
-                ->whereNotNull('calendar_import_date')
-                ->where('calendar_import_date', '<', now()->subDays(7))
+                ->whereNotNull('google_access_token')
+                ->where(function ($query): void {
+                    $query->whereNull('calendar_import_date')
+                        ->orWhere('calendar_import_date', '<', now()->subMinutes(30));
+                })
                 ->count();
+            $failed = DB::table('users')->whereNotNull('google_access_token')->where('calendar_sync_status', 'failed')->count();
+            $active = DB::table('users')->whereNotNull('google_access_token')->whereIn('calendar_sync_status', ['queued', 'running'])->count();
+            $neverSynced = DB::table('users')->whereNotNull('google_access_token')->whereNull('calendar_import_date')->count();
+            $latestSuccess = DB::table('users')->whereNotNull('google_access_token')->max('calendar_import_date');
+            $queuedJobs = DB::table('jobs')->where('payload', 'like', '%SyncCalendarEvents%')->count();
+            $failedJobs = DB::table('failed_jobs')->where('payload', 'like', '%SyncCalendarEvents%')->count();
+            $problemUsers = DB::table('users')
+                ->select(['id', 'name', 'calendar_sync_status', 'calendar_import_date', 'calendar_sync_failed_at'])
+                ->whereNotNull('google_access_token')
+                ->where(function ($query): void {
+                    $query->whereIn('calendar_sync_status', ['failed', 'queued', 'running'])
+                        ->orWhereNull('calendar_import_date')
+                        ->orWhere('calendar_import_date', '<', now()->subMinutes(30));
+                })
+                ->orderByRaw("CASE WHEN calendar_sync_status = 'failed' THEN 0 WHEN calendar_sync_status = 'running' THEN 1 WHEN calendar_sync_status = 'queued' THEN 2 ELSE 3 END")
+                ->limit(10)
+                ->get()
+                ->map(fn ($user): array => (array) $user)
+                ->all();
         } catch (\Throwable $e) {
             $connected = null;
             $stale = null;
@@ -87,6 +116,13 @@ class Metrics extends Component
         return [
             'connected' => $connected,
             'stale' => $stale,
+            'failed' => $failed,
+            'active' => $active,
+            'never_synced' => $neverSynced,
+            'queued_jobs' => $queuedJobs,
+            'failed_jobs' => $failedJobs,
+            'latest_success' => $latestSuccess,
+            'problem_users' => $problemUsers,
         ];
     }
 

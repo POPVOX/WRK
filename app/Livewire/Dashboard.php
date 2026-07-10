@@ -39,6 +39,8 @@ class Dashboard extends Component
 
     public ?string $lastSyncAt = null;
 
+    public ?string $calendarSyncStatus = null;
+
     public ?string $aiWarning = null;
 
     public ?string $calendarWarning = null;
@@ -70,17 +72,11 @@ class Dashboard extends Component
         }
 
         $this->isCalendarConnected = $calendarService->isConnected($this->user);
-        $this->lastSyncAt = $this->user->calendar_import_date?->diffForHumans();
+        $this->applyCalendarSyncState();
         $this->lastGmailSyncAt = $this->user->gmail_import_date?->diffForHumans();
 
         if (! config('ai.enabled')) {
             $this->aiWarning = 'AI features are disabled by the administrator.';
-        }
-
-        if (! $this->isCalendarConnected) {
-            $this->calendarWarning = 'Calendar is not connected. Connect to keep meetings and focus windows accurate.';
-        } elseif ($this->user->calendar_import_date && $this->user->calendar_import_date->lt(now()->subDays(7))) {
-            $this->calendarWarning = 'Calendar has not synced in over a week.';
         }
 
         if ($this->isCalendarConnected && ! $this->user->gmail_import_date) {
@@ -409,6 +405,7 @@ class Dashboard extends Component
         $seed = now()->dayOfYear + now()->hour;
         if ($isWeekend && $isLateNight) {
             $combined = array_merge($weekendNudges, $lateNightNudges);
+
             return $combined[$seed % count($combined)];
         }
 
@@ -651,7 +648,7 @@ class Dashboard extends Component
                         $assistantMessage = $this->composeCompanionAssistantMessage($suggestions);
                     }
                     if ($addedCount < count($suggestions)) {
-                        $assistantMessage .= "\n\nI skipped ".(count($suggestions) - $addedCount)." duplicate suggestion(s) already in your queue.";
+            $assistantMessage .= "\n\nI skipped ".(count($suggestions) - $addedCount)." duplicate suggestion(s) already in your queue.";
                     }
 
                     $this->addConversationMessage('assistant', $assistantMessage);
@@ -1030,6 +1027,7 @@ PROMPT;
                     'reason' => 'You asked for a reminder.',
                     'confidence' => 'high',
                 ]);
+
                 continue;
             }
 
@@ -1048,6 +1046,7 @@ PROMPT;
                     'reason' => 'This looks like email follow-through.',
                     'confidence' => 'medium',
                 ]);
+
                 continue;
             }
 
@@ -1062,6 +1061,7 @@ PROMPT;
                     'reason' => 'This sounds like a subproject request.',
                     'confidence' => 'medium',
                 ]);
+
                 continue;
             }
 
@@ -1076,6 +1076,7 @@ PROMPT;
                     'reason' => 'This sounds like a new project request.',
                     'confidence' => 'medium',
                 ]);
+
                 continue;
             }
 
@@ -1544,12 +1545,14 @@ PROMPT;
                 } else {
                     $lines[] = "• Should I make \"{$title}\" a new task?";
                 }
+
                 continue;
             }
 
             if ($type === 'reminder') {
                 $due = (string) ($suggestion['due_label'] ?? 'later');
                 $lines[] = "• Should I set a reminder for \"{$title}\"".($due !== '' ? " (due {$due})" : '').'?';
+
                 continue;
             }
 
@@ -1558,28 +1561,33 @@ PROMPT;
                 $lines[] = $recipient !== ''
                     ? "• Should I draft an email to {$recipient}?"
                     : '• Should I draft an email for this follow-up?';
+
                 continue;
             }
 
             if ($type === 'create_project') {
                 $lines[] = "• Sounds like \"{$title}\" might be a new project. Should I create it?";
+
                 continue;
             }
 
             if ($type === 'create_subproject') {
                 $lines[] = "• Sounds like \"{$title}\" might be a subproject. Should I create it under an existing project?";
+
                 continue;
             }
 
             if ($type === 'capture_win') {
                 $visibility = (string) ($suggestion['visibility'] ?? 'personal');
                 $lines[] = "• That is a pretty big deal. Should I add \"{$title}\" to your wins (".($visibility === 'team' ? 'team-visible' : 'personal').')?';
+
                 continue;
             }
 
             if ($type === 'capture_reflection') {
                 $visibility = (string) ($suggestion['visibility'] ?? 'personal');
                 $lines[] = "• Should I save this reflection as ".($visibility === 'team' ? 'a team reflection' : 'a private reflection').": \"{$title}\"?";
+
                 continue;
             }
 
@@ -1615,6 +1623,7 @@ PROMPT;
         if (preg_match('/\b(next\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i', $trimmed, $matches)) {
             $forceNext = ! empty($matches[1]);
             $weekday = (string) $matches[2];
+
             return $this->nextWeekdayDate($weekday, $forceNext)?->toDateString();
         }
 
@@ -1956,21 +1965,96 @@ PROMPT;
             return;
         }
 
-        $this->isSyncing = true;
+        $this->user->refresh();
+        $activeQueuedSync = $this->user->calendar_sync_status === 'queued'
+            && $this->user->calendar_sync_queued_at?->gt(now()->subMinutes(15));
+        $activeRunningSync = $this->user->calendar_sync_status === 'running'
+            && $this->user->calendar_sync_started_at?->gt(now()->subMinutes(15));
+
+        if ($activeQueuedSync || $activeRunningSync) {
+            $this->applyCalendarSyncState();
+            $this->dispatch('notify', type: 'info', message: 'Calendar sync is already in progress.');
+
+            return;
+        }
 
         try {
-            SyncCalendarEvents::dispatchSync($this->user);
-        } catch (\Throwable $e) {
-            \Log::warning('Workspace calendar sync failed: '.$e->getMessage());
+            $this->user->update([
+                'calendar_sync_status' => 'queued',
+                'calendar_sync_queued_at' => now(),
+                'calendar_sync_error' => null,
+            ]);
+            SyncCalendarEvents::dispatch($this->user);
+            $this->dispatch('notify', type: 'info', message: 'Calendar sync queued. This page will update when it finishes.');
+        } catch (\Throwable $exception) {
+            $this->user->update([
+                'calendar_sync_status' => 'failed',
+                'calendar_sync_failed_at' => now(),
+                'calendar_sync_error' => 'Unable to queue calendar sync.',
+            ]);
+            \Log::warning('Workspace calendar sync dispatch failed: '.$exception->getMessage());
+            $this->dispatch('notify', type: 'error', message: 'Could not queue calendar sync. Please try again.');
+        }
+
+        $this->applyCalendarSyncState();
+    }
+
+    public function refreshCalendarStatus(): void
+    {
+        if (! $this->isCalendarConnected) {
+            return;
         }
 
         $this->user->refresh();
-        $this->lastSyncAt = $this->user->calendar_import_date
-            ? $this->user->calendar_import_date->diffForHumans()
-            : 'just now';
+        $this->applyCalendarSyncState();
+    }
 
-        $this->calendarWarning = null;
-        $this->isSyncing = false;
+    protected function applyCalendarSyncState(): void
+    {
+        $this->lastSyncAt = $this->user->calendar_import_date?->diffForHumans();
+        $this->calendarSyncStatus = $this->user->calendar_sync_status;
+        $queuedRecently = $this->calendarSyncStatus === 'queued'
+            && $this->user->calendar_sync_queued_at?->gt(now()->subMinutes(15));
+        $runningRecently = $this->calendarSyncStatus === 'running'
+            && $this->user->calendar_sync_started_at?->gt(now()->subMinutes(15));
+        $this->isSyncing = $queuedRecently || $runningRecently;
+
+        if (! $this->isCalendarConnected) {
+            $this->calendarWarning = 'Calendar is not connected. Connect to keep meetings and focus windows accurate.';
+
+            return;
+        }
+
+        if ($this->calendarSyncStatus === 'failed') {
+            $when = $this->user->calendar_sync_failed_at?->diffForHumans();
+            $this->calendarWarning = 'Calendar sync failed'.($when ? ' '.$when : '').'. Try again; reconnect Google if it continues.';
+
+            return;
+        }
+
+        if (in_array($this->calendarSyncStatus, ['queued', 'running'], true) && ! $this->isSyncing) {
+            $this->calendarWarning = 'Calendar sync appears stuck. Try syncing again; reconnect Google if it continues.';
+
+            return;
+        }
+
+        if ($this->isSyncing) {
+            $this->calendarWarning = $this->calendarSyncStatus === 'running'
+                ? 'Calendar sync is running.'
+                : 'Calendar sync is queued.';
+
+            return;
+        }
+
+        if (! $this->user->calendar_import_date) {
+            $this->calendarWarning = 'Calendar has not completed its first sync yet.';
+
+            return;
+        }
+
+        $this->calendarWarning = $this->user->calendar_import_date->lt(now()->subMinutes(30))
+            ? 'Calendar has not synced successfully in over 30 minutes.'
+            : null;
     }
 
     public function syncGmail(): string
@@ -2073,6 +2157,7 @@ PROMPT;
 
             if (Str::startsWith($lower, 'due:')) {
                 $dueDate = $this->parseDueDateToken(trim(substr($part, 4)));
+
                 continue;
             }
 
@@ -2081,6 +2166,7 @@ PROMPT;
                 if (in_array($candidate, ['high', 'medium', 'low'], true)) {
                     $priority = $candidate;
                 }
+
                 continue;
             }
 
@@ -2089,6 +2175,7 @@ PROMPT;
                 if ($projectName !== '') {
                     $projectId = $this->resolveUserProjectIdByName($projectName);
                 }
+
                 continue;
             }
 
@@ -2200,6 +2287,7 @@ PROMPT;
         if ($timeValue && trim($timeValue) !== '') {
             try {
                 $parsedTime = Carbon::parse($timeValue)->format('H:i:s');
+
                 return Carbon::parse($base->format('Y-m-d').' '.$parsedTime);
             } catch (\Throwable) {
                 // Fall through to fallback behavior.

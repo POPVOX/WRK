@@ -50,6 +50,12 @@ class User extends Authenticatable
         'google_refresh_token',
         'google_token_expires_at',
         'calendar_import_date',
+        'calendar_sync_status',
+        'calendar_sync_queued_at',
+        'calendar_sync_started_at',
+        'calendar_sync_completed_at',
+        'calendar_sync_failed_at',
+        'calendar_sync_error',
         'gmail_import_date',
         'gmail_history_id',
         'activation_token',
@@ -66,6 +72,8 @@ class User extends Authenticatable
         'password',
         'remember_token',
         'activation_token',
+        'google_access_token',
+        'google_refresh_token',
     ];
 
     /**
@@ -86,6 +94,10 @@ class User extends Authenticatable
             'profile_completed_at' => 'datetime',
             'google_token_expires_at' => 'datetime',
             'calendar_import_date' => 'datetime',
+            'calendar_sync_queued_at' => 'datetime',
+            'calendar_sync_started_at' => 'datetime',
+            'calendar_sync_completed_at' => 'datetime',
+            'calendar_sync_failed_at' => 'datetime',
             'gmail_import_date' => 'datetime',
             'activation_token_expires_at' => 'datetime',
             'activated_at' => 'datetime',

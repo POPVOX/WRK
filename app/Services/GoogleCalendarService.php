@@ -9,8 +9,10 @@ use App\Services\Agents\AgentCredentialService;
 use Google\Client as GoogleClient;
 use Google\Service\Calendar as GoogleCalendar;
 use Google\Service\Gmail as GoogleGmail;
+use GuzzleHttp\Client as HttpClient;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 class GoogleCalendarService
 {
@@ -20,6 +22,10 @@ class GoogleCalendarService
         protected AgentCredentialService $agentCredentialService
     ) {
         $this->client = new GoogleClient;
+        $this->client->setHttpClient(new HttpClient([
+            'connect_timeout' => max(1, (int) config('services.google.connect_timeout', 10)),
+            'timeout' => max(5, (int) config('services.google.request_timeout', 60)),
+        ]));
         $this->client->setClientId(config('services.google.client_id'));
         $this->client->setClientSecret(config('services.google.client_secret'));
         $this->client->setRedirectUri(config('services.google.redirect_uri'));
@@ -72,10 +78,10 @@ class GoogleCalendarService
                 'error' => $token['error'],
                 'error_description' => $token['error_description'] ?? 'No description',
             ]);
-            throw new \Exception('Google OAuth error: ' . ($token['error_description'] ?? $token['error']));
+            throw new \Exception('Google OAuth error: '.($token['error_description'] ?? $token['error']));
         }
 
-        if (!isset($token['access_token'])) {
+        if (! isset($token['access_token'])) {
             \Log::error('Google OAuth missing access_token', ['response' => $token]);
             throw new \Exception('No access token received from Google');
         }
@@ -84,6 +90,9 @@ class GoogleCalendarService
             'google_access_token' => $token['access_token'],
             'google_refresh_token' => $token['refresh_token'] ?? $user->google_refresh_token,
             'google_token_expires_at' => now()->addSeconds($token['expires_in'] ?? 3600),
+            'calendar_sync_status' => 'pending',
+            'calendar_sync_error' => null,
+            'calendar_sync_failed_at' => null,
         ]);
     }
 
@@ -96,6 +105,12 @@ class GoogleCalendarService
             'google_access_token' => null,
             'google_refresh_token' => null,
             'google_token_expires_at' => null,
+            'calendar_sync_status' => null,
+            'calendar_sync_queued_at' => null,
+            'calendar_sync_started_at' => null,
+            'calendar_sync_completed_at' => null,
+            'calendar_sync_failed_at' => null,
+            'calendar_sync_error' => null,
         ];
 
         if (Schema::hasColumn('users', 'gmail_import_date')) {
@@ -256,7 +271,7 @@ class GoogleCalendarService
         while (true) {
             $service = $this->getCalendarService($user, $agent);
             if (! $service) {
-                return [];
+                throw new RuntimeException('Google Calendar is not connected.');
             }
 
             $allEvents = [];
@@ -286,12 +301,13 @@ class GoogleCalendarService
             } catch (\Throwable $e) {
                 if ($allowRetry && $this->isAuthError($e) && $this->refreshToken($user, $agent)) {
                     $allowRetry = false;
+
                     continue;
                 }
 
                 \Log::error('Google Calendar Error: '.$e->getMessage());
 
-                return [];
+                throw new RuntimeException('Google Calendar request failed: '.$e->getMessage(), previous: $e);
             }
         }
     }
@@ -330,7 +346,7 @@ class GoogleCalendarService
             // Skip personal/internal events that shouldn't be imported as meetings
             // Matches: Lunch, lunch break, OOO, Out of Office, Focus Time, Busy, etc.
             if ($this->isPersonalEvent($summary)) {
-                $skipped[] = $summary . ' (personal event)';
+                $skipped[] = $summary.' (personal event)';
 
                 continue;
             }
@@ -353,7 +369,7 @@ class GoogleCalendarService
 
             // Set meeting title/summary from event
             if ($summary) {
-                $meeting->update(['raw_notes' => "**{$summary}**\n\n" . ($event->getDescription() ?? '')]);
+                $meeting->update(['raw_notes' => "**{$summary}**\n\n".($event->getDescription() ?? '')]);
             }
 
             $imported[] = $summary ?: 'Untitled event';
@@ -412,9 +428,9 @@ class GoogleCalendarService
             // Exact match or keyword at start/end of title
             if (
                 $lowerTitle === $keyword ||
-                str_starts_with($lowerTitle, $keyword . ' ') ||
-                str_ends_with($lowerTitle, ' ' . $keyword) ||
-                str_contains($lowerTitle, ' ' . $keyword . ' ')
+                str_starts_with($lowerTitle, $keyword.' ') ||
+                str_ends_with($lowerTitle, ' '.$keyword) ||
+                str_contains($lowerTitle, ' '.$keyword.' ')
             ) {
                 return true;
             }

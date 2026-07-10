@@ -9,7 +9,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // Primary meeting sync: run all day and dispatch to the default queue.
-Schedule::command('calendars:sync')
+Schedule::command('calendars:sync --past-days=14 --future-days=120')
     ->everyTenMinutes()
     ->withoutOverlapping(9)
     ->onOneServer()
@@ -17,7 +17,7 @@ Schedule::command('calendars:sync')
     ->description('Continuous calendar sync');
 
 // Backstop sync: runs inline daily so meetings still refresh if queue workers hiccup.
-Schedule::command('calendars:sync --sync')
+Schedule::command('calendars:sync --sync --past-days=30 --future-days=365')
     ->dailyAt('05:30')
     ->withoutOverlapping(120)
     ->onOneServer()

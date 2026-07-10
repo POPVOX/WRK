@@ -43,16 +43,16 @@
                     </p>
                 </div>
 
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2" @if($isSyncing) wire:poll.10s="refreshCalendarStatus" @endif>
                     @if($isCalendarConnected)
-                        <button wire:click="syncCalendar" wire:loading.attr="disabled"
+                        <button wire:click="syncCalendar" wire:loading.attr="disabled" @if($isSyncing) disabled @endif
                             class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                             <svg class="w-4 h-4 {{ $isSyncing ? 'animate-spin' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
                             <span class="ml-2" wire:loading.remove wire:target="syncCalendar">
-                                {{ $lastSyncAt ? 'Synced '.$lastSyncAt : 'Sync calendar' }}
+                                {{ $isSyncing ? 'Calendar syncing…' : ($lastSyncAt ? 'Synced '.$lastSyncAt : 'Sync calendar') }}
                             </span>
                             <span class="ml-2" wire:loading wire:target="syncCalendar">Syncing...</span>
                         </button>

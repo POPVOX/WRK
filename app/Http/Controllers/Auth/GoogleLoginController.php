@@ -99,6 +99,9 @@ class GoogleLoginController extends Controller
                 'google_access_token' => $token['access_token'],
                 'google_refresh_token' => $token['refresh_token'] ?? $user->google_refresh_token,
                 'google_token_expires_at' => now()->addSeconds((int) ($token['expires_in'] ?? 3600)),
+                'calendar_sync_status' => 'pending',
+                'calendar_sync_error' => null,
+                'calendar_sync_failed_at' => null,
             ])->save();
         }
 
@@ -106,6 +109,11 @@ class GoogleLoginController extends Controller
         $request->session()->regenerate();
 
         // Trigger background sync automatically at login.
+        $user->forceFill([
+            'calendar_sync_status' => 'queued',
+            'calendar_sync_queued_at' => now(),
+            'calendar_sync_error' => null,
+        ])->save();
         SyncCalendarEvents::dispatch($user);
         $gmailQueue = (string) (config('queue.gmail_queue') ?: 'default');
         SyncGmailMessages::dispatch($user, 90, 300)->onQueue($gmailQueue);

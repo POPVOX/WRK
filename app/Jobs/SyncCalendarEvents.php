@@ -9,15 +9,26 @@ use App\Models\User;
 use App\Services\GoogleCalendarService;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Throwable;
 
-class SyncCalendarEvents implements ShouldQueue
+class SyncCalendarEvents implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public int $tries = 3;
+
+    public int $timeout = 75;
+
+    public bool $failOnTimeout = true;
+
+    public int $uniqueFor = 900;
 
     public function __construct(
         public User $user,
@@ -29,15 +40,35 @@ class SyncCalendarEvents implements ShouldQueue
         $this->endDate = $endDate ?? now()->addMonths(12);
     }
 
+    public function uniqueId(): string
+    {
+        return 'calendar-user-'.$this->user->id;
+    }
+
+    /** @return array<int, int> */
+    public function backoff(): array
+    {
+        return [30, 120];
+    }
+
     public function handle(GoogleCalendarService $calendarService): void
     {
-        $syncSucceeded = false;
-
         if (! $calendarService->isConnected($this->user)) {
             Log::info("Calendar sync skipped for user {$this->user->id} - not connected");
 
+            $this->user->update([
+                'calendar_sync_status' => 'disconnected',
+                'calendar_sync_error' => null,
+            ]);
+
             return;
         }
+
+        $this->user->update([
+            'calendar_sync_status' => 'running',
+            'calendar_sync_started_at' => now(),
+            'calendar_sync_error' => null,
+        ]);
 
         Log::info("Starting calendar sync for user {$this->user->id} ({$this->startDate->format('Y-m-d')} to {$this->endDate->format('Y-m-d')})");
 
@@ -56,6 +87,10 @@ class SyncCalendarEvents implements ShouldQueue
                 $start = $event->getStart();
                 $dateTime = $start->getDateTime() ?? $start->getDate();
                 $eventDate = Carbon::parse($dateTime);
+                $meetingTime = $start->getDateTime() ? $eventDate->format('H:i:s') : null;
+                $eventEnd = method_exists($event, 'getEnd') ? $event->getEnd() : null;
+                $endDateTime = $eventEnd?->getDateTime();
+                $meetingEndTime = $endDateTime ? Carbon::parse($endDateTime)->format('H:i:s') : null;
 
                 // Check if meeting already exists
                 $existingMeeting = Meeting::where('google_event_id', $eventId)->first();
@@ -67,6 +102,18 @@ class SyncCalendarEvents implements ShouldQueue
                     $hangoutLink = $event->getHangoutLink();
 
                     $updates = [];
+
+                    if (! $existingMeeting->meeting_date?->isSameDay($eventDate)) {
+                        $updates['meeting_date'] = $eventDate->toDateString();
+                    }
+
+                    if ($existingMeeting->meeting_time !== $meetingTime) {
+                        $updates['meeting_time'] = $meetingTime;
+                    }
+
+                    if ($existingMeeting->meeting_end_time !== $meetingEndTime) {
+                        $updates['meeting_end_time'] = $meetingEndTime;
+                    }
 
                     if ($existingMeeting->title !== $title) {
                         $updates['title'] = $title;
@@ -102,6 +149,8 @@ class SyncCalendarEvents implements ShouldQueue
                         $existingMeeting->update($updates);
                         $updated++;
                     }
+
+                    $existingMeeting->teamMembers()->syncWithoutDetaching([$this->user->id]);
 
                     continue;
                 }
@@ -214,7 +263,9 @@ class SyncCalendarEvents implements ShouldQueue
                 $meeting = Meeting::create([
                     'user_id' => $this->user->id,
                     'title' => $title,
-                    'meeting_date' => $eventDate,
+                    'meeting_date' => $eventDate->toDateString(),
+                    'meeting_time' => $meetingTime,
+                    'meeting_end_time' => $meetingEndTime,
                     'location' => $location,
                     'meeting_link' => $meetingLink,
                     'meeting_link_type' => $meetingLinkType,
@@ -237,14 +288,43 @@ class SyncCalendarEvents implements ShouldQueue
             }
 
             Log::info("Calendar sync completed for user {$this->user->id}: {$imported} new, {$updated} updated");
-            $syncSucceeded = true;
-        } catch (\Exception $e) {
-            Log::error("Calendar sync failed for user {$this->user->id}: ".$e->getMessage());
-        } finally {
-            if ($syncSucceeded) {
-                $this->user->update(['calendar_import_date' => now()]);
-            }
+
+            $this->user->update([
+                'calendar_import_date' => now(),
+                'calendar_sync_status' => 'succeeded',
+                'calendar_sync_completed_at' => now(),
+                'calendar_sync_failed_at' => null,
+                'calendar_sync_error' => null,
+            ]);
+        } catch (Throwable $exception) {
+            $this->recordFailure($exception);
+
+            Log::error("Calendar sync failed for user {$this->user->id}", [
+                'exception' => $exception,
+            ]);
+
+            throw $exception;
         }
+    }
+
+    public function failed(?Throwable $exception): void
+    {
+        $this->recordFailure($exception ?? new \RuntimeException('Calendar sync job failed.'));
+    }
+
+    protected function recordFailure(Throwable $exception): void
+    {
+        $message = preg_replace(
+            '/(access_token|refresh_token)=([^&\s]+)/i',
+            '$1=[redacted]',
+            $exception->getMessage()
+        ) ?: 'Calendar sync failed.';
+
+        $this->user->update([
+            'calendar_sync_status' => 'failed',
+            'calendar_sync_failed_at' => now(),
+            'calendar_sync_error' => Str::limit($message, 1000),
+        ]);
     }
 
     /**
