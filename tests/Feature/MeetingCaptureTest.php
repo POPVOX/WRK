@@ -346,4 +346,10 @@ test('meeting capture applies a full set of extracted parliamentary relationship
 
     expect(Organization::query()->where('name', 'Commonwealth')->exists())->toBeFalse();
     expect(Person::query()->where('name', 'Elvis Chipuka')->exists())->toBeFalse();
+
+    $component->call('save')->assertRedirect();
+    $meeting = Meeting::query()->where('title', 'National Assembly of Zambia ICT Integration Discussion')->firstOrFail();
+    expect($meeting->organizations()->count())->toBe(count($organizations) - 1)
+        ->and($meeting->people()->count())->toBe(count($people) - 1)
+        ->and($meeting->issues()->count())->toBe(count($issues));
 });

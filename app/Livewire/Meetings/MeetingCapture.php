@@ -14,6 +14,7 @@ use App\Services\MeetingAIService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
@@ -763,24 +764,38 @@ class MeetingCapture extends Component
             'commitments_made' => $this->commitmentsMade,
         ];
 
-        if ($this->editingMeeting) {
-            // Update existing meeting
-            $this->editingMeeting->update($meetingData);
-            $meeting = $this->editingMeeting;
-            $message = 'Meeting updated successfully!';
-        } else {
-            // Create new meeting
-            $meetingData['user_id'] = Auth::id();
-            $meetingData['status'] = Meeting::STATUS_NEW;
-            $meeting = Meeting::create($meetingData);
-            $message = 'Meeting logged successfully!';
-        }
+        try {
+            [$meeting, $message] = DB::transaction(function () use ($meetingData): array {
+                if ($this->editingMeeting) {
+                    $this->editingMeeting->update($meetingData);
+                    $meeting = $this->editingMeeting;
+                    $message = 'Meeting updated successfully!';
+                } else {
+                    $meetingData['user_id'] = Auth::id();
+                    $meetingData['status'] = Meeting::STATUS_NEW;
+                    $meeting = Meeting::create($meetingData);
+                    $message = 'Meeting logged successfully!';
+                }
 
-        // Sync relationships
-        $meeting->organizations()->sync($this->selectedOrganizations);
-        $meeting->people()->sync($this->selectedPeople);
-        $meeting->issues()->sync($this->selectedIssues);
-        $meeting->teamMembers()->sync($this->selectedTeamMembers);
+                $meeting->organizations()->sync($this->selectedOrganizations);
+                $meeting->people()->sync($this->selectedPeople);
+                $meeting->issues()->sync($this->selectedIssues);
+                $meeting->teamMembers()->sync($this->selectedTeamMembers);
+
+                return [$meeting, $message];
+            });
+        } catch (\Throwable $exception) {
+            \Log::error('Meeting save failed', [
+                'user_id' => Auth::id(),
+                'editing_meeting_id' => $this->editingMeeting?->id,
+                'exception' => $exception,
+            ]);
+            $message = 'The meeting could not be saved. Your form is still intact; please retry after refreshing, or ask an administrator to check the database.';
+            $this->dispatch('notify', type: 'error', message: $message);
+            $this->addError('save', $message);
+
+            return null;
+        }
 
         // Handle file uploads (only for new attachments)
         foreach ($this->attachments as $file) {

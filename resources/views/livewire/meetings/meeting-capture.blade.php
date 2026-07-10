@@ -492,6 +492,9 @@
 
                     <!-- Submit -->
                     <div class="flex items-center justify-end gap-4">
+                        @error('save')
+                            <span class="mr-auto text-sm text-red-600 dark:text-red-400">{{ $message }}</span>
+                        @enderror
                         <a href="{{ route('meetings.index') }}"
                             class="text-sm text-gray-600 dark:text-gray-400 hover:underline">
                             Cancel
