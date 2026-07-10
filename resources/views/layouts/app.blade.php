@@ -55,6 +55,7 @@
             ];
         }
         if ($user && $user->isManagement()) {
+            $adminNav[] = ['label' => 'Attention Pilot', 'route' => 'attention.insights', 'active' => ['attention.insights']];
             $adminNav[] = ['label' => 'Notifications', 'route' => 'notifications.admin', 'active' => ['notifications.admin']];
         }
 

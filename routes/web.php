@@ -117,6 +117,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Manager notifications admin
     Route::get('/notifications/admin', \App\Livewire\Admin\NotificationsManager::class)->name('notifications.admin');
+    Route::get('/admin/attention-pilot', \App\Livewire\Admin\AttentionPilotInsights::class)->name('attention.insights');
 
     // Admin routes
     Route::middleware(['admin'])->prefix('admin')->group(function () {
