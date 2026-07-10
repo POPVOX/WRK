@@ -10,6 +10,8 @@ use Illuminate\Support\Str;
 
 class MeetingAIService
 {
+    protected const MAX_EXTRACTION_CHARACTERS = 60_000;
+
     protected ?string $apiKey;
 
     public function __construct()
@@ -52,6 +54,8 @@ class MeetingAIService
             );
         }
 
+        $text = self::prepareNotes($text);
+
         $prompt = <<<PROMPT
 Analyze the following meeting notes or transcript and extract structured information.
 Return a JSON object with these fields:
@@ -75,8 +79,9 @@ Respond with ONLY valid JSON, no markdown code blocks or explanation.
 PROMPT;
 
         $response = AnthropicClient::send([
-            'max_tokens' => 2048,
-            'timeout' => 60,
+            'max_tokens' => 1600,
+            'timeout' => 90,
+            'attempts' => 1,
             'messages' => [
                 [
                     'role' => 'user',
@@ -160,6 +165,19 @@ PROMPT;
         }
 
         return $normalized;
+    }
+
+    public static function prepareNotes(string $text): string
+    {
+        $text = trim($text);
+        if (Str::length($text) <= self::MAX_EXTRACTION_CHARACTERS) {
+            return $text;
+        }
+
+        $beginning = Str::substr($text, 0, 45_000);
+        $ending = Str::substr($text, -15_000);
+
+        return $beginning."\n\n[Middle of exceptionally long notes omitted for extraction]\n\n".$ending;
     }
 
     protected function providerException(array $response): MeetingExtractionException

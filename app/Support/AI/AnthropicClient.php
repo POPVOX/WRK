@@ -29,7 +29,7 @@ class AnthropicClient
         return self::RETIRED_MODEL_REPLACEMENTS[$configuredModel] ?? $configuredModel;
     }
 
-    public static function request(?int $timeout = null): PendingRequest
+    public static function request(?int $timeout = null, int $attempts = 2): PendingRequest
     {
         $apiKey = config('services.anthropic.api_key') ?: env('ANTHROPIC_API_KEY');
 
@@ -37,24 +37,26 @@ class AnthropicClient
             'x-api-key' => $apiKey,
             'anthropic-version' => self::API_VERSION,
             'Content-Type' => 'application/json',
-        ])->timeout($timeout ?? self::DEFAULT_TIMEOUT)->retry(2, 500, null, false);
+        ])->timeout($timeout ?? self::DEFAULT_TIMEOUT)->retry($attempts, 500, null, false);
     }
 
     /**
      * Send a message to Anthropic with standard logging.
      *
-     * @param  array{messages: array<int, array{role:string,content:string}>, system?:string, max_tokens?:int, model?:string, timeout?:int}  $payload
+     * @param  array{messages: array<int, array{role:string,content:string}>, system?:string, max_tokens?:int, model?:string, timeout?:int, attempts?:int}  $payload
      */
     public static function send(array $payload): array
     {
         $timeout = $payload['timeout'] ?? null;
+        $attempts = max(1, (int) ($payload['attempts'] ?? 2));
         unset($payload['timeout']);
+        unset($payload['attempts']);
 
         $model = $payload['model'] ?? self::defaultModel();
         $baseKey = 'metrics:ai';
 
         $start = microtime(true);
-        $res = self::request($timeout)->post(self::API_URL, array_merge([
+        $res = self::request($timeout, $attempts)->post(self::API_URL, array_merge([
             'model' => $model,
             'max_tokens' => $payload['max_tokens'] ?? 2000,
         ], $payload));

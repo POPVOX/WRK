@@ -2,7 +2,7 @@
 
 namespace App\Livewire\Meetings;
 
-use App\Exceptions\MeetingExtractionException;
+use App\Jobs\ExtractMeetingNotes;
 use App\Models\Issue;
 use App\Models\Meeting;
 use App\Models\MeetingAttachment;
@@ -11,6 +11,7 @@ use App\Models\Person;
 use App\Models\User;
 use App\Services\MeetingAIService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
@@ -80,6 +81,10 @@ class MeetingCapture extends Component
     public ?string $extractionMessage = null;
 
     public string $extractionMessageType = 'info';
+
+    public ?string $extractionRequestId = null;
+
+    public ?string $extractionNotesHash = null;
 
     // Editing mode
     public ?Meeting $editingMeeting = null;
@@ -310,75 +315,157 @@ class MeetingCapture extends Component
         }
 
         $this->isExtracting = true;
-        $this->extractionMessage = null;
+        $this->extractionRequestId = (string) Str::uuid();
+        $this->extractionNotesHash = hash('sha256', $this->raw_notes);
+        $this->setExtractionMessage('info', 'AI extraction is running in the background. You can keep this page open while it finishes.');
+
+        Cache::put($this->extractionCacheKey(), [
+            'status' => 'pending',
+            'notes_hash' => $this->extractionNotesHash,
+        ], now()->addMinutes(15));
 
         try {
-            $aiService = app(MeetingAIService::class);
-            $extractedData = $aiService->extractMeetingData($this->raw_notes);
+            ExtractMeetingNotes::dispatch(
+                $this->extractionRequestId,
+                (int) Auth::id(),
+                MeetingAIService::prepareNotes($this->raw_notes),
+                $this->extractionNotesHash,
+            );
+        } catch (\Throwable $exception) {
+            \Log::error('Meeting AI extraction could not be queued', [
+                'user_id' => Auth::id(),
+                'exception' => $exception,
+            ]);
+            Cache::forget($this->extractionCacheKey());
+            $this->isExtracting = false;
+            $this->clearExtractionRequest();
+            $message = 'AI extraction could not be queued. Your notes were kept; please retry or ask an administrator to check the queue.';
+            $this->setExtractionMessage('error', $message);
+            $this->dispatch('notify', type: 'error', message: $message);
 
-            // Auto-fill title if empty
-            if (empty($this->title) && ! empty($extractedData['suggested_title'])) {
-                $this->title = $extractedData['suggested_title'];
-            }
+            return;
+        }
 
-            // Auto-fill date if suggested
-            if (! empty($extractedData['suggested_date'])) {
-                $this->meeting_date = $extractedData['suggested_date'];
-            }
+        // The test/local sync queue may already have completed the job.
+        $this->checkExtractionStatus();
+    }
 
-            // Auto-fill organizations
-            foreach ($extractedData['organizations'] as $name) {
-                $org = $this->findOrCreateOrganization($name);
-                if (! in_array($org->id, $this->selectedOrganizations)) {
-                    $this->selectedOrganizations[] = $org->id;
-                }
-            }
+    public function checkExtractionStatus(): void
+    {
+        if (! $this->isExtracting || ! $this->extractionRequestId) {
+            return;
+        }
 
-            // Auto-fill people
-            foreach ($extractedData['people'] as $name) {
-                $person = $this->findOrCreatePerson($name);
-                if (! in_array($person->id, $this->selectedPeople)) {
-                    $this->selectedPeople[] = $person->id;
-                }
-            }
+        $result = Cache::get($this->extractionCacheKey());
+        $status = $result['status'] ?? 'pending';
+        if (in_array($status, ['pending', 'processing'], true)) {
+            return;
+        }
 
-            // Auto-fill issues
-            foreach ($extractedData['issues'] as $name) {
-                $issue = Issue::query()
-                    ->whereRaw('LOWER(name) = LOWER(?)', [$name])
-                    ->first() ?? Issue::create(['name' => $name]);
-                if (! in_array($issue->id, $this->selectedIssues)) {
-                    $this->selectedIssues[] = $issue->id;
-                }
-            }
+        Cache::forget($this->extractionCacheKey());
+        $this->isExtracting = false;
 
-            // Store AI-generated text fields
-            $this->aiSummary = $extractedData['ai_summary'] ?? null;
-            $this->keyAsk = $extractedData['key_ask'] ?? null;
-            $this->commitmentsMade = $extractedData['commitments_made'] ?? null;
+        if ($status === 'failed') {
+            $message = (string) ($result['message'] ?? 'AI extraction failed. Please retry or check Admin → Metrics.');
+            $this->setExtractionMessage('error', $message);
+            $this->dispatch('notify', type: 'error', message: $message);
+            $this->clearExtractionRequest();
 
+            return;
+        }
+
+        if (($result['notes_hash'] ?? null) !== $this->extractionNotesHash) {
+            $message = 'The notes changed while AI extraction was running, so the older result was not applied. Please run extraction again.';
+            $this->setExtractionMessage('warning', $message);
+            $this->dispatch('notify', type: 'warning', message: $message);
+            $this->clearExtractionRequest();
+
+            return;
+        }
+
+        $extractedData = $result['data'] ?? null;
+        if (! is_array($extractedData)) {
+            $message = 'The background extraction finished without a usable result. Please retry.';
+            $this->setExtractionMessage('error', $message);
+            $this->dispatch('notify', type: 'error', message: $message);
+            $this->clearExtractionRequest();
+
+            return;
+        }
+
+        try {
+            $this->applyExtractedData($extractedData);
             $this->setExtractionMessage(
                 'success',
                 'AI extraction complete. Review the highlighted details and relationships below before saving.'
             );
             $this->dispatch('notify', type: 'success', message: 'Fields populated from AI extraction. Review and edit as needed.');
         } catch (\Throwable $exception) {
-            \Log::error('Meeting AI extraction failed', [
+            \Log::error('Meeting AI extraction result could not be applied', [
                 'user_id' => Auth::id(),
                 'exception' => $exception,
             ]);
-            $message = $exception instanceof MeetingExtractionException
-                ? $exception->getMessage()
-                : 'AI extraction failed while applying the result. Your notes were kept; please retry or check Admin → Metrics.';
+            $message = 'AI extraction finished, but its result could not be applied. Your notes were kept; please retry or check Admin → Metrics.';
             $this->setExtractionMessage('error', $message);
-            $this->dispatch(
-                'notify',
-                type: 'error',
-                message: $message
-            );
+            $this->dispatch('notify', type: 'error', message: $message);
         } finally {
-            $this->isExtracting = false;
+            $this->clearExtractionRequest();
         }
+    }
+
+    protected function applyExtractedData(array $extractedData): void
+    {
+        // Auto-fill title if empty
+        if (empty($this->title) && ! empty($extractedData['suggested_title'])) {
+            $this->title = $extractedData['suggested_title'];
+        }
+
+        // Auto-fill date if suggested
+        if (! empty($extractedData['suggested_date'])) {
+            $this->meeting_date = $extractedData['suggested_date'];
+        }
+
+        // Auto-fill organizations
+        foreach ($extractedData['organizations'] as $name) {
+            $org = $this->findOrCreateOrganization($name);
+            if (! in_array($org->id, $this->selectedOrganizations)) {
+                $this->selectedOrganizations[] = $org->id;
+            }
+        }
+
+        // Auto-fill people
+        foreach ($extractedData['people'] as $name) {
+            $person = $this->findOrCreatePerson($name);
+            if (! in_array($person->id, $this->selectedPeople)) {
+                $this->selectedPeople[] = $person->id;
+            }
+        }
+
+        // Auto-fill issues
+        foreach ($extractedData['issues'] as $name) {
+            $issue = Issue::query()
+                ->whereRaw('LOWER(name) = LOWER(?)', [$name])
+                ->first() ?? Issue::create(['name' => $name]);
+            if (! in_array($issue->id, $this->selectedIssues)) {
+                $this->selectedIssues[] = $issue->id;
+            }
+        }
+
+        // Store AI-generated text fields
+        $this->aiSummary = $extractedData['ai_summary'] ?? null;
+        $this->keyAsk = $extractedData['key_ask'] ?? null;
+        $this->commitmentsMade = $extractedData['commitments_made'] ?? null;
+    }
+
+    protected function extractionCacheKey(): string
+    {
+        return ExtractMeetingNotes::cacheKeyFor($this->extractionRequestId, (int) Auth::id());
+    }
+
+    protected function clearExtractionRequest(): void
+    {
+        $this->extractionRequestId = null;
+        $this->extractionNotesHash = null;
     }
 
     protected function setExtractionMessage(string $type, string $message): void

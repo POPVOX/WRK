@@ -1,4 +1,4 @@
-<div>
+<div @if($isExtracting) wire:poll.2s="checkExtractionStatus" @endif>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
             {{ __('Log New Meeting') }}
@@ -189,26 +189,36 @@
                                 {{-- Extract Button --}}
                                 <button type="button" wire:click="extractWithAI" wire:loading.attr="disabled"
                                     wire:loading.class="opacity-50"
-                                    class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md text-white shadow-sm transition-all {{ $extractionPaused ? 'bg-gray-400 cursor-not-allowed' : '' }}"
-                                    style="{{ !$extractionPaused ? 'background-color: #7c3aed;' : '' }}"
-                                    {{ $extractionPaused ? 'disabled' : '' }}>
-                                    <span wire:loading.remove wire:target="extractWithAI">
-                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                        </svg>
-                                        Extract with AI
-                                    </span>
-                                    <span wire:loading wire:target="extractWithAI">
-                                        <svg class="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                                stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor"
-                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                                            </path>
-                                        </svg>
-                                        Extracting...
-                                    </span>
+                                    class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md text-white shadow-sm transition-all {{ $extractionPaused || $isExtracting ? 'bg-gray-400 cursor-not-allowed' : '' }}"
+                                    style="{{ !$extractionPaused && !$isExtracting ? 'background-color: #7c3aed;' : '' }}"
+                                    {{ $extractionPaused || $isExtracting ? 'disabled' : '' }}>
+                                    @if($isExtracting)
+                                        <span class="inline-flex items-center">
+                                            <svg class="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Extracting in background...
+                                        </span>
+                                    @else
+                                        <span wire:loading.remove wire:target="extractWithAI">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                            </svg>
+                                            Extract with AI
+                                        </span>
+                                        <span wire:loading wire:target="extractWithAI">
+                                            <svg class="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                                    stroke-width="4"></circle>
+                                                <path class="opacity-75" fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                                </path>
+                                            </svg>
+                                            Queuing...
+                                        </span>
+                                    @endif
                                 </button>
                             </div>
                         </div>
@@ -417,8 +427,8 @@
                             class="text-sm text-gray-600 dark:text-gray-400 hover:underline">
                             Cancel
                         </a>
-                        <button type="submit"
-                            class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 focus:bg-indigo-700 active:bg-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition ease-in-out duration-150">
+                        <button type="submit" {{ $isExtracting ? 'disabled' : '' }}
+                            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition ease-in-out duration-150 {{ $isExtracting ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:bg-indigo-700 active:bg-indigo-900' }}">
                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M5 13l4 4L19 7" />

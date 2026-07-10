@@ -7,6 +7,7 @@ use App\Models\Person;
 use App\Models\User;
 use App\Support\AI\AnthropicClient;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 test('meeting capture adds and saves organizations and attendees', function () {
@@ -149,6 +150,27 @@ test('meeting capture uses action-synchronized models for notes and relationship
         ->assertSee('wire:model="newOrganization"', false)
         ->assertSee('wire:model="newPerson"', false)
         ->assertDontSee('wire:model.live.debounce.500ms="raw_notes"', false);
+});
+
+test('meeting capture queues extraction instead of holding the browser request open', function () {
+    Queue::fake();
+    $user = User::factory()->create();
+    $notes = str_repeat('Detailed meeting note. ', 4000);
+
+    Livewire::actingAs($user)
+        ->test(MeetingCapture::class)
+        ->set('raw_notes', $notes)
+        ->call('extractWithAI')
+        ->assertSet('isExtracting', true)
+        ->assertSet('extractionMessageType', 'info')
+        ->assertSee('AI extraction is running in the background')
+        ->assertSee('wire:poll.2s="checkExtractionStatus"', false)
+        ->assertSee('Extracting in background...');
+
+    Queue::assertPushed(\App\Jobs\ExtractMeetingNotes::class, fn ($job): bool => $job->userId === $user->id
+        && strlen($job->notes) < strlen($notes)
+        && str_contains($job->notes, 'Middle of exceptionally long notes omitted'));
+    Http::assertNothingSent();
 });
 
 test('meeting capture parses JSON from a later AI text block', function () {
