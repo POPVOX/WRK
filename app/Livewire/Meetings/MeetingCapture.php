@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\MeetingAIService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Rule;
 use Livewire\Attributes\Title;
@@ -105,15 +106,19 @@ class MeetingCapture extends Component
 
     public function addOrganization()
     {
-        if (empty($this->newOrganization)) {
+        $name = $this->normalizeRelationshipName($this->newOrganization);
+        if ($name === '') {
+            $this->dispatch('notify', type: 'warning', message: 'Enter an organization name first.');
+
             return;
         }
 
-        $org = Organization::firstOrCreate(['name' => $this->newOrganization]);
+        $org = $this->findOrCreateOrganization($name);
         if (! in_array($org->id, $this->selectedOrganizations)) {
             $this->selectedOrganizations[] = $org->id;
         }
         $this->newOrganization = '';
+        $this->dispatch('notify', type: 'success', message: "Added {$org->name} to this meeting.");
     }
 
     public function removeOrganization($id)
@@ -126,15 +131,19 @@ class MeetingCapture extends Component
 
     public function addPerson()
     {
-        if (empty($this->newPerson)) {
+        $name = $this->normalizeRelationshipName($this->newPerson);
+        if ($name === '') {
+            $this->dispatch('notify', type: 'warning', message: 'Enter an attendee name first.');
+
             return;
         }
 
-        $person = Person::firstOrCreate(['name' => $this->newPerson]);
+        $person = $this->findOrCreatePerson($name);
         if (! in_array($person->id, $this->selectedPeople)) {
             $this->selectedPeople[] = $person->id;
         }
         $this->newPerson = '';
+        $this->dispatch('notify', type: 'success', message: "Added {$person->name} to this meeting.");
     }
 
     public function removePerson($id)
@@ -147,11 +156,14 @@ class MeetingCapture extends Component
 
     public function addIssue()
     {
-        if (empty($this->newIssue)) {
+        $name = $this->normalizeRelationshipName($this->newIssue);
+        if ($name === '') {
             return;
         }
 
-        $issue = Issue::firstOrCreate(['name' => $this->newIssue]);
+        $issue = Issue::query()
+            ->whereRaw('LOWER(name) = LOWER(?)', [$name])
+            ->first() ?? Issue::create(['name' => $name]);
         if (! in_array($issue->id, $this->selectedIssues)) {
             $this->selectedIssues[] = $issue->id;
         }
@@ -307,24 +319,26 @@ class MeetingCapture extends Component
             }
 
             // Auto-fill organizations
-            foreach ($extractedData['organizations'] ?? [] as $name) {
-                $org = Organization::firstOrCreate(['name' => $name]);
+            foreach ($extractedData['organizations'] as $name) {
+                $org = $this->findOrCreateOrganization($name);
                 if (! in_array($org->id, $this->selectedOrganizations)) {
                     $this->selectedOrganizations[] = $org->id;
                 }
             }
 
             // Auto-fill people
-            foreach ($extractedData['people'] ?? [] as $name) {
-                $person = Person::firstOrCreate(['name' => $name]);
+            foreach ($extractedData['people'] as $name) {
+                $person = $this->findOrCreatePerson($name);
                 if (! in_array($person->id, $this->selectedPeople)) {
                     $this->selectedPeople[] = $person->id;
                 }
             }
 
             // Auto-fill issues
-            foreach ($extractedData['issues'] ?? [] as $name) {
-                $issue = Issue::firstOrCreate(['name' => $name]);
+            foreach ($extractedData['issues'] as $name) {
+                $issue = Issue::query()
+                    ->whereRaw('LOWER(name) = LOWER(?)', [$name])
+                    ->first() ?? Issue::create(['name' => $name]);
                 if (! in_array($issue->id, $this->selectedIssues)) {
                     $this->selectedIssues[] = $issue->id;
                 }
@@ -336,12 +350,42 @@ class MeetingCapture extends Component
             $this->commitmentsMade = $extractedData['commitments_made'] ?? null;
 
             $this->dispatch('notify', type: 'success', message: 'Fields populated from AI extraction. Review and edit as needed.');
-        } catch (\Exception $e) {
-            \Log::error('AI extraction error: '.$e->getMessage());
-            $this->dispatch('notify', type: 'error', message: 'Error extracting data: '.$e->getMessage());
+        } catch (\Throwable $exception) {
+            \Log::error('Meeting AI extraction failed', [
+                'user_id' => Auth::id(),
+                'exception' => $exception,
+            ]);
+            $this->dispatch(
+                'notify',
+                type: 'error',
+                message: 'AI extraction failed. Your notes were kept; please try again or check Admin → Integrations.'
+            );
+        } finally {
+            $this->isExtracting = false;
         }
+    }
 
-        $this->isExtracting = false;
+    protected function normalizeRelationshipName(mixed $name): string
+    {
+        return Str::limit(Str::squish((string) $name), 255, '');
+    }
+
+    protected function findOrCreateOrganization(mixed $name): Organization
+    {
+        $normalizedName = $this->normalizeRelationshipName($name);
+
+        return Organization::query()
+            ->whereRaw('LOWER(name) = LOWER(?)', [$normalizedName])
+            ->first() ?? Organization::create(['name' => $normalizedName]);
+    }
+
+    protected function findOrCreatePerson(mixed $name): Person
+    {
+        $normalizedName = $this->normalizeRelationshipName($name);
+
+        return Person::query()
+            ->whereRaw('LOWER(name) = LOWER(?)', [$normalizedName])
+            ->first() ?? Person::create(['name' => $normalizedName]);
     }
 
     public function save()

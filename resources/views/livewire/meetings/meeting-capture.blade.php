@@ -212,7 +212,7 @@
                                 </button>
                             </div>
                         </div>
-                        <x-mention-textarea id="raw_notes" wire:model.live.debounce.500ms="raw_notes" rows="8"
+                        <x-mention-textarea id="raw_notes" wire:model="raw_notes" rows="8"
                             placeholder="Enter your meeting notes here. Type @ to mention people, organizations, or staff. Record/upload audio above, then click 'Extract with AI' to auto-fill..." />
                         @error('raw_notes') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                     </div>
@@ -223,7 +223,7 @@
                             Organizations
                         </label>
                         <div class="flex gap-2 mb-2">
-                            <input type="text" wire:model.live="newOrganization" wire:keydown.enter.prevent="addOrganization"
+                            <input type="text" wire:model="newOrganization" wire:keydown.enter.prevent="addOrganization"
                                 placeholder="Type name to add (new or existing)..." list="org-suggestions"
                                 class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm">
                             <datalist id="org-suggestions">
@@ -260,7 +260,7 @@
                             Attendees
                         </label>
                         <div class="flex gap-2 mb-2">
-                            <input type="text" wire:model.live="newPerson" wire:keydown.enter.prevent="addPerson"
+                            <input type="text" wire:model="newPerson" wire:keydown.enter.prevent="addPerson"
                                 placeholder="Type name to add (new or existing)..." list="person-suggestions"
                                 class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm">
                             <datalist id="person-suggestions">
@@ -297,7 +297,7 @@
                             Issues/Topics
                         </label>
                         <div class="flex gap-2 mb-2">
-                            <input type="text" wire:model.live="newIssue" wire:keydown.enter.prevent="addIssue"
+                            <input type="text" wire:model="newIssue" wire:keydown.enter.prevent="addIssue"
                                 placeholder="Type issue or topic..." list="issue-suggestions"
                                 class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm">
                             <datalist id="issue-suggestions">

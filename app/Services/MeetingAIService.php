@@ -3,7 +3,11 @@
 namespace App\Services;
 
 use App\Support\AI\AnthropicClient;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use RuntimeException;
+use UnexpectedValueException;
 
 class MeetingAIService
 {
@@ -33,14 +37,17 @@ class MeetingAIService
      */
     public function extractMeetingData(string $text): array
     {
+        if (! config('ai.enabled')) {
+            throw new RuntimeException('AI extraction is disabled.');
+        }
+
         if (empty($this->apiKey)) {
             Log::error('Anthropic API key not configured');
 
-            return $this->getEmptyExtraction();
+            throw new RuntimeException('AI extraction is not configured.');
         }
 
-        try {
-            $prompt = <<<PROMPT
+        $prompt = <<<PROMPT
 Analyze the following meeting notes or transcript and extract structured information.
 Return a JSON object with these fields:
 - suggested_title: a short, descriptive title for this meeting (max 60 chars, e.g. "Housing Policy Discussion with City Council")
@@ -62,56 +69,91 @@ Meeting notes:
 Respond with ONLY valid JSON, no markdown code blocks or explanation.
 PROMPT;
 
-            $response = AnthropicClient::send([
-                'max_tokens' => 1024,
-                'messages' => [
-                    [
-                        'role' => 'user',
-                        'content' => $prompt,
-                    ],
+        $response = AnthropicClient::send([
+            'max_tokens' => 1024,
+            'timeout' => 60,
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => $prompt,
                 ],
+            ],
+        ]);
+
+        if ($response['error'] ?? false) {
+            Log::error('Anthropic API error during meeting extraction', [
+                'status' => $response['status'] ?? null,
+                'body' => Str::limit((string) ($response['body'] ?? ''), 500),
             ]);
 
-            if ($response['error'] ?? false) {
-                Log::error('Anthropic API error: '.($response['body'] ?? ''));
-
-                return $this->getEmptyExtraction();
-            }
-
-            $content = data_get($response, 'content.0.text', '');
-
-            // Parse JSON response
-            $data = json_decode($content, true);
-
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                // Try to extract JSON from the response if it's wrapped
-                if (preg_match('/\{[\s\S]*\}/', $content, $matches)) {
-                    $data = json_decode($matches[0], true);
-                }
-            }
-
-            return $data ?? $this->getEmptyExtraction();
-        } catch (\Exception $e) {
-            Log::error('AI extraction error: '.$e->getMessage());
-
-            return $this->getEmptyExtraction();
+            throw new RuntimeException('The AI provider rejected the extraction request.');
         }
+
+        $content = trim((string) data_get($response, 'content.0.text', ''));
+        if ($content === '') {
+            throw new UnexpectedValueException('The AI provider returned an empty extraction.');
+        }
+
+        $data = json_decode($content, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE && preg_match('/\{[\s\S]*\}/', $content, $matches)) {
+            $data = json_decode($matches[0], true);
+        }
+
+        if (! is_array($data) || json_last_error() !== JSON_ERROR_NONE) {
+            throw new UnexpectedValueException('The AI provider returned invalid structured data.');
+        }
+
+        $normalized = [
+            'suggested_title' => Str::limit(Str::squish((string) ($data['suggested_title'] ?? '')), 255, ''),
+            'organizations' => $this->normalizeNameList($data['organizations'] ?? []),
+            'people' => $this->normalizeNameList($data['people'] ?? []),
+            'issues' => $this->normalizeNameList($data['issues'] ?? []),
+            'key_ask' => trim((string) ($data['key_ask'] ?? '')),
+            'commitments_made' => trim((string) ($data['commitments_made'] ?? '')),
+            'suggested_date' => $this->normalizeDate($data['suggested_date'] ?? null),
+            'ai_summary' => trim((string) ($data['ai_summary'] ?? '')),
+        ];
+
+        if ($normalized['suggested_title'] === ''
+            && $normalized['ai_summary'] === ''
+            && $normalized['organizations'] === []
+            && $normalized['people'] === []
+            && $normalized['issues'] === []) {
+            throw new UnexpectedValueException('The AI provider did not identify any meeting information.');
+        }
+
+        return $normalized;
     }
 
-    /**
-     * Get empty extraction result.
-     */
-    protected function getEmptyExtraction(): array
+    /** @return array<int, string> */
+    protected function normalizeNameList(mixed $values): array
     {
-        return [
-            'suggested_title' => '',
-            'organizations' => [],
-            'people' => [],
-            'issues' => [],
-            'key_ask' => '',
-            'commitments_made' => '',
-            'suggested_date' => null,
-            'ai_summary' => '',
-        ];
+        if (! is_array($values)) {
+            return [];
+        }
+
+        return collect($values)
+            ->filter(fn ($value): bool => is_string($value))
+            ->map(fn (string $value): string => Str::limit(Str::squish($value), 255, ''))
+            ->filter()
+            ->unique(fn (string $value): string => Str::lower($value))
+            ->values()
+            ->all();
+    }
+
+    protected function normalizeDate(mixed $value): ?string
+    {
+        if (! is_string($value) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return null;
+        }
+
+        try {
+            $date = Carbon::createFromFormat('!Y-m-d', $value);
+
+            return $date && $date->format('Y-m-d') === $value ? $value : null;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }
