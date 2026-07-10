@@ -215,7 +215,47 @@
                         <x-mention-textarea id="raw_notes" wire:model="raw_notes" rows="8"
                             placeholder="Enter your meeting notes here. Type @ to mention people, organizations, or staff. Record/upload audio above, then click 'Extract with AI' to auto-fill..." />
                         @error('raw_notes') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+
+                        @if($extractionMessage)
+                            <div id="ai-extraction-status" aria-live="polite"
+                                class="mt-3 rounded-lg border px-4 py-3 text-sm {{ $extractionMessageType === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300' : ($extractionMessageType === 'error' ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300' : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300') }}">
+                                {{ $extractionMessage }}
+                            </div>
+                        @endif
                     </div>
+
+                    @if($aiSummary !== null || $keyAsk !== null || $commitmentsMade !== null)
+                        <section id="ai-extraction-results"
+                            class="rounded-lg border border-purple-200 bg-purple-50/70 p-4 dark:border-purple-800 dark:bg-purple-900/20">
+                            <div class="mb-4">
+                                <h3 class="text-sm font-semibold text-purple-900 dark:text-purple-200">AI-extracted meeting details</h3>
+                                <p class="mt-1 text-xs text-purple-700 dark:text-purple-300">These fields will be saved with the meeting. Review and edit them as needed.</p>
+                            </div>
+
+                            <div class="space-y-4">
+                                <div>
+                                    <label for="ai_summary" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Summary</label>
+                                    <textarea id="ai_summary" wire:model="aiSummary" rows="3"
+                                        placeholder="No summary was identified."
+                                        class="mt-1 block w-full rounded-md border-purple-200 shadow-sm focus:border-purple-500 focus:ring-purple-500 dark:border-purple-700 dark:bg-gray-800 dark:text-white sm:text-sm"></textarea>
+                                </div>
+                                <div class="grid gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label for="key_ask" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Key ask</label>
+                                        <textarea id="key_ask" wire:model="keyAsk" rows="3"
+                                            placeholder="No key ask was identified."
+                                            class="mt-1 block w-full rounded-md border-purple-200 shadow-sm focus:border-purple-500 focus:ring-purple-500 dark:border-purple-700 dark:bg-gray-800 dark:text-white sm:text-sm"></textarea>
+                                    </div>
+                                    <div>
+                                        <label for="commitments_made" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Commitments and next steps</label>
+                                        <textarea id="commitments_made" wire:model="commitmentsMade" rows="3"
+                                            placeholder="No commitments were identified."
+                                            class="mt-1 block w-full rounded-md border-purple-200 shadow-sm focus:border-purple-500 focus:ring-purple-500 dark:border-purple-700 dark:bg-gray-800 dark:text-white sm:text-sm"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    @endif
 
                     <!-- Organizations -->
                     <div>

@@ -15,11 +15,18 @@ class AnthropicClient
 
     public const API_VERSION = '2023-06-01';
 
-    public const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+    public const DEFAULT_MODEL = 'claude-sonnet-4-6';
+
+    /** @var array<string, string> */
+    private const RETIRED_MODEL_REPLACEMENTS = [
+        'claude-sonnet-4-20250514' => self::DEFAULT_MODEL,
+    ];
 
     public static function defaultModel(): string
     {
-        return config('ai.model', self::DEFAULT_MODEL);
+        $configuredModel = (string) config('ai.model', self::DEFAULT_MODEL);
+
+        return self::RETIRED_MODEL_REPLACEMENTS[$configuredModel] ?? $configuredModel;
     }
 
     public static function request(?int $timeout = null): PendingRequest

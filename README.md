@@ -195,7 +195,7 @@
 - **Frontend:** Blade templates with Tailwind CSS
 - **Database:** SQLite (dev) / PostgreSQL (production)
 - **Real-time:** Livewire for reactive UI updates
-- **AI Integration:** Anthropic Claude API (claude-sonnet-4-20250514)
+- **AI Integration:** Anthropic Claude API (Claude Sonnet 4.6)
 - **Calendar:** Google Calendar API with OAuth 2.0
 - **Queue System:** Database-backed job queue for async processing
 

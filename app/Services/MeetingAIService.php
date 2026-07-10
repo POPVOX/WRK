@@ -70,7 +70,7 @@ Respond with ONLY valid JSON, no markdown code blocks or explanation.
 PROMPT;
 
         $response = AnthropicClient::send([
-            'max_tokens' => 1024,
+            'max_tokens' => 2048,
             'timeout' => 60,
             'messages' => [
                 [
@@ -89,18 +89,35 @@ PROMPT;
             throw new RuntimeException('The AI provider rejected the extraction request.');
         }
 
-        $content = trim((string) data_get($response, 'content.0.text', ''));
-        if ($content === '') {
+        if (($response['stop_reason'] ?? null) === 'max_tokens') {
+            throw new UnexpectedValueException('The AI response was truncated before extraction completed.');
+        }
+
+        $contentBlocks = collect($response['content'] ?? [])
+            ->filter(fn (mixed $block): bool => is_array($block)
+                && isset($block['text'])
+                && (! isset($block['type']) || $block['type'] === 'text'))
+            ->map(fn (array $block): string => trim((string) $block['text']))
+            ->filter()
+            ->values();
+
+        if ($contentBlocks->isEmpty()) {
             throw new UnexpectedValueException('The AI provider returned an empty extraction.');
         }
 
-        $data = json_decode($content, true);
-
-        if (json_last_error() !== JSON_ERROR_NONE && preg_match('/\{[\s\S]*\}/', $content, $matches)) {
-            $data = json_decode($matches[0], true);
+        $data = null;
+        foreach ($contentBlocks as $content) {
+            $data = $this->decodeJsonObject($content);
+            if (is_array($data)) {
+                break;
+            }
         }
 
-        if (! is_array($data) || json_last_error() !== JSON_ERROR_NONE) {
+        if (! is_array($data)) {
+            $data = $this->decodeJsonObject($contentBlocks->implode("\n"));
+        }
+
+        if (! is_array($data)) {
             throw new UnexpectedValueException('The AI provider returned invalid structured data.');
         }
 
@@ -119,11 +136,29 @@ PROMPT;
             && $normalized['ai_summary'] === ''
             && $normalized['organizations'] === []
             && $normalized['people'] === []
-            && $normalized['issues'] === []) {
+            && $normalized['issues'] === []
+            && $normalized['key_ask'] === ''
+            && $normalized['commitments_made'] === '') {
             throw new UnexpectedValueException('The AI provider did not identify any meeting information.');
         }
 
         return $normalized;
+    }
+
+    protected function decodeJsonObject(string $content): ?array
+    {
+        $decoded = json_decode($content, true);
+        if (is_array($decoded) && json_last_error() === JSON_ERROR_NONE) {
+            return $decoded;
+        }
+
+        if (! preg_match('/\{[\s\S]*\}/', $content, $matches)) {
+            return null;
+        }
+
+        $decoded = json_decode($matches[0], true);
+
+        return is_array($decoded) && json_last_error() === JSON_ERROR_NONE ? $decoded : null;
     }
 
     /** @return array<int, string> */

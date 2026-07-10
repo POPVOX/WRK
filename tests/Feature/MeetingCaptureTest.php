@@ -72,6 +72,8 @@ test('meeting capture extracts current notes into reviewable fields and relation
         ->assertSet('aiSummary', 'The group aligned on the next implementation phase.')
         ->assertSet('keyAsk', 'Share the implementation brief.')
         ->assertSet('commitmentsMade', 'Send the brief by Friday.')
+        ->assertSet('extractionMessageType', 'success')
+        ->assertSee('AI-extracted meeting details')
         ->assertSet('isExtracting', false)
         ->assertDispatched('notify');
 
@@ -81,8 +83,40 @@ test('meeting capture extracts current notes into reviewable fields and relation
     $component->assertSet('selectedPeople', [$person->id]);
 
     Http::assertSent(fn ($request): bool => $request->url() === AnthropicClient::API_URL
-        && $request['model'] === config('ai.model')
+        && $request['model'] === AnthropicClient::defaultModel()
         && str_contains($request['messages'][0]['content'], $notes));
+});
+
+test('meeting extraction replaces the retired Sonnet 4 model configured in an environment', function () {
+    config()->set('services.anthropic.api_key', 'test-anthropic-key');
+    config()->set('ai.enabled', true);
+    config()->set('ai.model', 'claude-sonnet-4-20250514');
+
+    Http::fake([
+        AnthropicClient::API_URL => Http::response([
+            'content' => [['type' => 'text', 'text' => json_encode([
+                'suggested_title' => 'Model migration check',
+                'organizations' => [],
+                'people' => [],
+                'issues' => [],
+                'key_ask' => '',
+                'commitments_made' => '',
+                'suggested_date' => null,
+                'ai_summary' => 'The supported model completed extraction.',
+            ])]],
+            'stop_reason' => 'end_turn',
+            'usage' => ['input_tokens' => 40, 'output_tokens' => 30],
+        ], 200),
+    ]);
+
+    Livewire::actingAs(User::factory()->create())
+        ->test(MeetingCapture::class)
+        ->set('raw_notes', 'Verify that extraction uses a supported model.')
+        ->call('extractWithAI')
+        ->assertSet('title', 'Model migration check')
+        ->assertSet('extractionMessageType', 'success');
+
+    Http::assertSent(fn ($request): bool => $request['model'] === 'claude-sonnet-4-6');
 });
 
 test('meeting capture keeps notes and reports provider failures truthfully', function () {
@@ -100,6 +134,8 @@ test('meeting capture keeps notes and reports provider failures truthfully', fun
         ->call('extractWithAI')
         ->assertSet('raw_notes', $notes)
         ->assertSet('aiSummary', null)
+        ->assertSet('extractionMessageType', 'error')
+        ->assertSee('AI extraction failed. Your notes were kept')
         ->assertSet('isExtracting', false)
         ->assertDispatched('notify', fn (string $name, array $params): bool => $params['type'] === 'error');
 });
@@ -113,4 +149,60 @@ test('meeting capture uses action-synchronized models for notes and relationship
         ->assertSee('wire:model="newOrganization"', false)
         ->assertSee('wire:model="newPerson"', false)
         ->assertDontSee('wire:model.live.debounce.500ms="raw_notes"', false);
+});
+
+test('meeting capture parses JSON from a later AI text block', function () {
+    config()->set('services.anthropic.api_key', 'test-anthropic-key');
+    config()->set('ai.enabled', true);
+
+    Http::fake([
+        AnthropicClient::API_URL => Http::response([
+            'content' => [
+                ['type' => 'text', 'text' => 'I will structure the result now.'],
+                ['type' => 'text', 'text' => json_encode([
+                    'suggested_title' => 'Internal planning',
+                    'organizations' => [],
+                    'people' => [],
+                    'issues' => [],
+                    'key_ask' => '',
+                    'commitments_made' => 'Draft the brief by Friday.',
+                    'suggested_date' => null,
+                    'ai_summary' => 'The team agreed on the next deliverable.',
+                ])],
+            ],
+            'stop_reason' => 'end_turn',
+            'usage' => ['input_tokens' => 80, 'output_tokens' => 50],
+        ], 200),
+    ]);
+
+    Livewire::actingAs(User::factory()->create())
+        ->test(MeetingCapture::class)
+        ->set('raw_notes', 'Internal planning notes with a Friday deliverable.')
+        ->call('extractWithAI')
+        ->assertSet('title', 'Internal planning')
+        ->assertSet('aiSummary', 'The team agreed on the next deliverable.')
+        ->assertSet('commitmentsMade', 'Draft the brief by Friday.')
+        ->assertSet('extractionMessageType', 'success');
+});
+
+test('meeting capture reports a truncated AI response instead of appearing successful', function () {
+    config()->set('services.anthropic.api_key', 'test-anthropic-key');
+    config()->set('ai.enabled', true);
+
+    Http::fake([
+        AnthropicClient::API_URL => Http::response([
+            'content' => [['type' => 'text', 'text' => '{']],
+            'stop_reason' => 'max_tokens',
+            'usage' => ['input_tokens' => 2000, 'output_tokens' => 2048],
+        ], 200),
+    ]);
+
+    Livewire::actingAs(User::factory()->create())
+        ->test(MeetingCapture::class)
+        ->set('raw_notes', str_repeat('Long meeting notes. ', 300))
+        ->call('extractWithAI')
+        ->assertSet('aiSummary', null)
+        ->assertSet('extractionMessageType', 'error')
+        ->assertSee('AI extraction failed. Your notes were kept')
+        ->assertDispatched('notify', fn (string $name, array $params): bool => $params['type'] === 'error');
 });

@@ -2,7 +2,7 @@
 
 return [
     'enabled' => env('AI_FEATURES_ENABLED', true),
-    'model' => env('AI_MODEL', 'claude-sonnet-4-20250514'),
+    'model' => env('AI_MODEL', 'claude-sonnet-4-6'),
     'timeout' => env('AI_HTTP_TIMEOUT', 120),
     // Basic per-action soft limits, enforced in Livewire (not middleware)
     'limits' => [

@@ -76,6 +76,10 @@ class MeetingCapture extends Component
 
     public ?string $commitmentsMade = null;
 
+    public ?string $extractionMessage = null;
+
+    public string $extractionMessageType = 'info';
+
     // Editing mode
     public ?Meeting $editingMeeting = null;
 
@@ -291,18 +295,21 @@ class MeetingCapture extends Component
     public function extractWithAI()
     {
         if (empty($this->raw_notes)) {
+            $this->setExtractionMessage('error', 'Please enter meeting notes first.');
             $this->dispatch('notify', type: 'error', message: 'Please enter meeting notes first.');
 
             return;
         }
 
         if ($this->extractionPaused) {
+            $this->setExtractionMessage('warning', 'AI extraction is paused. Unpause it to continue.');
             $this->dispatch('notify', type: 'warning', message: 'AI extraction is paused. Unpause to continue.');
 
             return;
         }
 
         $this->isExtracting = true;
+        $this->extractionMessage = null;
 
         try {
             $aiService = app(MeetingAIService::class);
@@ -349,12 +356,20 @@ class MeetingCapture extends Component
             $this->keyAsk = $extractedData['key_ask'] ?? null;
             $this->commitmentsMade = $extractedData['commitments_made'] ?? null;
 
+            $this->setExtractionMessage(
+                'success',
+                'AI extraction complete. Review the highlighted details and relationships below before saving.'
+            );
             $this->dispatch('notify', type: 'success', message: 'Fields populated from AI extraction. Review and edit as needed.');
         } catch (\Throwable $exception) {
             \Log::error('Meeting AI extraction failed', [
                 'user_id' => Auth::id(),
                 'exception' => $exception,
             ]);
+            $this->setExtractionMessage(
+                'error',
+                'AI extraction failed. Your notes were kept; please retry. If it fails again, check Admin → Integrations.'
+            );
             $this->dispatch(
                 'notify',
                 type: 'error',
@@ -363,6 +378,12 @@ class MeetingCapture extends Component
         } finally {
             $this->isExtracting = false;
         }
+    }
+
+    protected function setExtractionMessage(string $type, string $message): void
+    {
+        $this->extractionMessageType = $type;
+        $this->extractionMessage = $message;
     }
 
     protected function normalizeRelationshipName(mixed $name): string
