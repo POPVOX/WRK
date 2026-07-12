@@ -827,7 +827,7 @@ class MeetingCapture extends Component
         $organizations = Organization::orderBy('name')->get();
         $people = Person::orderBy('name')->get();
         $issues = Issue::orderBy('name')->get();
-        $teamMembers = User::orderBy('name')->get();
+        $teamMembers = User::active()->orderBy('name')->get();
 
         return view('livewire.meetings.meeting-capture', [
             'organizations' => $organizations,

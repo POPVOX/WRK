@@ -466,7 +466,7 @@ PROMPT;
             'Dubai, UAE' => [25.2048, 55.2708],
         ];
 
-        $teamMembers = User::where('is_visible', true)->whereNotNull('location')->get();
+        $teamMembers = User::active()->where('is_visible', true)->whereNotNull('location')->get();
         $mapData = [];
 
         foreach ($teamMembers as $member) {
@@ -500,7 +500,7 @@ PROMPT;
 
     public function render()
     {
-        $teamMembers = User::where('is_visible', true)->orderBy('name')->get();
+        $teamMembers = User::active()->where('is_visible', true)->orderBy('name')->get();
 
         // Only get parent messages (not replies)
         $messages = TeamMessage::with(['user', 'replies.user', 'replies.reactions.user', 'reactions.user'])

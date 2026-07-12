@@ -308,7 +308,7 @@ class MeetingList extends Component
     {
         $organizations = Organization::orderBy('name')->get();
         $issues = Issue::orderBy('name')->get();
-        $teamMembers = \App\Models\User::where('is_visible', true)->orderBy('name')->get();
+        $teamMembers = \App\Models\User::active()->where('is_visible', true)->orderBy('name')->get();
 
         return view('livewire.meetings.meeting-list', [
             'upcomingMeetings' => $this->upcomingMeetings,

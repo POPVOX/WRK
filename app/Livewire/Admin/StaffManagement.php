@@ -4,7 +4,9 @@ namespace App\Livewire\Admin;
 
 use App\Models\User;
 use App\Notifications\TeamInvitation;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -24,6 +26,8 @@ class StaffManagement extends Component
 
     public bool $showAddModal = false;
 
+    public bool $showInactive = false;
+
     public ?string $tempPassword = null;
 
     // Activation link modal
@@ -37,12 +41,16 @@ class StaffManagement extends Component
 
     // Bulk activation links
     public bool $showBulkLinksModal = false;
+
     public array $bulkActivationLinks = [];
 
     // Edit staff member
     public bool $showEditModal = false;
+
     public ?int $editingUserId = null;
+
     public string $editName = '';
+
     public string $editEmail = '';
 
     protected $rules = [
@@ -54,7 +62,7 @@ class StaffManagement extends Component
     {
         return [
             'editName' => 'required|string|max:255',
-            'editEmail' => 'required|email|unique:users,email,' . $this->editingUserId,
+            'editEmail' => 'required|email|unique:users,email,'.$this->editingUserId,
         ];
     }
 
@@ -82,6 +90,7 @@ class StaffManagement extends Component
             'email' => $this->newEmail,
             'password' => Hash::make($this->tempPassword),
             'is_admin' => $this->newIsAdmin,
+            'is_active' => true,
         ]);
 
         $this->reset(['newName', 'newEmail', 'newIsAdmin']);
@@ -103,47 +112,70 @@ class StaffManagement extends Component
         $this->dispatch('notify', type: 'success', message: 'Admin status updated.');
     }
 
-    public function deleteStaff(int $userId)
+    public function deactivateStaff(int $userId): void
     {
         $user = User::find($userId);
 
-        if (!$user) {
+        if (! $user) {
             $this->dispatch('notify', type: 'error', message: 'User not found.');
+
             return;
         }
 
-        // Prevent self-deletion
         if ($user->id === auth()->id()) {
-            $this->dispatch('notify', type: 'error', message: 'You cannot delete your own account.');
+            $this->dispatch('notify', type: 'error', message: 'You cannot deactivate your own account.');
+
             return;
         }
 
-        try {
-            // Nullify foreign key references before deletion
-            \DB::table('feedback')->where('resolved_by', $userId)->update(['resolved_by' => null]);
-            \DB::table('actions')->where('assigned_to', $userId)->update(['assigned_to' => null]);
-            \DB::table('trips')->where('created_by', $userId)->update(['created_by' => null]);
-            \DB::table('trips')->where('approved_by', $userId)->update(['approved_by' => null]);
-            \DB::table('trip_travelers')->where('user_id', $userId)->delete();
-            \DB::table('trip_segments')->where('user_id', $userId)->update(['user_id' => null]);
-            \DB::table('trip_lodging')->where('user_id', $userId)->update(['user_id' => null]);
-            \DB::table('trip_ground_transport')->where('user_id', $userId)->update(['user_id' => null]);
-            \DB::table('accomplishments')->where('user_id', $userId)->delete();
-            \DB::table('accomplishment_reactions')->where('user_id', $userId)->delete();
-            
-            $user->delete();
-            $this->dispatch('notify', type: 'success', message: 'Staff member removed.');
-        } catch (\Exception $e) {
-            \Log::error('Failed to delete user: ' . $e->getMessage());
-            $this->dispatch('notify', type: 'error', message: 'Could not delete user. They may have associated data.');
+        DB::transaction(function () use ($user): void {
+            $user->forceFill([
+                'is_active' => false,
+                'is_visible' => false,
+                'deactivated_at' => now(),
+                'deactivated_by' => auth()->id(),
+                'remember_token' => null,
+                'activation_token' => null,
+                'activation_token_expires_at' => null,
+                'google_access_token' => null,
+                'google_refresh_token' => null,
+                'google_token_expires_at' => null,
+                'calendar_sync_status' => 'disconnected',
+            ])->save();
+
+            if (Schema::hasTable('sessions')) {
+                DB::table('sessions')->where('user_id', $user->id)->delete();
+            }
+        });
+
+        $this->dispatch('notify', type: 'success', message: "{$user->name} was deactivated. Historical records were preserved.");
+    }
+
+    public function reactivateStaff(int $userId): void
+    {
+        $user = User::find($userId);
+        if (! $user) {
+            $this->dispatch('notify', type: 'error', message: 'User not found.');
+
+            return;
         }
+
+        $user->forceFill([
+            'is_active' => true,
+            'is_visible' => true,
+            'deactivated_at' => null,
+            'deactivated_by' => null,
+        ])->save();
+
+        $this->dispatch('notify', type: 'success', message: "{$user->name} was reactivated and can sign in again.");
     }
 
     public function openEditModal(int $userId): void
     {
         $user = User::find($userId);
-        if (!$user) {
+        if (! $user) {
             $this->dispatch('notify', type: 'error', message: 'User not found.');
+
             return;
         }
 
@@ -166,8 +198,9 @@ class StaffManagement extends Component
         $this->validate($this->editRules());
 
         $user = User::find($this->editingUserId);
-        if (!$user) {
+        if (! $user) {
             $this->dispatch('notify', type: 'error', message: 'User not found.');
+
             return;
         }
 
@@ -185,6 +218,12 @@ class StaffManagement extends Component
         $user = User::find($userId);
         if (! $user) {
             $this->dispatch('notify', type: 'error', message: 'User not found.');
+
+            return;
+        }
+
+        if (! $user->is_active) {
+            $this->dispatch('notify', type: 'error', message: 'Reactivate this staff member before generating an activation link.');
 
             return;
         }
@@ -217,7 +256,7 @@ class StaffManagement extends Component
 
     public function generateAllActivationLinks(): void
     {
-        $users = User::whereNull('activated_at')->get();
+        $users = User::active()->whereNull('activated_at')->get();
         $this->bulkActivationLinks = [];
 
         foreach ($users as $user) {
@@ -239,6 +278,7 @@ class StaffManagement extends Component
 
         if (empty($this->bulkActivationLinks)) {
             $this->dispatch('notify', type: 'info', message: 'All staff members have already activated their accounts.');
+
             return;
         }
 
@@ -254,13 +294,20 @@ class StaffManagement extends Component
     public function sendInviteEmail(int $userId): void
     {
         $user = User::find($userId);
-        if (!$user) {
+        if (! $user) {
             $this->dispatch('notify', type: 'error', message: 'User not found.');
+
+            return;
+        }
+
+        if (! $user->is_active) {
+            $this->dispatch('notify', type: 'error', message: 'Reactivate this staff member before sending an invite.');
+
             return;
         }
 
         // Generate activation token if needed
-        if (!$user->activation_token || ($user->activation_token_expires_at && $user->activation_token_expires_at->isPast())) {
+        if (! $user->activation_token || ($user->activation_token_expires_at && $user->activation_token_expires_at->isPast())) {
             $token = Str::random(64);
             $user->update([
                 'activation_token' => $token,
@@ -278,12 +325,12 @@ class StaffManagement extends Component
 
     public function sendAllInviteEmails(): void
     {
-        $users = User::whereNull('activated_at')->get();
+        $users = User::active()->whereNull('activated_at')->get();
         $sent = 0;
 
         foreach ($users as $user) {
             // Generate activation token if needed
-            if (!$user->activation_token || ($user->activation_token_expires_at && $user->activation_token_expires_at->isPast())) {
+            if (! $user->activation_token || ($user->activation_token_expires_at && $user->activation_token_expires_at->isPast())) {
                 $token = Str::random(64);
                 $user->update([
                     'activation_token' => $token,
@@ -309,9 +356,12 @@ class StaffManagement extends Component
     public function render()
     {
         $staff = User::query()
+            ->when(! $this->showInactive, fn ($query) => $query->active())
             ->when($this->search, function ($query) {
-                $query->where('name', 'like', '%'.$this->search.'%')
-                    ->orWhere('email', 'like', '%'.$this->search.'%');
+                $query->where(function ($searchQuery): void {
+                    $searchQuery->where('name', 'like', '%'.$this->search.'%')
+                        ->orWhere('email', 'like', '%'.$this->search.'%');
+                });
             })
             ->orderBy('name')
             ->get();

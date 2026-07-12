@@ -14,6 +14,11 @@
                     class="w-full md:w-96 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                 
                 <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" wire:click="$toggle('showInactive')"
+                        class="inline-flex items-center px-4 py-2 bg-gray-100 border border-gray-300 rounded-md font-semibold text-xs text-gray-700 uppercase tracking-widest hover:bg-gray-200 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200">
+                        {{ $showInactive ? 'Hide Former Staff' : 'Show Former Staff' }}
+                    </button>
+
                     {{-- Bulk Invite Options --}}
                     <button wire:click="generateAllActivationLinks"
                         class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700">
@@ -57,7 +62,7 @@
                         </thead>
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                             @forelse($staff as $member)
-                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 {{ $member->is_active ? '' : 'opacity-60 bg-gray-50 dark:bg-gray-900/40' }}">
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="flex items-center">
                                             <div class="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-medium">
@@ -68,6 +73,9 @@
                                                     {{ $member->name }}
                                                     @if($member->id === auth()->id())
                                                         <span class="text-xs text-gray-500">(you)</span>
+                                                    @endif
+                                                    @if(! $member->is_active)
+                                                        <span class="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-900/40 dark:text-red-300">Former staff</span>
                                                     @endif
                                                 </div>
                                             </div>
@@ -89,7 +97,9 @@
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                                         <div>{{ $member->created_at->format('M j, Y') }}</div>
-                                        @if($member->activated_at)
+                                        @if(! $member->is_active)
+                                            <span class="text-xs text-red-600 dark:text-red-400">Deactivated {{ $member->deactivated_at?->format('M j, Y') }}</span>
+                                        @elseif($member->activated_at)
                                             <span class="text-xs text-green-600 dark:text-green-400">✓ Activated</span>
                                         @elseif($member->activation_token)
                                             <span class="text-xs text-yellow-600 dark:text-yellow-400">⏳ Pending invite</span>
@@ -99,7 +109,7 @@
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div class="flex items-center justify-end gap-2">
-                                            <button wire:click="openEditModal({{ $member->id }})"
+                                            <button type="button" wire:click="openEditModal({{ $member->id }})"
                                                 class="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 dark:bg-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
                                                 title="Edit staff member">
                                                 <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,7 +117,7 @@
                                                 </svg>
                                                 Edit
                                             </button>
-                                            @if(!$member->activated_at)
+                                            @if($member->is_active && !$member->activated_at)
                                                 <button wire:click="sendInviteEmail({{ $member->id }})"
                                                     class="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 dark:bg-blue-900/40 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-900/60"
                                                     title="Send invite email">
@@ -125,15 +135,23 @@
                                                     Link
                                                 </button>
                                             @endif
-                                            <button wire:click="toggleAdmin({{ $member->id }})"
-                                                class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 text-xs">
-                                                {{ $member->is_admin ? 'Remove Admin' : 'Make Admin' }}
-                                            </button>
-                                            @if($member->id !== auth()->id())
-                                                <button wire:click="deleteStaff({{ $member->id }})" 
-                                                    wire:confirm="Are you sure you want to remove this staff member?"
-                                                    class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 text-xs">
-                                                    Delete
+                                            @if($member->is_active)
+                                                <button type="button" wire:click="toggleAdmin({{ $member->id }})"
+                                                    class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 text-xs">
+                                                    {{ $member->is_admin ? 'Remove Admin' : 'Make Admin' }}
+                                                </button>
+                                                @if($member->id !== auth()->id())
+                                                    <button type="button" wire:click="deactivateStaff({{ $member->id }})"
+                                                        wire:confirm="Deactivate {{ $member->name }}? They will be signed out and removed from active team lists. Historical records will be preserved."
+                                                        class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 text-xs">
+                                                        Deactivate
+                                                    </button>
+                                                @endif
+                                            @else
+                                                <button type="button" wire:click="reactivateStaff({{ $member->id }})"
+                                                    wire:confirm="Reactivate {{ $member->name }} and allow them to sign in again?"
+                                                    class="text-emerald-600 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300 text-xs">
+                                                    Reactivate
                                                 </button>
                                             @endif
                                         </div>

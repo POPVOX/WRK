@@ -39,6 +39,12 @@ class ActivateAccount extends Component
             return;
         }
 
+        if (! $this->user->is_active) {
+            $this->validToken = false;
+
+            return;
+        }
+
         // Check if already activated
         if ($this->user->activated_at) {
             $this->alreadyActivated = true;
@@ -87,4 +93,3 @@ class ActivateAccount extends Component
         return view('livewire.auth.activate-account');
     }
 }
-

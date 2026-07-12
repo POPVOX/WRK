@@ -60,7 +60,7 @@ class MentionSearchController extends Controller
 
         // Search Staff (Users)
         if ($type === 'all' || $type === 'staff') {
-            $staff = User::where('name', 'like', "%{$query}%")
+            $staff = User::active()->where('name', 'like', "%{$query}%")
                 ->orderBy('name')
                 ->limit(5)
                 ->get()
@@ -156,7 +156,7 @@ class MentionSearchController extends Controller
             return response()->json([]);
         }
 
-        return User::where('name', 'like', "%{$query}%")
+        return User::active()->where('name', 'like', "%{$query}%")
             ->orderBy('name')
             ->limit(10)
             ->get()

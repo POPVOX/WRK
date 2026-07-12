@@ -89,6 +89,12 @@ class GoogleLoginController extends Controller
             ]);
         }
 
+        if (! $user->is_active) {
+            return redirect()->route('login')->withErrors([
+                'form.email' => 'This WRK account has been deactivated. Contact an administrator if access should be restored.',
+            ]);
+        }
+
         if ($emailVerified && $user->email_verified_at === null) {
             $user->forceFill(['email_verified_at' => now()])->save();
         }

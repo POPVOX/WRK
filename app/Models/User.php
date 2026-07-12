@@ -46,6 +46,9 @@ class User extends Authenticatable
         'bio_medium',
         'publications',
         'is_visible',
+        'is_active',
+        'deactivated_at',
+        'deactivated_by',
         'google_access_token',
         'google_refresh_token',
         'google_token_expires_at',
@@ -87,6 +90,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
+            'is_active' => 'boolean',
+            'deactivated_at' => 'datetime',
             'start_date' => 'date',
             'end_date' => 'date',
             'onboarding_checklist' => 'array',
@@ -119,6 +124,11 @@ class User extends Authenticatable
     public function isManagement(): bool
     {
         return in_array($this->access_level, ['management', 'admin']);
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
     }
 
     /**
