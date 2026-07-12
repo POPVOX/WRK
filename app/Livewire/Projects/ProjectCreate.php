@@ -6,6 +6,7 @@ use App\Models\Person;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\Notifications\WorkspaceNotificationService;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -623,7 +624,7 @@ PROMPT;
                 $staffCollaboratorIds = array_values(array_diff($staffCollaboratorIds, [$this->lead_user_id]));
             }
 
-            $project = DB::transaction(function () use ($tags, $staffCollaboratorIds, $contactCollaboratorIds): Project {
+            $createProject = function () use ($tags, $staffCollaboratorIds, $contactCollaboratorIds): Project {
                 $project = Project::create([
                     'name' => $this->name,
                     'description' => $this->description ?: null,
@@ -679,7 +680,18 @@ PROMPT;
                 );
 
                 return $project;
-            });
+            };
+
+            try {
+                $project = DB::transaction($createProject);
+            } catch (QueryException $exception) {
+                if (! Project::isWorkspaceIdSequenceCollision($exception)) {
+                    throw $exception;
+                }
+
+                Project::repairPostgresWorkspaceIdSequences();
+                $project = DB::transaction($createProject);
+            }
 
             $addedStaffIds = collect($staffCollaboratorIds)
                 ->when(
@@ -725,7 +737,6 @@ PROMPT;
         } catch (\Throwable $exception) {
             report($exception);
             $this->saveError = 'Could not create project. Please try again.';
-            $this->addError('save', $this->saveError);
             $this->dispatch('notify', type: 'error', message: 'Could not create project. Please try again.');
 
             return null;

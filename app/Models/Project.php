@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 
 class Project extends Model
 {
@@ -62,6 +64,48 @@ class Project extends Model
         'completed' => 'Completed',
         'archived' => 'Archived',
     ];
+
+    /**
+     * Imported PostgreSQL data can leave auto-increment sequences behind the
+     * highest explicit IDs. Detect that narrow failure so creation can repair
+     * the affected workspace sequences and retry once.
+     */
+    public static function isWorkspaceIdSequenceCollision(QueryException $exception): bool
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql' || (string) $exception->getCode() !== '23505') {
+            return false;
+        }
+
+        $message = strtolower((string) $exception->getMessage());
+        $constraints = [
+            'projects_pkey',
+            'project_staff_pkey',
+            'project_person_pkey',
+            'geographables_pkey',
+        ];
+
+        return str_contains($message, '(id)=')
+            && collect($constraints)->contains(fn (string $constraint): bool => str_contains($message, $constraint));
+    }
+
+    public static function repairPostgresWorkspaceIdSequences(): void
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return;
+        }
+
+        DB::select("SELECT pg_advisory_lock(hashtext('wrk-project-workspace-sequence-repair'))");
+
+        try {
+            foreach (['projects', 'project_staff', 'project_person', 'geographables'] as $table) {
+                DB::statement(
+                    "SELECT setval(pg_get_serial_sequence('{$table}', 'id'), COALESCE(MAX(id), 1), MAX(id) IS NOT NULL) FROM {$table}"
+                );
+            }
+        } finally {
+            DB::select("SELECT pg_advisory_unlock(hashtext('wrk-project-workspace-sequence-repair'))");
+        }
+    }
 
     // Relationships
     public function meetings(): BelongsToMany
