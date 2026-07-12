@@ -15,12 +15,12 @@
                 </svg>
                 Log Clip
             </button>
-            <button wire:click="openPitchModal"
+            <button wire:click="{{ $activeTab === 'contacts' ? 'openContactModal' : 'openPitchModal' }}"
                 class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                 </svg>
-                New Pitch
+                {{ $activeTab === 'contacts' ? 'New Contact' : 'New Pitch' }}
             </button>
         </div>
     </div>
@@ -110,5 +110,10 @@
     {{-- Inquiry Modal --}}
     @if($showInquiryModal)
         @include('livewire.media.partials.inquiry-modal')
+    @endif
+
+    {{-- Press Contact Modal --}}
+    @if($showContactModal)
+        @include('livewire.media.partials/contact-modal')
     @endif
 </div>

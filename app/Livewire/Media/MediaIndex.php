@@ -57,6 +57,8 @@ class MediaIndex extends Component
 
     public bool $showInquiryModal = false;
 
+    public bool $showContactModal = false;
+
     public ?int $editingId = null;
 
     // Clip form
@@ -67,6 +69,9 @@ class MediaIndex extends Component
 
     // Inquiry form
     public array $inquiryForm = [];
+
+    // Press contact form
+    public array $contactForm = [];
 
     protected $queryString = [
         'activeTab' => ['except' => 'dashboard'],
@@ -79,6 +84,7 @@ class MediaIndex extends Component
         $this->resetClipForm();
         $this->resetPitchForm();
         $this->resetInquiryForm();
+        $this->resetContactForm();
     }
 
     public function setTab(string $tab): void
@@ -431,6 +437,57 @@ class MediaIndex extends Component
     }
 
     // ===== Press Contacts =====
+
+    public function openContactModal(): void
+    {
+        $this->resetContactForm();
+        $this->showContactModal = true;
+    }
+
+    public function saveContact(): void
+    {
+        $this->validate([
+            'contactForm.name' => ['required', 'string', 'max:255'],
+            'contactForm.email' => ['nullable', 'email', 'max:255'],
+            'contactForm.title' => ['nullable', 'string', 'max:255'],
+            'contactForm.phone' => ['nullable', 'string', 'max:50'],
+            'contactForm.outlet_id' => ['nullable', 'exists:organizations,id'],
+            'contactForm.outlet_name' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $contactId = $this->findOrCreateJournalist(
+            $this->contactForm['name'],
+            $this->contactForm['email'] ?: null,
+            $this->contactForm['outlet_name'] ?: null,
+            $this->contactForm['outlet_id'] ?: null,
+            'media_contact'
+        );
+
+        $contactUpdates = ['contact_type' => 'media'];
+        if ($this->contactForm['title']) {
+            $contactUpdates['title'] = $this->contactForm['title'];
+        }
+        if ($this->contactForm['phone']) {
+            $contactUpdates['phone'] = $this->contactForm['phone'];
+        }
+
+        Person::whereKey($contactId)->update($contactUpdates);
+
+        $this->showContactModal = false;
+        $this->dispatch('notify', type: 'success', message: 'Press contact saved!');
+    }
+
+    protected function resetContactForm(): void
+    {
+        $this->contactForm = [
+            'name' => '',
+            'email' => '',
+            'title' => '',
+            'phone' => '',
+            'outlet_id' => null,
+            'outlet_name' => '',
+        ];
+    }
 
     public function getJournalistsProperty()
     {
@@ -1150,7 +1207,7 @@ PROMPT;
      * Find existing journalist or create new Person with is_journalist flag.
      * Also creates Organization from outlet name if needed.
      */
-    protected function findOrCreateJournalist(string $name, ?string $email, ?string $outletName, ?int $outletId): int
+    protected function findOrCreateJournalist(string $name, ?string $email, ?string $outletName, ?int $outletId, string $source = 'media_inquiry'): int
     {
         // First try to find by email if provided
         if ($email) {
@@ -1205,7 +1262,7 @@ PROMPT;
             'organization_id' => $resolvedOutletId,
             'is_journalist' => true,
             'status' => 'active',
-            'source' => 'media_inquiry',
+            'source' => $source,
         ]);
 
         return $person->id;
@@ -1361,6 +1418,7 @@ Return ONLY the JSON object, no other text.";
         $this->showClipModal = false;
         $this->showPitchModal = false;
         $this->showInquiryModal = false;
+        $this->showContactModal = false;
         $this->editingId = null;
     }
 
