@@ -26,6 +26,7 @@ class Inquiry extends Model
         'ai_insights',
         'resulting_clip_id',
         'created_by',
+        'submission_token',
     ];
 
     protected $casts = [

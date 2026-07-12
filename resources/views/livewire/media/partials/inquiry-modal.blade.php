@@ -191,15 +191,27 @@
             </div>
 
             {{-- Footer --}}
-            <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-                <button wire:click="closeModal"
-                    class="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800">
-                    Cancel
-                </button>
-                <button wire:click="saveInquiry"
-                    class="px-5 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">
-                    {{ $editingId ? 'Update Inquiry' : 'Save Inquiry' }}
-                </button>
+            <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                <div>
+                    @if($editingId)
+                        <button type="button" wire:click="deleteInquiry({{ $editingId }})"
+                            wire:confirm="Delete this media inquiry? This cannot be undone."
+                            class="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
+                            Delete Inquiry
+                        </button>
+                    @endif
+                </div>
+                <div class="flex items-center gap-3">
+                    <button type="button" wire:click="closeModal"
+                        class="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800">
+                        Cancel
+                    </button>
+                    <button type="button" wire:click="saveInquiry" wire:loading.attr="disabled" wire:target="saveInquiry"
+                        class="px-5 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
+                        <span wire:loading.remove wire:target="saveInquiry">{{ $editingId ? 'Update Inquiry' : 'Save Inquiry' }}</span>
+                        <span wire:loading wire:target="saveInquiry">Saving…</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

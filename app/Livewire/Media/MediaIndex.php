@@ -14,6 +14,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
@@ -1128,6 +1129,12 @@ PROMPT;
     {
         if ($id) {
             $inquiry = Inquiry::find($id);
+            if (! $inquiry) {
+                $this->dispatch('notify', type: 'error', message: 'Inquiry not found.');
+
+                return;
+            }
+
             $this->editingId = $id;
             $this->inquiryForm = [
                 'subject' => $inquiry->subject,
@@ -1145,6 +1152,7 @@ PROMPT;
                 'handled_by' => $inquiry->handled_by,
                 'issue_ids' => $inquiry->issues->pluck('id')->toArray(),
                 'response_notes' => $inquiry->response_notes,
+                'submission_token' => $inquiry->submission_token,
             ];
         } else {
             $this->editingId = null;
@@ -1159,6 +1167,7 @@ PROMPT;
             'inquiryForm.subject' => 'required|string|max:255',
             'inquiryForm.description' => 'required|string',
             'inquiryForm.received_at' => 'required|date',
+            'inquiryForm.submission_token' => $this->editingId ? 'nullable|uuid' : 'required|uuid',
         ]);
 
         // Auto-create or link journalist as Person with is_journalist flag
@@ -1191,16 +1200,44 @@ PROMPT;
 
         if ($this->editingId) {
             $inquiry = Inquiry::find($this->editingId);
+            if (! $inquiry) {
+                $this->dispatch('notify', type: 'error', message: 'Inquiry not found.');
+
+                return;
+            }
+
             $inquiry->update($data);
         } else {
             $data['created_by'] = auth()->id();
-            $inquiry = Inquiry::create($data);
+            $inquiry = Inquiry::firstOrCreate(
+                ['submission_token' => $this->inquiryForm['submission_token']],
+                $data
+            );
+            $this->editingId = $inquiry->id;
         }
 
         $inquiry->issues()->sync($this->inquiryForm['issue_ids'] ?? []);
 
         $this->showInquiryModal = false;
         $this->dispatch('notify', type: 'success', message: 'Inquiry saved!');
+    }
+
+    public function deleteInquiry(int $id): void
+    {
+        $inquiry = Inquiry::find($id);
+        if (! $inquiry) {
+            $this->dispatch('notify', type: 'error', message: 'Inquiry not found.');
+
+            return;
+        }
+
+        $inquiry->delete();
+
+        if ($this->editingId === $id) {
+            $this->closeModal();
+        }
+
+        $this->dispatch('notify', type: 'success', message: 'Inquiry deleted.');
     }
 
     /**
@@ -1410,6 +1447,7 @@ Return ONLY the JSON object, no other text.";
             'handled_by' => null,
             'issue_ids' => [],
             'response_notes' => '',
+            'submission_token' => (string) Str::uuid(),
         ];
     }
 

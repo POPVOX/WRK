@@ -112,6 +112,18 @@
                 </button>
             @endif
 
+            <div class="flex items-center gap-2">
+                <button type="button" wire:click="openInquiryModal({{ $inquiry->id }})"
+                    class="text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
+                    Edit
+                </button>
+                <button type="button" wire:click="deleteInquiry({{ $inquiry->id }})"
+                    wire:confirm="Delete this media inquiry? This cannot be undone."
+                    class="text-xs font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
+                    Delete
+                </button>
+            </div>
+
             {{-- AI Analyze Button - Always show --}}
             <button wire:click="analyzeInquiryWithAI({{ $inquiry->id }})" wire:loading.attr="disabled"
                 wire:loading.class="opacity-50" wire:target="analyzeInquiryWithAI({{ $inquiry->id }})"
