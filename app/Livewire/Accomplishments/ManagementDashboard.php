@@ -215,7 +215,7 @@ class ManagementDashboard extends Component
 
     public function viewUser(int $userId): void
     {
-        $this->redirect(route('accomplishments.user', ['userId' => $userId]));
+        $this->redirect(route('accomplishments.user', ['userId' => $userId]), navigate: true);
     }
 
     public function getRecentAccomplishmentsProperty()
@@ -245,4 +245,3 @@ class ManagementDashboard extends Component
         ]);
     }
 }
-

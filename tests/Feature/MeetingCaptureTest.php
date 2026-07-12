@@ -33,6 +33,8 @@ test('meeting capture adds and saves organizations and attendees', function () {
         ->call('save')
         ->assertRedirect();
 
+    expect($component->effects['redirectUsingNavigate'] ?? false)->toBeTrue();
+
     $meeting = Meeting::query()->where('title', 'Partner follow-up')->firstOrFail();
     expect($meeting->organizations()->whereKey($existingOrganization->id)->exists())->toBeTrue();
     expect($meeting->people()->whereKey($person->id)->exists())->toBeTrue();

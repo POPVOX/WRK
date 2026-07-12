@@ -819,7 +819,9 @@ class MeetingCapture extends Component
 
         session()->flash('success', $message);
 
-        return redirect()->route('meetings.show', $meeting);
+        $this->redirectRoute('meetings.show', $meeting, navigate: true);
+
+        return null;
     }
 
     public function render()

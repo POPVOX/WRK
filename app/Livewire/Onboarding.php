@@ -468,7 +468,9 @@ class Onboarding extends Component
         Auth::user()->update(['profile_completed_at' => now()]);
         session()->forget('onboarding_step');
 
-        return redirect()->route('dashboard');
+        $this->redirectRoute('dashboard', navigate: true);
+
+        return null;
     }
 
     public function previousStep()

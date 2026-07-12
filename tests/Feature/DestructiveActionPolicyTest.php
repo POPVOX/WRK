@@ -98,10 +98,12 @@ test('staff cannot delete a meeting they do not own', function () {
 
     expect(Meeting::find($meeting->id))->not->toBeNull();
 
-    Livewire::actingAs($owner)
+    $component = Livewire::actingAs($owner)
         ->test(MeetingDetail::class, ['meeting' => $meeting])
         ->call('deleteMeeting')
         ->assertRedirect(route('meetings.index'));
+
+    expect($component->effects['redirectUsingNavigate'] ?? false)->toBeTrue();
 
     expect(Meeting::find($meeting->id))->toBeNull();
 });

@@ -516,7 +516,9 @@ class MeetingDetail extends Component
 
         session()->flash('success', 'Meeting deleted successfully.');
 
-        return redirect()->route('meetings.index');
+        $this->redirectRoute('meetings.index', navigate: true);
+
+        return null;
     }
 
     // ==========================================
