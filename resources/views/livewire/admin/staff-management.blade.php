@@ -85,9 +85,13 @@
                                         {{ $member->email }}
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
-                                        @if($member->is_admin)
+                                        @if($member->isAdmin())
                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300">
-                                                Admin
+                                                Administrator
+                                            </span>
+                                        @elseif($member->access_level === 'management')
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                                                Management
                                             </span>
                                         @else
                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-300">
@@ -136,10 +140,6 @@
                                                 </button>
                                             @endif
                                             @if($member->is_active)
-                                                <button type="button" wire:click="toggleAdmin({{ $member->id }})"
-                                                    class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 text-xs">
-                                                    {{ $member->is_admin ? 'Remove Admin' : 'Make Admin' }}
-                                                </button>
                                                 @if($member->id !== auth()->id())
                                                     <button type="button" wire:click="deactivateStaff({{ $member->id }})"
                                                         wire:confirm="Deactivate {{ $member->name }}? They will be signed out and removed from active team lists. Historical records will be preserved."
@@ -275,6 +275,20 @@
                                         class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                         placeholder="email@example.com">
                                     @error('editEmail') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Platform Access</label>
+                                    <select wire:model="editAccessLevel"
+                                        class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                        <option value="staff">Staff — standard workspace access</option>
+                                        <option value="management">Management — management content and approvals</option>
+                                        <option value="admin">Administrator — full admin access</option>
+                                    </select>
+                                    @error('editAccessLevel') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                        For agent, project-scope, and Box grants, use
+                                        <a href="{{ route('admin.permissions') }}" wire:navigate class="font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">Advanced Permissions</a>.
+                                    </p>
                                 </div>
                             </div>
                         </div>

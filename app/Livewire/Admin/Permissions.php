@@ -94,8 +94,9 @@ class Permissions extends Component
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
-                    'access_level' => $user->access_level ?? 'team',
-                    'is_admin' => $user->is_admin ? '1' : '0',
+                    'access_level' => in_array($user->access_level, ['management', 'admin'], true)
+                        ? $user->access_level
+                        : 'staff',
                     'can_create_specialist' => (($permission?->can_create_specialist ?? $defaultSpecialist) ? '1' : '0'),
                     'can_create_project' => (($permission?->can_create_project ?? true) ? '1' : '0'),
                     'project_scope' => (string) ($permission?->project_scope ?? 'all'),
@@ -116,9 +117,16 @@ class Permissions extends Component
         $this->validate([
             'rows' => 'required|array',
             'rows.*.id' => ['required', 'integer', Rule::exists('users', 'id')],
-            'rows.*.access_level' => ['required', Rule::in(['team', 'management', 'admin'])],
-            'rows.*.is_admin' => ['required', Rule::in(['0', '1'])],
+            'rows.*.access_level' => ['required', Rule::in(['staff', 'management', 'admin'])],
         ]);
+
+        foreach ($this->rows as $index => $row) {
+            if ((int) $row['id'] === (int) auth()->id() && auth()->user()->isAdmin() && $row['access_level'] !== 'admin') {
+                $this->addError('rows.'.$index.'.access_level', 'You cannot remove your own administrator access.');
+
+                return;
+            }
+        }
 
         if ($this->agentPermissionsEnabled) {
             $this->validate([
@@ -163,7 +171,7 @@ class Permissions extends Component
 
             User::where('id', $row['id'])->update([
                 'access_level' => $row['access_level'],
-                'is_admin' => $row['is_admin'] === '1',
+                'is_admin' => $row['access_level'] === 'admin',
             ]);
 
             if ($this->agentPermissionsEnabled) {
@@ -332,7 +340,7 @@ class Permissions extends Component
         $this->boxFolderOptions = BoxItem::query()
             ->folders()
             ->whereNull('trashed_at')
-            ->orderByRaw("coalesce(path_display, name)")
+            ->orderByRaw('coalesce(path_display, name)')
             ->limit(2000)
             ->get(['box_item_id', 'name', 'path_display'])
             ->map(fn (BoxItem $folder) => [

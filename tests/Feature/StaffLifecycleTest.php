@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Admin\Permissions;
 use App\Livewire\Admin\StaffManagement;
 use App\Models\Meeting;
 use App\Models\User;
@@ -102,4 +103,79 @@ test('inactive staff cannot receive activation links or invitations', function (
         ->assertDispatched('notify', fn (string $name, array $params): bool => $params['type'] === 'error');
 
     expect($inactive->fresh()->activation_token)->toBeNull();
+});
+
+test('admin can edit staff platform access while preserving their own admin access', function () {
+    $admin = User::factory()->admin()->create();
+    $staff = User::factory()->create([
+        'access_level' => 'staff',
+        'is_admin' => false,
+    ]);
+
+    Livewire::actingAs($admin)
+        ->test(StaffManagement::class)
+        ->call('openEditModal', $staff->id)
+        ->assertSet('editAccessLevel', 'staff')
+        ->set('editAccessLevel', 'management')
+        ->call('saveEdit')
+        ->assertHasNoErrors()
+        ->assertDispatched('notify');
+
+    expect($staff->fresh()->access_level)->toBe('management')
+        ->and($staff->fresh()->is_admin)->toBeFalse();
+
+    Livewire::actingAs($admin)
+        ->test(StaffManagement::class)
+        ->call('openEditModal', $staff->id)
+        ->set('editAccessLevel', 'admin')
+        ->call('saveEdit')
+        ->assertHasNoErrors();
+
+    expect($staff->fresh()->access_level)->toBe('admin')
+        ->and($staff->fresh()->is_admin)->toBeTrue();
+
+    Livewire::actingAs($admin)
+        ->test(StaffManagement::class)
+        ->call('openEditModal', $admin->id)
+        ->set('editAccessLevel', 'staff')
+        ->call('saveEdit')
+        ->assertHasErrors('editAccessLevel');
+
+    expect($admin->fresh()->isAdmin())->toBeTrue();
+});
+
+test('advanced permissions accepts the canonical staff access level', function () {
+    $admin = User::factory()->admin()->create(['name' => 'Admin User']);
+    $staff = User::factory()->create([
+        'name' => 'Staff User',
+        'access_level' => 'staff',
+        'is_admin' => false,
+    ]);
+
+    $component = Livewire::actingAs($admin)->test(Permissions::class);
+    $rows = $component->get('rows');
+    $staffIndex = collect($rows)->search(fn (array $row): bool => $row['id'] === $staff->id);
+
+    expect($staffIndex)->not->toBeFalse();
+
+    $component
+        ->set("rows.{$staffIndex}.access_level", 'staff')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect($staff->fresh()->access_level)->toBe('staff');
+});
+
+test('advanced permissions cannot remove the current administrators own access', function () {
+    $admin = User::factory()->admin()->create();
+    $component = Livewire::actingAs($admin)->test(Permissions::class);
+    $rows = $component->get('rows');
+    $adminIndex = collect($rows)->search(fn (array $row): bool => $row['id'] === $admin->id);
+
+    $component
+        ->set("rows.{$adminIndex}.access_level", 'staff')
+        ->call('save')
+        ->assertHasErrors("rows.{$adminIndex}.access_level");
+
+    expect($admin->fresh()->isAdmin())->toBeTrue();
 });

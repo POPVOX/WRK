@@ -53,6 +53,8 @@ class StaffManagement extends Component
 
     public string $editEmail = '';
 
+    public string $editAccessLevel = 'staff';
+
     protected $rules = [
         'newName' => 'required|string|max:255',
         'newEmail' => 'required|email|unique:users,email',
@@ -63,6 +65,7 @@ class StaffManagement extends Component
         return [
             'editName' => 'required|string|max:255',
             'editEmail' => 'required|email|unique:users,email,'.$this->editingUserId,
+            'editAccessLevel' => 'required|in:staff,management,admin',
         ];
     }
 
@@ -90,6 +93,7 @@ class StaffManagement extends Component
             'email' => $this->newEmail,
             'password' => Hash::make($this->tempPassword),
             'is_admin' => $this->newIsAdmin,
+            'access_level' => $this->newIsAdmin ? 'admin' : 'staff',
             'is_active' => true,
         ]);
 
@@ -108,7 +112,11 @@ class StaffManagement extends Component
             return;
         }
 
-        $user->update(['is_admin' => ! $user->is_admin]);
+        $makeAdmin = ! $user->isAdmin();
+        $user->update([
+            'is_admin' => $makeAdmin,
+            'access_level' => $makeAdmin ? 'admin' : 'staff',
+        ]);
         $this->dispatch('notify', type: 'success', message: 'Admin status updated.');
     }
 
@@ -182,6 +190,9 @@ class StaffManagement extends Component
         $this->editingUserId = $userId;
         $this->editName = $user->name;
         $this->editEmail = $user->email;
+        $this->editAccessLevel = $user->isAdmin()
+            ? 'admin'
+            : (in_array($user->access_level, ['staff', 'management'], true) ? $user->access_level : 'staff');
         $this->showEditModal = true;
     }
 
@@ -191,6 +202,7 @@ class StaffManagement extends Component
         $this->editingUserId = null;
         $this->editName = '';
         $this->editEmail = '';
+        $this->editAccessLevel = 'staff';
     }
 
     public function saveEdit(): void
@@ -204,9 +216,17 @@ class StaffManagement extends Component
             return;
         }
 
+        if ($user->id === auth()->id() && $user->isAdmin() && $this->editAccessLevel !== 'admin') {
+            $this->addError('editAccessLevel', 'You cannot remove your own administrator access.');
+
+            return;
+        }
+
         $user->update([
             'name' => $this->editName,
             'email' => $this->editEmail,
+            'access_level' => $this->editAccessLevel,
+            'is_admin' => $this->editAccessLevel === 'admin',
         ]);
 
         $this->closeEditModal();

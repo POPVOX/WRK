@@ -47,6 +47,7 @@
         $adminNav = [];
         if ($user && $user->isAdmin()) {
             $adminNav = [
+                ['label' => 'Staff', 'route' => 'admin.staff', 'active' => ['admin.staff']],
                 ['label' => 'Permissions', 'route' => 'admin.permissions', 'active' => ['admin.permissions']],
                 ['label' => 'Agent Policies', 'route' => 'admin.agent-policies', 'active' => ['admin.agent-policies', 'admin.agents.prompt-preview']],
                 ['label' => 'Integrations', 'route' => 'admin.integrations', 'active' => ['admin.integrations']],

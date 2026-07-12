@@ -32,7 +32,6 @@
                         <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Name</th>
                         <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Email</th>
                         <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Access</th>
-                        <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Admin</th>
                         <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Create Specialist</th>
                         <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Create Project Agent</th>
                         <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">Project Scope</th>
@@ -49,16 +48,9 @@
                             <td class="px-4 py-3 min-w-[10rem]">
                                 <select wire:model="rows.{{ $index }}.access_level"
                                     class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                    <option value="team">Team</option>
+                                    <option value="staff">Staff</option>
                                     <option value="management">Management</option>
                                     <option value="admin">Admin</option>
-                                </select>
-                            </td>
-                            <td class="px-4 py-3 min-w-[7rem]">
-                                <select wire:model="rows.{{ $index }}.is_admin"
-                                    class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                                    <option value="0">No</option>
-                                    <option value="1">Yes</option>
                                 </select>
                             </td>
                             <td class="px-4 py-3 min-w-[9rem]">
