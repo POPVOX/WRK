@@ -344,7 +344,9 @@ class ProjectShow extends Component
 
             $this->dispatch('notify', type: 'success', message: 'Project deleted.');
 
-            return redirect()->route('projects.index');
+            $this->redirectRoute('projects.index', navigate: true);
+
+            return null;
         } catch (\Throwable $exception) {
             report($exception);
             $this->dispatch('notify', type: 'error', message: 'Could not delete project. Please try again.');

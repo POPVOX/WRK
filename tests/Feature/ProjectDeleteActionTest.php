@@ -24,10 +24,12 @@ test('project show delete action removes project, unparents children, and redire
         'file_path' => 'project-documents/delete-me.txt',
     ]);
 
-    Livewire::actingAs($user)
+    $component = Livewire::actingAs($user)
         ->test(ProjectShow::class, ['project' => $project])
         ->call('deleteProject')
         ->assertRedirect(route('projects.index'));
+
+    expect($component->effects['redirectUsingNavigate'] ?? false)->toBeTrue();
 
     $this->assertDatabaseMissing('projects', ['id' => $project->id]);
     $this->assertDatabaseHas('projects', [
