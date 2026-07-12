@@ -145,6 +145,7 @@ test('admin can edit staff platform access while preserving their own admin acce
 });
 
 test('advanced permissions accepts the canonical staff access level', function () {
+    config()->set('features.agent_governance_ui', true);
     $admin = User::factory()->admin()->create(['name' => 'Admin User']);
     $staff = User::factory()->create([
         'name' => 'Staff User',
@@ -167,6 +168,7 @@ test('advanced permissions accepts the canonical staff access level', function (
 });
 
 test('advanced permissions cannot remove the current administrators own access', function () {
+    config()->set('features.agent_governance_ui', true);
     $admin = User::factory()->admin()->create();
     $component = Livewire::actingAs($admin)->test(Permissions::class);
     $rows = $component->get('rows');
@@ -178,4 +180,17 @@ test('advanced permissions cannot remove the current administrators own access',
         ->assertHasErrors("rows.{$adminIndex}.access_level");
 
     expect($admin->fresh()->isAdmin())->toBeTrue();
+});
+
+test('permissions page hides deferred agent governance controls by default', function () {
+    config()->set('features.agent_governance_ui', false);
+    $admin = User::factory()->admin()->create();
+
+    Livewire::actingAs($admin)
+        ->test(Permissions::class)
+        ->assertSee('Box Access')
+        ->assertSee('Box Folder Access')
+        ->assertDontSee('Create Specialist')
+        ->assertDontSee('Create Project Agent')
+        ->assertDontSee('Approve High');
 });

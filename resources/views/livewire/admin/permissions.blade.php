@@ -1,13 +1,14 @@
 <div class="max-w-[120rem] mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="flex items-center justify-between mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Permissions</h1>
-            <p class="text-gray-500 dark:text-gray-400">Manage platform access and agent governance rights.</p>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Box Access</h1>
+            <p class="text-gray-500 dark:text-gray-400">Manage shared-folder policies and access grants.</p>
         </div>
         <a href="{{ route('dashboard') }}" wire:navigate
             class="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800">← Back to Dashboard</a>
     </div>
 
+    @if($agentGovernanceUiEnabled)
     @if (session('status'))
         <div class="mb-4 rounded-lg border border-green-200 bg-green-50 text-green-800 px-4 py-3 text-sm">
             {{ session('status') }}
@@ -111,12 +112,13 @@
             </button>
         </div>
     </div>
+    @endif
 
-    <div class="mt-8">
+    <div class="{{ $agentGovernanceUiEnabled ? 'mt-8' : '' }}">
         <div class="flex items-center justify-between mb-4">
             <div>
-                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Box Permission Control Plane</h2>
-                <p class="text-sm text-gray-500 dark:text-gray-400">Manage folder policies, user grants, and apply/reconcile jobs.</p>
+                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Box Folder Access</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Manage folder policies, team access, and sync status.</p>
             </div>
             <div class="text-xs text-gray-500 dark:text-gray-400">
                 Synced folder options: {{ $boxFolderCount }}

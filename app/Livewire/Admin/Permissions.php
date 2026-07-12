@@ -20,7 +20,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 #[Layout('layouts.app')]
-#[Title('Admin Permissions')]
+#[Title('Box Access')]
 class Permissions extends Component
 {
     public array $rows = [];
@@ -28,6 +28,8 @@ class Permissions extends Component
     public array $projectOptions = [];
 
     public bool $agentPermissionsEnabled = false;
+
+    public bool $agentGovernanceUiEnabled = false;
 
     public bool $boxPermissionControlsEnabled = false;
 
@@ -63,49 +65,12 @@ class Permissions extends Component
     public function mount(): void
     {
         $this->agentPermissionsEnabled = Schema::hasTable('agent_permissions');
+        $this->agentGovernanceUiEnabled = (bool) config('features.agent_governance_ui', false);
         $this->boxPermissionControlsEnabled = $this->hasBoxAccessSchema();
 
-        $this->projectOptions = Project::query()
-            ->orderBy('name')
-            ->get(['id', 'name'])
-            ->map(fn (Project $project) => [
-                'id' => $project->id,
-                'name' => $project->name,
-            ])->values()->all();
-
-        $users = User::orderBy('name')
-            ->get(['id', 'name', 'email', 'access_level', 'is_admin']);
-
-        $permissionMap = $this->agentPermissionsEnabled
-            ? AgentPermission::query()
-                ->whereIn('user_id', $users->pluck('id'))
-                ->get()
-                ->keyBy('user_id')
-            : collect();
-
-        $this->rows = $users
-            ->map(function (User $user) use ($permissionMap): array {
-                /** @var AgentPermission|null $permission */
-                $permission = $permissionMap->get($user->id);
-                $defaultSpecialist = $user->isManagement();
-                $defaultApprove = $user->isManagement();
-
-                return [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'access_level' => in_array($user->access_level, ['management', 'admin'], true)
-                        ? $user->access_level
-                        : 'staff',
-                    'can_create_specialist' => (($permission?->can_create_specialist ?? $defaultSpecialist) ? '1' : '0'),
-                    'can_create_project' => (($permission?->can_create_project ?? true) ? '1' : '0'),
-                    'project_scope' => (string) ($permission?->project_scope ?? 'all'),
-                    'allowed_project_ids_text' => collect($permission?->allowed_project_ids ?? [])->implode(', '),
-                    'can_approve_medium_risk' => (($permission?->can_approve_medium_risk ?? $defaultApprove) ? '1' : '0'),
-                    'can_approve_high_risk' => (($permission?->can_approve_high_risk ?? $defaultApprove) ? '1' : '0'),
-                ];
-            })
-            ->toArray();
+        if ($this->agentGovernanceUiEnabled) {
+            $this->loadAgentGovernanceControls();
+        }
 
         if ($this->boxPermissionControlsEnabled) {
             $this->loadBoxAccessControls();
@@ -114,6 +79,12 @@ class Permissions extends Component
 
     public function save(): void
     {
+        if (! $this->agentGovernanceUiEnabled) {
+            $this->dispatch('notify', type: 'info', message: 'Agent governance controls are currently hidden.');
+
+            return;
+        }
+
         $this->validate([
             'rows' => 'required|array',
             'rows.*.id' => ['required', 'integer', Rule::exists('users', 'id')],
@@ -191,6 +162,51 @@ class Permissions extends Component
 
         session()->flash('status', 'Permissions updated.');
         $this->mount();
+    }
+
+    protected function loadAgentGovernanceControls(): void
+    {
+        $this->projectOptions = Project::query()
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Project $project) => [
+                'id' => $project->id,
+                'name' => $project->name,
+            ])->values()->all();
+
+        $users = User::orderBy('name')
+            ->get(['id', 'name', 'email', 'access_level', 'is_admin']);
+
+        $permissionMap = $this->agentPermissionsEnabled
+            ? AgentPermission::query()
+                ->whereIn('user_id', $users->pluck('id'))
+                ->get()
+                ->keyBy('user_id')
+            : collect();
+
+        $this->rows = $users
+            ->map(function (User $user) use ($permissionMap): array {
+                /** @var AgentPermission|null $permission */
+                $permission = $permissionMap->get($user->id);
+                $defaultSpecialist = $user->isManagement();
+                $defaultApprove = $user->isManagement();
+
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'access_level' => in_array($user->access_level, ['management', 'admin'], true)
+                        ? $user->access_level
+                        : 'staff',
+                    'can_create_specialist' => (($permission?->can_create_specialist ?? $defaultSpecialist) ? '1' : '0'),
+                    'can_create_project' => (($permission?->can_create_project ?? true) ? '1' : '0'),
+                    'project_scope' => (string) ($permission?->project_scope ?? 'all'),
+                    'allowed_project_ids_text' => collect($permission?->allowed_project_ids ?? [])->implode(', '),
+                    'can_approve_medium_risk' => (($permission?->can_approve_medium_risk ?? $defaultApprove) ? '1' : '0'),
+                    'can_approve_high_risk' => (($permission?->can_approve_high_risk ?? $defaultApprove) ? '1' : '0'),
+                ];
+            })
+            ->toArray();
     }
 
     public function selectBoxPolicy(int $policyId): void

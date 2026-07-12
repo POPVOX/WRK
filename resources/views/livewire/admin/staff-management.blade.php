@@ -286,8 +286,8 @@
                                     </select>
                                     @error('editAccessLevel') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                                     <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                        For agent, project-scope, and Box grants, use
-                                        <a href="{{ route('admin.permissions') }}" wire:navigate class="font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">Advanced Permissions</a>.
+                                        For shared-folder policies and grants, use
+                                        <a href="{{ route('admin.permissions') }}" wire:navigate class="font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">Box Access</a>.
                                     </p>
                                 </div>
                             </div>
