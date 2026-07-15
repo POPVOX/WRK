@@ -666,15 +666,58 @@ test('batch delivery refuses unresolved personalization placeholders', function 
         ->and(OutreachCampaign::query()->count())->toBe(0);
 });
 
+test('approved recipient preview uses guess evidence for names links and carousel navigation', function () {
+    config()->set('features.congressional_directory_ui', true);
+    $owner = User::factory()->create();
+    $firstProfile = workbenchProfile('Aaronson Braiden');
+    $secondProfile = workbenchProfile('Baker Casey');
+    $evidence = app(CongressionalEmailEvidenceService::class);
+    $firstEmail = $evidence->addAddress($firstProfile, 'braiden.aaronson@mail.house.gov', 'guessed');
+    $firstEmail->update(['metadata' => ['guess' => ['components' => ['first' => 'braiden', 'last' => 'aaronson']]]]);
+    $secondEmail = $evidence->addAddress($secondProfile, 'casey.baker@mail.house.gov', 'guessed');
+    $secondEmail->update(['metadata' => ['guess' => ['components' => ['first' => 'casey', 'last' => 'baker']]]]);
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft(
+        $workbench,
+        workbenchList($owner, [$firstProfile, $secondProfile]),
+        $owner,
+        'Preview carousel'
+    );
+    $firstRecipient = $draft->recipients()->where('profile_id', $firstProfile->id)->sole();
+    $secondRecipient = $draft->recipients()->where('profile_id', $secondProfile->id)->sole();
+    $workbench->approve($firstRecipient, $owner->id);
+    $workbench->approve($secondRecipient, $owner->id);
+    $workbench->updateMessage($draft, 'Hello [Name]', 'Hi [Name], visit CongressH3.io.');
+
+    $preview = $workbench->preview($draft->fresh(), $firstRecipient->fresh());
+    expect($preview['subject'])->toBe('Hello Braiden')
+        ->and($preview['body'])->toBe('Hi Braiden, visit CongressH3.io.')
+        ->and($preview['personalization']['first_name'])->toBe('Braiden')
+        ->and($preview['personalization']['full_name'])->toBe('Braiden Aaronson')
+        ->and($preview['body_html'])->toContain('<mark')
+        ->and($preview['body_html'])->toContain('>Braiden</mark>')
+        ->and($preview['body_html'])->toContain('href="https://CongressH3.io"')
+        ->and($preview['links'])->toBe([['display' => 'CongressH3.io', 'url' => 'https://CongressH3.io']]);
+
+    Livewire::actingAs($owner)
+        ->test(OutreachDraftShow::class, ['draft' => $draft->fresh()])
+        ->assertSee('Approved recipient 1 of 2')
+        ->assertSee('Braiden')
+        ->assertSee('CongressH3.io')
+        ->call('showPreview', $secondRecipient->id)
+        ->assertSee('Approved recipient 2 of 2')
+        ->assertSee('Casey');
+});
+
 test('gmail messages include plain text and clickable html alternatives', function () {
     $service = app(GoogleGmailService::class);
     $method = new ReflectionMethod($service, 'buildRawMessage');
-    $encoded = $method->invoke($service, 'recipient@example.com', 'Resource', 'Visit https://CongressH3.io today.');
+    $encoded = $method->invoke($service, 'recipient@example.com', 'Resource', 'Visit CongressH3.io today.');
     $mime = base64_decode(strtr($encoded, '-_', '+/').str_repeat('=', (4 - strlen($encoded) % 4) % 4));
 
     expect($mime)->toContain('Content-Type: multipart/alternative')
         ->and($mime)->toContain('Content-Type: text/plain; charset=UTF-8')
         ->and($mime)->toContain('Content-Type: text/html; charset=UTF-8')
         ->and($mime)->toContain('<a href="https://CongressH3.io"')
-        ->and($mime)->toContain('Visit https://CongressH3.io today.');
+        ->and($mime)->toContain('Visit CongressH3.io today.');
 });

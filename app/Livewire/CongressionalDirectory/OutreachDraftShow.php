@@ -443,6 +443,21 @@ class OutreachDraftShow extends Component
         $previewRecipient = $this->previewRecipientId
             ? $this->draft->recipients()->find($this->previewRecipientId)
             : null;
+        $previewIds = $this->draft->recipients()
+            ->where('review_status', 'approved')
+            ->whereNull('exclusion_reason')
+            ->whereNotNull('staff_email_id')
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+        $previewIndex = $this->previewRecipientId ? $previewIds->search((int) $this->previewRecipientId) : false;
+        $previewNavigation = [
+            'count' => $previewIds->count(),
+            'position' => $previewIndex === false ? null : $previewIndex + 1,
+            'previous_id' => $previewIndex !== false && $previewIndex > 0 ? $previewIds[$previewIndex - 1] : null,
+            'next_id' => $previewIndex !== false && $previewIndex < $previewIds->count() - 1 ? $previewIds[$previewIndex + 1] : null,
+        ];
         $viewers = $this->draft->viewers()->orderBy('name')->get();
         $availableViewers = $this->canManage
             ? User::query()
@@ -461,6 +476,7 @@ class OutreachDraftShow extends Component
             'emailGuessEstimate' => $guesses->estimate($this->draft),
             'previewRecipient' => $previewRecipient,
             'preview' => $previewRecipient ? $workbench->preview($this->draft, $previewRecipient) : null,
+            'previewNavigation' => $previewNavigation,
             'viewers' => $viewers,
             'availableViewers' => $availableViewers,
             'sendingSummary' => $sendingSummary,

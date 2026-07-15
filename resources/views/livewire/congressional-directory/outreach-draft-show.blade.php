@@ -199,22 +199,49 @@
         </section>
 
         <section class="app-surface p-5">
-            <div class="flex items-center justify-between gap-3">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <h2 class="text-lg font-semibold text-gray-900">Personalization preview</h2>
-                    <p class="mt-1 text-sm text-gray-500">Preview uses the last saved message.</p>
+                    <p class="mt-1 text-sm text-gray-500">Preview uses the last saved message. Green highlights show inserted personalization.</p>
                 </div>
                 @if($previewRecipient)
-                    <span class="text-xs font-semibold text-gray-500">{{ $previewRecipient->name }}</span>
+                    <div class="text-right">
+                        <p class="text-sm font-semibold text-gray-900">{{ $previewRecipient->name }}</p>
+                        @if($previewNavigation['count'] > 0)
+                            <p class="mt-0.5 text-xs text-gray-500">Approved recipient {{ $previewNavigation['position'] ?? '—' }} of {{ $previewNavigation['count'] }}</p>
+                        @endif
+                    </div>
                 @endif
             </div>
             @if($previewRecipient && $preview)
+                @if($previewNavigation['count'] > 1)
+                    <div class="mt-4 flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-2">
+                        <button type="button" wire:click="showPreview({{ $previewNavigation['previous_id'] ?? 0 }})" @disabled(!$previewNavigation['previous_id']) class="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40">← Previous</button>
+                        <span class="text-xs font-medium text-gray-500">Review all {{ $previewNavigation['count'] }} approved messages</span>
+                        <button type="button" wire:click="showPreview({{ $previewNavigation['next_id'] ?? 0 }})" @disabled(!$previewNavigation['next_id']) class="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40">Next →</button>
+                    </div>
+                @endif
                 <div class="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
                     <dl class="space-y-2 text-sm">
                         <div class="grid grid-cols-[4.5rem_1fr] gap-2"><dt class="font-semibold text-gray-500">To</dt><dd class="break-all text-gray-900">{{ $previewRecipient->email ?: 'No address selected' }}</dd></div>
-                        <div class="grid grid-cols-[4.5rem_1fr] gap-2"><dt class="font-semibold text-gray-500">Subject</dt><dd class="text-gray-900">{{ $preview['subject'] ?: 'Save a subject to preview it' }}</dd></div>
+                        <div class="grid grid-cols-[4.5rem_1fr] gap-2"><dt class="font-semibold text-gray-500">Subject</dt><dd class="text-gray-900">{!! $preview['subject_html'] ?: 'Save a subject to preview it' !!}</dd></div>
                     </dl>
-                    <div class="mt-4 whitespace-pre-wrap border-t border-gray-200 pt-4 text-sm leading-6 text-gray-800">{{ $preview['body'] ?: 'Save a message to preview it.' }}</div>
+                    <div class="mt-4 whitespace-pre-wrap border-t border-gray-200 pt-4 text-sm leading-6 text-gray-800">{!! $preview['body_html'] ?: 'Save a message to preview it.' !!}</div>
+                    <div class="mt-4 grid gap-2 border-t border-gray-200 pt-4 text-xs sm:grid-cols-2">
+                        <div class="rounded-lg bg-white px-3 py-2 text-gray-700">
+                            <span class="font-semibold text-gray-500">[Name] becomes</span>
+                            <span class="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 font-semibold text-emerald-900">{{ $preview['personalization']['first_name'] }}</span>
+                            <span class="ml-1 text-gray-400">from {{ $preview['personalization']['name_source'] }}</span>
+                        </div>
+                        <div class="rounded-lg bg-white px-3 py-2 text-gray-700">
+                            <span class="font-semibold text-gray-500">Links in this message</span>
+                            @forelse($preview['links'] as $link)
+                                <a href="{{ $link['url'] }}" target="_blank" rel="noopener noreferrer" class="ml-1 text-indigo-700 underline">{{ $link['display'] }}</a>
+                            @empty
+                                <span class="ml-1 text-amber-700">No web links detected</span>
+                            @endforelse
+                        </div>
+                    </div>
                     @if($preview['unresolved'] !== [])
                         <div class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
                             <strong>Fix before sending:</strong> unresolved {{ implode(', ', $preview['unresolved']) }}. The send button will refuse to queue this message.
