@@ -52,6 +52,12 @@ class CongressionalStaffProfile extends Model
             ->latestOfMany('last_reported_end');
     }
 
+    public function latestPosition(): HasOne
+    {
+        return $this->hasOne(CongressionalPosition::class, 'profile_id')
+            ->latestOfMany('last_reported_end');
+    }
+
     public function observations(): HasMany
     {
         return $this->hasMany(CongressionalStaffObservation::class, 'profile_id');

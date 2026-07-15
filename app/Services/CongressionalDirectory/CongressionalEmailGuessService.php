@@ -50,20 +50,20 @@ class CongressionalEmailGuessService
     public function guess(
         CongressionalStaffProfile $profile,
         string $housePattern = self::HOUSE_PATTERN,
-        string $senatePattern = self::SENATE_PATTERN
+        string $senatePattern = self::SENATE_PATTERN,
+        bool $allowAllHouseOffices = false
     ): ?array {
-        $profile->loadMissing(['currentPosition.office', 'latestObservation']);
-        $office = $profile->currentPosition?->office;
-        if (! $office) {
-            return null;
-        }
-
+        $profile->loadMissing(['currentPosition.office', 'latestPosition.office', 'latestObservation']);
         $name = $this->staffNameParts($profile);
         if (! $name) {
             return null;
         }
 
-        if ($office->chamber === 'House' && preg_match('/^HON\./i', $office->name) === 1) {
+        $office = $profile->currentPosition?->office ?: $profile->latestPosition?->office;
+        $houseOfficeIsSupported = $office
+            && $office->chamber === 'House'
+            && preg_match('/^HON\./i', $office->name) === 1;
+        if ($profile->chamber === 'House' && ($allowAllHouseOffices || $houseOfficeIsSupported)) {
             $components = ['first' => $name['first'], 'last' => $name['last']];
 
             return [
@@ -74,7 +74,7 @@ class CongressionalEmailGuessService
             ];
         }
 
-        if ($office->chamber === 'Senate') {
+        if ($profile->chamber === 'Senate' && $office) {
             $senatorLast = $this->senatorDomainName($office);
             if (! $senatorLast) {
                 return null;
@@ -98,6 +98,100 @@ class CongressionalEmailGuessService
     }
 
     /**
+     * @return array{total:int,already_addressed:int,candidates:int,guessable:int,house:int,senate:int,unresolved:int,reported_active:int,reported_historical:int}
+     */
+    public function estimateAllProfiles(
+        string $housePattern = self::HOUSE_PATTERN,
+        string $senatePattern = self::SENATE_PATTERN
+    ): array {
+        $stats = [
+            'total' => CongressionalStaffProfile::query()->count(),
+            'already_addressed' => CongressionalStaffProfile::query()->whereHas('emails')->count(),
+            'candidates' => CongressionalStaffProfile::query()->whereDoesntHave('emails')->count(),
+            'guessable' => 0,
+            'house' => 0,
+            'senate' => 0,
+            'unresolved' => 0,
+            'reported_active' => 0,
+            'reported_historical' => 0,
+        ];
+
+        CongressionalStaffProfile::query()
+            ->whereDoesntHave('emails')
+            ->with(['currentPosition.office', 'latestPosition.office', 'latestObservation'])
+            ->orderBy('id')
+            ->chunkById(500, function ($profiles) use (&$stats, $housePattern, $senatePattern): void {
+                foreach ($profiles as $profile) {
+                    $guess = $this->guess($profile, $housePattern, $senatePattern, true);
+                    if (! $guess) {
+                        $stats['unresolved']++;
+
+                        continue;
+                    }
+
+                    $stats['guessable']++;
+                    $stats[Str::lower($guess['chamber'])]++;
+                    $statusKey = $profile->status === 'reported_historical'
+                        ? 'reported_historical'
+                        : 'reported_active';
+                    $stats[$statusKey]++;
+                }
+            });
+
+        return $stats;
+    }
+
+    /**
+     * @return array{total:int,already_addressed:int,candidates:int,generated:int,skipped:int,unresolved:int,house:int,senate:int}
+     */
+    public function generateForAllProfiles(
+        int $userId,
+        string $instructions,
+        string $housePattern = self::HOUSE_PATTERN,
+        string $senatePattern = self::SENATE_PATTERN
+    ): array {
+        $result = [
+            'total' => CongressionalStaffProfile::query()->count(),
+            'already_addressed' => CongressionalStaffProfile::query()->whereHas('emails')->count(),
+            'candidates' => CongressionalStaffProfile::query()->whereDoesntHave('emails')->count(),
+            'generated' => 0,
+            'skipped' => 0,
+            'unresolved' => 0,
+            'house' => 0,
+            'senate' => 0,
+        ];
+
+        CongressionalStaffProfile::query()
+            ->whereDoesntHave('emails')
+            ->with(['currentPosition.office', 'latestPosition.office', 'latestObservation', 'emails'])
+            ->orderBy('id')
+            ->chunkById(100, function ($profiles) use (
+                &$result,
+                $userId,
+                $instructions,
+                $housePattern,
+                $senatePattern
+            ): void {
+                $batch = $this->generateProfileBatch(
+                    $profiles,
+                    $userId,
+                    $instructions,
+                    $housePattern,
+                    $senatePattern,
+                    'Database-wide provisional guess.',
+                    'global',
+                    true
+                );
+
+                foreach (['generated', 'skipped', 'unresolved', 'house', 'senate'] as $key) {
+                    $result[$key] += $batch[$key];
+                }
+            });
+
+        return $result;
+    }
+
+    /**
      * @return array{generated:int,skipped:int}
      */
     public function generateForDraft(
@@ -112,7 +206,12 @@ class CongressionalEmailGuessService
 
         $draft->recipients()
             ->where('exclusion_reason', 'no_address')
-            ->with(['profile.currentPosition.office', 'profile.latestObservation', 'profile.emails'])
+            ->with([
+                'profile.currentPosition.office',
+                'profile.latestPosition.office',
+                'profile.latestObservation',
+                'profile.emails',
+            ])
             ->orderBy('id')
             ->chunkById(100, function ($recipients) use (
                 &$generated,
@@ -122,99 +221,133 @@ class CongressionalEmailGuessService
                 $housePattern,
                 $senatePattern
             ): void {
-                $emailRows = [];
-                $eventNotes = [];
-                $now = now();
-
-                foreach ($recipients as $recipient) {
-                    $profile = $recipient->profile;
-                    if (! $profile || $profile->emails->isNotEmpty()) {
-                        $skipped++;
-
-                        continue;
-                    }
-
-                    $guess = $this->guess($profile, $housePattern, $senatePattern);
-                    if (! $guess) {
-                        $skipped++;
-
-                        continue;
-                    }
-
-                    $notes = implode(' ', array_filter([
-                        'Batch-generated provisional guess.',
-                        'Pattern: '.($guess['chamber'] === 'House' ? $housePattern : $senatePattern).'.',
-                        $instructions !== '' ? 'Instructions: '.$instructions : null,
-                    ]));
-                    $email = Str::lower($guess['email']);
-                    $emailRows[] = [
-                        'profile_id' => $profile->id,
-                        'email' => $email,
-                        'email_normalized' => $email,
-                        'source_type' => 'guessed',
-                        'verification_status' => 'unverified',
-                        'is_primary' => false,
-                        'source_notes' => Str::limit($notes, 4000, ''),
-                        'metadata' => json_encode(['guess' => [
-                            'method' => $guess['method'],
-                            'pattern' => $guess['chamber'] === 'House' ? $housePattern : $senatePattern,
-                            'components' => $guess['components'],
-                            'instructions' => $instructions,
-                            'generated_by' => $userId,
-                            'generated_at' => $now->toIso8601String(),
-                        ]], JSON_THROW_ON_ERROR),
-                        'added_by' => $userId,
-                        'created_at' => $now,
-                        'updated_at' => $now,
-                    ];
-                    $eventNotes[$profile->id.'|'.$email] = Str::limit($notes, 4000, '');
-                }
-
-                if ($emailRows === []) {
-                    return;
-                }
-
-                DB::transaction(function () use ($emailRows, $eventNotes, $userId, $now, &$generated, &$skipped): void {
-                    $inserted = DB::table('congressional_staff_emails')->insertOrIgnore($emailRows);
-                    $generated += $inserted;
-                    $skipped += count($emailRows) - $inserted;
-
-                    $profileIds = array_column($emailRows, 'profile_id');
-                    $emails = array_column($emailRows, 'email_normalized');
-                    $staffEmails = CongressionalStaffEmail::query()
-                        ->whereIn('profile_id', $profileIds)
-                        ->whereIn('email_normalized', $emails)
-                        ->get(['id', 'profile_id', 'email_normalized']);
-
-                    $events = $staffEmails
-                        ->filter(fn (CongressionalStaffEmail $staffEmail) => array_key_exists(
-                            $staffEmail->profile_id.'|'.$staffEmail->email_normalized,
-                            $eventNotes
-                        ))
-                        ->map(function (CongressionalStaffEmail $staffEmail) use ($eventNotes, $userId, $now): array {
-                            $key = $staffEmail->profile_id.'|'.$staffEmail->email_normalized;
-
-                            return [
-                                'staff_email_id' => $staffEmail->id,
-                                'user_id' => $userId,
-                                'event_key' => hash('sha256', "address-added|{$staffEmail->id}"),
-                                'event_type' => 'address_added',
-                                'evidence_strength' => 'low',
-                                'evidence_excerpt' => $eventNotes[$key] ?? null,
-                                'metadata' => json_encode(['source_type' => 'guessed', 'source_url' => null], JSON_THROW_ON_ERROR),
-                                'occurred_at' => $now,
-                                'created_at' => $now,
-                                'updated_at' => $now,
-                            ];
-                        })->all();
-
-                    if ($events !== []) {
-                        DB::table('congressional_staff_email_events')->insertOrIgnore($events);
-                    }
-                });
+                $profiles = $recipients->pluck('profile')->filter()->values();
+                $skipped += $recipients->count() - $profiles->count();
+                $batch = $this->generateProfileBatch(
+                    $profiles,
+                    $userId,
+                    $instructions,
+                    $housePattern,
+                    $senatePattern,
+                    'Batch-generated provisional guess.',
+                    'draft',
+                    false
+                );
+                $generated += $batch['generated'];
+                $skipped += $batch['skipped'] + $batch['unresolved'];
             });
 
         return compact('generated', 'skipped');
+    }
+
+    /**
+     * @param  iterable<int,CongressionalStaffProfile>  $profiles
+     * @return array{generated:int,skipped:int,unresolved:int,house:int,senate:int}
+     */
+    protected function generateProfileBatch(
+        iterable $profiles,
+        int $userId,
+        string $instructions,
+        string $housePattern,
+        string $senatePattern,
+        string $sourceLabel,
+        string $scope,
+        bool $allowAllHouseOffices
+    ): array {
+        $result = ['generated' => 0, 'skipped' => 0, 'unresolved' => 0, 'house' => 0, 'senate' => 0];
+        $emailRows = [];
+        $eventNotes = [];
+        $now = now();
+
+        foreach ($profiles as $profile) {
+            if ($profile->emails->isNotEmpty()) {
+                $result['skipped']++;
+
+                continue;
+            }
+
+            $guess = $this->guess($profile, $housePattern, $senatePattern, $allowAllHouseOffices);
+            if (! $guess) {
+                $result['unresolved']++;
+
+                continue;
+            }
+
+            $result[Str::lower($guess['chamber'])]++;
+            $notes = implode(' ', array_filter([
+                $sourceLabel,
+                'Pattern: '.($guess['chamber'] === 'House' ? $housePattern : $senatePattern).'.',
+                $instructions !== '' ? 'Instructions: '.$instructions : null,
+            ]));
+            $email = Str::lower($guess['email']);
+            $emailRows[] = [
+                'profile_id' => $profile->id,
+                'email' => $email,
+                'email_normalized' => $email,
+                'source_type' => 'guessed',
+                'verification_status' => 'unverified',
+                'is_primary' => false,
+                'source_notes' => Str::limit($notes, 4000, ''),
+                'metadata' => json_encode(['guess' => [
+                    'method' => $guess['method'],
+                    'pattern' => $guess['chamber'] === 'House' ? $housePattern : $senatePattern,
+                    'components' => $guess['components'],
+                    'instructions' => $instructions,
+                    'scope' => $scope,
+                    'generated_by' => $userId,
+                    'generated_at' => $now->toIso8601String(),
+                ]], JSON_THROW_ON_ERROR),
+                'added_by' => $userId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+            $eventNotes[$profile->id.'|'.$email] = Str::limit($notes, 4000, '');
+        }
+
+        if ($emailRows === []) {
+            return $result;
+        }
+
+        DB::transaction(function () use ($emailRows, $eventNotes, $userId, $now, &$result): void {
+            $inserted = DB::table('congressional_staff_emails')->insertOrIgnore($emailRows);
+            $result['generated'] += $inserted;
+            $result['skipped'] += count($emailRows) - $inserted;
+
+            $profileIds = array_column($emailRows, 'profile_id');
+            $emails = array_column($emailRows, 'email_normalized');
+            $staffEmails = CongressionalStaffEmail::query()
+                ->whereIn('profile_id', $profileIds)
+                ->whereIn('email_normalized', $emails)
+                ->get(['id', 'profile_id', 'email_normalized']);
+
+            $events = $staffEmails
+                ->filter(fn (CongressionalStaffEmail $staffEmail) => array_key_exists(
+                    $staffEmail->profile_id.'|'.$staffEmail->email_normalized,
+                    $eventNotes
+                ))
+                ->map(function (CongressionalStaffEmail $staffEmail) use ($eventNotes, $userId, $now): array {
+                    $key = $staffEmail->profile_id.'|'.$staffEmail->email_normalized;
+
+                    return [
+                        'staff_email_id' => $staffEmail->id,
+                        'user_id' => $userId,
+                        'event_key' => hash('sha256', "address-added|{$staffEmail->id}"),
+                        'event_type' => 'address_added',
+                        'evidence_strength' => 'low',
+                        'evidence_excerpt' => $eventNotes[$key] ?? null,
+                        'metadata' => json_encode(['source_type' => 'guessed', 'source_url' => null], JSON_THROW_ON_ERROR),
+                        'occurred_at' => $now,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                })->all();
+
+            if ($events !== []) {
+                DB::table('congressional_staff_email_events')->insertOrIgnore($events);
+            }
+        });
+
+        return $result;
     }
 
     /**
@@ -282,7 +415,7 @@ class CongressionalEmailGuessService
         $observedDomain = CongressionalStaffEmail::query()
             ->where('source_type', '!=', 'guessed')
             ->whereLike('email_normalized', '%@%.senate.gov')
-            ->whereHas('profile.currentPosition', fn ($query) => $query->where('office_id', $office->id))
+            ->whereHas('profile.positions', fn ($query) => $query->where('office_id', $office->id))
             ->pluck('email_normalized')
             ->map(fn (string $email) => Str::after($email, '@'))
             ->countBy()
