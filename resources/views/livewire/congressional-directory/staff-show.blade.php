@@ -33,6 +33,98 @@
         </div>
     </section>
 
+    <section class="app-surface overflow-hidden">
+        <div class="border-b border-gray-200 px-5 py-4">
+            <h2 class="font-semibold text-gray-900">Email evidence</h2>
+            <p class="mt-1 text-sm app-muted">Record sourced, observed, or provisional addresses. Adding evidence never sends an email.</p>
+        </div>
+
+        <div class="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+            <div class="space-y-3">
+                @forelse($profile->emails as $staffEmail)
+                    @php($eligibility = $emailEligibility[$staffEmail->id])
+                    @php($tierClass = match($eligibility['tier']) {
+                        'eligible' => 'bg-emerald-100 text-emerald-800',
+                        'limited' => 'bg-amber-100 text-amber-800',
+                        default => 'bg-red-100 text-red-800',
+                    })
+                    <article class="rounded-xl border border-gray-200 p-4">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <a href="mailto:{{ $staffEmail->email }}" class="break-all font-semibold text-indigo-700 hover:underline">{{ $staffEmail->email }}</a>
+                                    <span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ $tierClass }}">{{ Str::headline($eligibility['tier']) }}</span>
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{{ Str::headline($staffEmail->source_type) }}</span>
+                                </div>
+                                <p class="mt-1 text-xs text-gray-600">{{ $eligibility['reason'] }}</p>
+                                <p class="mt-1 text-xs app-muted">Evidence status: {{ Str::headline($staffEmail->verification_status) }}</p>
+                                @if($staffEmail->source_url)
+                                    <a href="{{ $staffEmail->source_url }}" target="_blank" rel="noopener noreferrer" class="mt-1 inline-flex text-xs font-medium text-indigo-600 hover:underline">View address source ↗</a>
+                                @endif
+                                @if($staffEmail->source_notes)<p class="mt-2 text-sm text-gray-700">{{ $staffEmail->source_notes }}</p>@endif
+                            </div>
+                            <div class="flex shrink-0 flex-wrap gap-2">
+                                @if($eligibility['tier'] !== 'blocked' && $staffEmail->verification_status !== 'confirmed')
+                                    <button type="button" wire:click="markEmailConfirmed({{ $staffEmail->id }})" class="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">Mark confirmed</button>
+                                @endif
+                                @if(($suppressionReasons[$staffEmail->email_normalized] ?? null) === 'manual')
+                                    <button type="button" wire:click="restoreEmail({{ $staffEmail->id }})" wire:confirm="Remove the manual suppression for this address?" class="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">Restore</button>
+                                @elseif($eligibility['tier'] !== 'blocked')
+                                    <button type="button" wire:click="suppressEmail({{ $staffEmail->id }})" wire:confirm="Suppress this address from all outreach?" class="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100">Suppress</button>
+                                @endif
+                            </div>
+                        </div>
+
+                        @if($staffEmail->events->isNotEmpty())
+                            <div class="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+                                @foreach($staffEmail->events->take(4) as $event)
+                                    <span class="rounded-md bg-gray-50 px-2 py-1 text-xs text-gray-600" title="{{ $event->occurred_at?->format('M j, Y g:i A') }}">
+                                        {{ Str::headline($event->event_type) }} · {{ Str::headline($event->evidence_strength) }} evidence
+                                    </span>
+                                @endforeach
+                            </div>
+                        @endif
+                    </article>
+                @empty
+                    <div class="rounded-xl border border-dashed border-gray-300 px-5 py-8 text-center text-sm text-gray-500">No email evidence has been recorded for this staff profile.</div>
+                @endforelse
+            </div>
+
+            <form wire:submit="addEmail" class="h-fit space-y-3 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+                <div>
+                    <h3 class="font-semibold text-indigo-950">Add email evidence</h3>
+                    <p class="mt-1 text-xs text-indigo-800">Guessed and manual addresses remain limited until stronger evidence appears.</p>
+                </div>
+                <label class="block text-sm font-medium text-gray-700">
+                    Email address
+                    <input type="email" wire:model.defer="emailAddress" class="mt-1 block w-full rounded-lg border-gray-300 text-sm" placeholder="staffer@house.gov">
+                </label>
+                @error('emailAddress') <p class="text-xs text-red-600">{{ $message }}</p> @enderror
+                <label class="block text-sm font-medium text-gray-700">
+                    How we know it
+                    <select wire:model.defer="emailSourceType" class="mt-1 block w-full rounded-lg border-gray-300 text-sm">
+                        <option value="guessed">Guessed pattern</option>
+                        <option value="observed">Observed in correspondence</option>
+                        <option value="redirected">Provided as a replacement</option>
+                        <option value="sourced">Published source</option>
+                        <option value="manual">Manually entered</option>
+                    </select>
+                </label>
+                <label class="block text-sm font-medium text-gray-700">
+                    Source URL <span class="font-normal text-gray-500">(optional)</span>
+                    <input type="url" wire:model.defer="emailSourceUrl" class="mt-1 block w-full rounded-lg border-gray-300 text-sm" placeholder="https://…">
+                </label>
+                @error('emailSourceUrl') <p class="text-xs text-red-600">{{ $message }}</p> @enderror
+                <label class="block text-sm font-medium text-gray-700">
+                    Evidence note <span class="font-normal text-gray-500">(optional)</span>
+                    <textarea rows="3" wire:model.defer="emailSourceNotes" class="mt-1 block w-full rounded-lg border-gray-300 text-sm" placeholder="Where this address came from"></textarea>
+                </label>
+                @error('emailSourceNotes') <p class="text-xs text-red-600">{{ $message }}</p> @enderror
+                <button type="submit" class="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Add evidence</button>
+            </form>
+        </div>
+    </section>
+
     <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section class="app-surface overflow-hidden">
             <div class="border-b border-gray-200 px-5 py-4">
