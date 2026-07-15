@@ -9,7 +9,9 @@ use App\Models\CongressionalOutreachDraftRecipient;
 use App\Models\CongressionalStaffEmail;
 use App\Models\User;
 use App\Services\CongressionalDirectory\CongressionalEmailGuessService;
+use App\Services\CongressionalDirectory\CongressionalOutreachBatchService;
 use App\Services\CongressionalDirectory\CongressionalOutreachWorkbenchService;
+use App\Services\GoogleGmailService;
 use DomainException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
@@ -264,6 +266,62 @@ class OutreachDraftShow extends Component
         $this->attempt(fn () => $workbench->markReady($this->draft->fresh()));
     }
 
+    public function sendNextBatch(
+        CongressionalOutreachWorkbenchService $workbench,
+        CongressionalOutreachBatchService $batches,
+        GoogleGmailService $gmail
+    ): void {
+        $this->authorizeManage();
+        if (! $this->snapshotIsReady()) {
+            return;
+        }
+
+        $this->validate([
+            'subject' => ['required', 'string', 'max:255'],
+            'bodyText' => ['required', 'string', 'max:50000'],
+        ]);
+        if (! $gmail->isConnected(Auth::user())) {
+            $this->dispatch('notify', type: 'error', message: 'Connect Gmail in Admin → Integrations before sending.');
+
+            return;
+        }
+
+        try {
+            $workbench->updateMessage($this->draft, $this->subject, $this->bodyText);
+            $result = $batches->sendNextBatch($this->draft->fresh(), Auth::user());
+            $this->draft->refresh();
+            $this->dispatch('notify', type: 'success', message: "Queued {$result['queued']} approved recipients for Gmail delivery.");
+        } catch (DomainException $exception) {
+            $this->dispatch('notify', type: 'error', message: $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->dispatch('notify', type: 'error', message: 'The batch could not be queued for Gmail delivery. No email was sent; use Retry failed if it appears.');
+        }
+    }
+
+    public function retryFailedBatch(
+        CongressionalOutreachBatchService $batches,
+        GoogleGmailService $gmail
+    ): void {
+        $this->authorizeManage();
+        if (! $gmail->isConnected(Auth::user())) {
+            $this->dispatch('notify', type: 'error', message: 'Connect Gmail in Admin → Integrations before retrying.');
+
+            return;
+        }
+
+        try {
+            $result = $batches->retryFailedBatch($this->draft->fresh(), Auth::user());
+            $this->draft->refresh();
+            $this->dispatch('notify', type: 'success', message: "Re-queued {$result['queued']} failed recipients.");
+        } catch (DomainException $exception) {
+            $this->dispatch('notify', type: 'error', message: $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->dispatch('notify', type: 'error', message: 'The failed batch could not be re-queued. No new Gmail delivery was started.');
+        }
+    }
+
     public function deleteDraft(): mixed
     {
         $this->authorizeManage();
@@ -348,7 +406,9 @@ class OutreachDraftShow extends Component
 
     public function render(
         CongressionalOutreachWorkbenchService $workbench,
-        CongressionalEmailGuessService $guesses
+        CongressionalEmailGuessService $guesses,
+        CongressionalOutreachBatchService $batches,
+        GoogleGmailService $gmail
     ) {
         $previousStatus = $this->draft->status;
         $this->draft->refresh();
@@ -392,6 +452,7 @@ class OutreachDraftShow extends Component
                 ->orderBy('name')
                 ->get(['id', 'name', 'email'])
             : collect();
+        $sendingSummary = $batches->summary($this->draft);
 
         return view('livewire.congressional-directory.outreach-draft-show', [
             'recipients' => $recipients,
@@ -401,6 +462,8 @@ class OutreachDraftShow extends Component
             'preview' => $previewRecipient ? $workbench->preview($this->draft, $previewRecipient) : null,
             'viewers' => $viewers,
             'availableViewers' => $availableViewers,
+            'sendingSummary' => $sendingSummary,
+            'gmailConnected' => $this->canManage && $gmail->isConnected(Auth::user()),
             'reasonLabels' => [
                 'inactive_profile' => 'No current position',
                 'no_address' => 'No address available',

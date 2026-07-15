@@ -5,6 +5,7 @@ use App\Models\OutreachCampaign;
 use App\Models\OutreachCampaignRecipient;
 use App\Models\OutreachEmailSuppression;
 use App\Models\User;
+use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
 use App\Services\GoogleGmailService;
 use App\Services\Outreach\OutreachCampaignService;
 use App\Services\Outreach\OutreachSuppressionService;
@@ -62,7 +63,8 @@ test('send job rechecks suppression immediately before Gmail delivery', function
     (new SendOutreachCampaignRecipient($recipient->id))->handle(
         $gmail,
         app(OutreachCampaignService::class),
-        app(OutreachSuppressionService::class)
+        app(OutreachSuppressionService::class),
+        app(CongressionalEmailEvidenceService::class)
     );
 
     expect($recipient->fresh()->status)->toBe('suppressed')

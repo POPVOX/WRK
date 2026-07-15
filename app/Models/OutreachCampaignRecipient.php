@@ -10,6 +10,7 @@ class OutreachCampaignRecipient extends Model
     protected $fillable = [
         'campaign_id',
         'person_id',
+        'congressional_outreach_draft_recipient_id',
         'email',
         'name',
         'status',
@@ -36,5 +37,9 @@ class OutreachCampaignRecipient extends Model
     {
         return $this->belongsTo(Person::class, 'person_id');
     }
-}
 
+    public function congressionalOutreachDraftRecipient(): BelongsTo
+    {
+        return $this->belongsTo(CongressionalOutreachDraftRecipient::class, 'congressional_outreach_draft_recipient_id');
+    }
+}
