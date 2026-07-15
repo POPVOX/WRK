@@ -4,11 +4,16 @@ namespace App\Services\CongressionalDirectory;
 
 use App\Models\CongressionalStaffChangeSignal;
 use App\Models\GmailMessage;
+use App\Models\OutreachCampaignRecipient;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class CongressionalStaffChangeDetector
 {
+    public function __construct(
+        protected CongressionalEmailEvidenceService $emailEvidence
+    ) {}
+
     public function mightContainSignal(string $text): bool
     {
         return (bool) preg_match(
@@ -22,6 +27,8 @@ class CongressionalStaffChangeDetector
         if (! $message->is_inbound || ! Schema::hasTable('congressional_staff_change_signals')) {
             return null;
         }
+
+        $this->recordOutreachResponse($message);
 
         $text = trim(implode("\n", array_filter([
             $message->subject,
@@ -78,6 +85,48 @@ class CongressionalStaffChangeDetector
                 'evidence_excerpt' => Str::limit(preg_replace('/\s+/', ' ', $text) ?: $text, 600),
                 'detected_at' => $message->sent_at ?? now(),
             ]
+        );
+    }
+
+    protected function recordOutreachResponse(GmailMessage $message): void
+    {
+        $from = Str::lower(trim((string) $message->from_email));
+        if ($from === '' || ! Schema::hasTable('outreach_campaign_recipients')) {
+            return;
+        }
+
+        $recipient = OutreachCampaignRecipient::query()
+            ->where('email', $from)
+            ->whereNotNull('sent_at')
+            ->whereHas('campaign', fn ($query) => $query
+                ->where('user_id', $message->user_id)
+                ->whereNotNull('congressional_outreach_draft_id'))
+            ->when($message->sent_at, fn ($query) => $query->where('sent_at', '<=', $message->sent_at))
+            ->latest('sent_at')
+            ->first();
+        $staffEmailId = (int) data_get($recipient?->metadata, 'congressional_staff_email_id');
+        if (! $recipient || $staffEmailId <= 0) {
+            return;
+        }
+
+        $staffEmail = \App\Models\CongressionalStaffEmail::query()->find($staffEmailId);
+        if (! $staffEmail) {
+            return;
+        }
+
+        $text = trim(($message->subject ?? '').' '.($message->snippet ?? '').' '.($message->body_text ?? ''));
+        $eventType = preg_match('/automatic reply|auto[ -]?reply|out of office|away from the office/i', $text) === 1
+            ? 'auto_reply'
+            : 'human_reply';
+        $this->emailEvidence->recordEvent(
+            $staffEmail,
+            $eventType,
+            userId: $message->user_id,
+            gmailMessageId: $message->id,
+            campaignRecipientId: $recipient->id,
+            evidenceExcerpt: Str::limit(Str::squish($text), 600),
+            occurredAt: $message->sent_at,
+            eventKey: hash('sha256', "gmail-outreach-response|{$message->id}|{$staffEmail->id}|{$eventType}")
         );
     }
 

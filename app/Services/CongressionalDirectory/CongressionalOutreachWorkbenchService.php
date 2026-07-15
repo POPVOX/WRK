@@ -207,7 +207,7 @@ class CongressionalOutreachWorkbenchService
     }
 
     /**
-     * @return array{subject:string,body:string}
+     * @return array{subject:string,body:string,unresolved:array<int,string>}
      */
     public function preview(CongressionalOutreachDraft $draft, CongressionalOutreachDraftRecipient $recipient): array
     {
@@ -219,10 +219,29 @@ class CongressionalOutreachWorkbenchService
             '{{office}}' => (string) $recipient->office,
         ];
 
+        $subject = strtr((string) $draft->subject, $replacements);
+        $body = strtr((string) $draft->body_text, $replacements);
+        $aliases = ['[First Name]', '[Name]', '[Full Name]', '[Title]', '[Office]'];
+        $values = [$firstName, $firstName, $recipient->name, (string) $recipient->title, (string) $recipient->office];
+        $subject = str_ireplace($aliases, $values, $subject);
+        $body = str_ireplace($aliases, $values, $body);
+
         return [
-            'subject' => strtr((string) $draft->subject, $replacements),
-            'body' => strtr((string) $draft->body_text, $replacements),
+            'subject' => $subject,
+            'body' => $body,
+            'unresolved' => array_values(array_unique(array_merge(
+                $this->unresolvedPlaceholders($subject),
+                $this->unresolvedPlaceholders($body)
+            ))),
         ];
+    }
+
+    /** @return array<int,string> */
+    public function unresolvedPlaceholders(string $text): array
+    {
+        preg_match_all('/\{\{[^{}\r\n]+\}\}|\[[A-Za-z][^\]\r\n]{0,40}\]/', $text, $matches);
+
+        return array_values(array_unique($matches[0] ?? []));
     }
 
     /**

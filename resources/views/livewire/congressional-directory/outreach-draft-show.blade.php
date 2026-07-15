@@ -164,7 +164,8 @@
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <h2 class="text-lg font-semibold text-gray-900">Message draft</h2>
-                    <p class="mt-1 text-sm text-gray-500">Available fields: <code>@{{first_name}}</code>, <code>@{{name}}</code>, <code>@{{title}}</code>, and <code>@{{office}}</code>.</p>
+                    <p class="mt-1 text-sm text-gray-500">Use <code>[Name]</code> or <code>@{{first_name}}</code> for the first name. Also available: <code>[Full Name]</code>, <code>[Title]</code>, <code>[Office]</code>, <code>@{{name}}</code>, <code>@{{title}}</code>, and <code>@{{office}}</code>.</p>
+                    <p class="mt-1 text-xs text-gray-500">Use complete URLs such as <code>https://CongressH3.io</code>. Sent messages include both a plain-text version and a clickable HTML version.</p>
                 </div>
                 @if($draft->status === 'ready')
                     <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Review ready</span>
@@ -214,6 +215,15 @@
                         <div class="grid grid-cols-[4.5rem_1fr] gap-2"><dt class="font-semibold text-gray-500">Subject</dt><dd class="text-gray-900">{{ $preview['subject'] ?: 'Save a subject to preview it' }}</dd></div>
                     </dl>
                     <div class="mt-4 whitespace-pre-wrap border-t border-gray-200 pt-4 text-sm leading-6 text-gray-800">{{ $preview['body'] ?: 'Save a message to preview it.' }}</div>
+                    @if($preview['unresolved'] !== [])
+                        <div class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                            <strong>Fix before sending:</strong> unresolved {{ implode(', ', $preview['unresolved']) }}. The send button will refuse to queue this message.
+                        </div>
+                    @else
+                        <div class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                            Personalization check passed for this recipient.
+                        </div>
+                    @endif
                 </div>
             @else
                 <div class="mt-4 rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500">No recipient is available for preview.</div>
@@ -273,6 +283,83 @@
             </div>
         </section>
     @endif
+
+    <section class="app-surface overflow-hidden">
+        <header class="border-b border-gray-200 p-5">
+            <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Send analytics</p>
+            <h2 class="mt-1 text-lg font-semibold text-gray-900">Campaign delivery and response dashboard</h2>
+            <p class="mt-1 text-sm text-gray-500">“Gmail accepted” means Gmail accepted the send request; it is not the same as a confirmed delivery. Bounce and reply signals appear after Gmail sync and evidence review.</p>
+        </header>
+        @if($analytics['campaigns']->isEmpty())
+            <div class="p-8 text-center text-sm text-gray-500">No batch has been sent yet. Analytics will appear here after the first confirmed send.</div>
+        @else
+            @php
+                $analyticsStatuses = $analytics['statuses'];
+                $analyticsEvents = $analytics['events'];
+                $queuedOrSending = ($analyticsStatuses['queued'] ?? 0) + ($analyticsStatuses['sending'] ?? 0);
+            @endphp
+            <div class="grid gap-3 border-b border-gray-200 p-5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+                @foreach([
+                    ['Queued', $queuedOrSending, 'text-indigo-700'],
+                    ['Gmail accepted', $analyticsStatuses['sent'] ?? 0, 'text-emerald-700'],
+                    ['Failed', $analyticsStatuses['failed'] ?? 0, 'text-red-700'],
+                    ['Suppressed', $analyticsStatuses['suppressed'] ?? 0, 'text-amber-700'],
+                    ['Human replies', $analyticsEvents['human_reply'] ?? 0, 'text-emerald-700'],
+                    ['Auto-replies', $analyticsEvents['auto_reply'] ?? 0, 'text-indigo-700'],
+                    ['Bounce alerts', $analytics['bounce_signals'], 'text-red-700'],
+                ] as [$label, $value, $color])
+                    <div class="rounded-lg bg-gray-50 p-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{{ $label }}</p>
+                        <p class="mt-1 text-2xl font-bold {{ $color }}">{{ number_format($value) }}</p>
+                    </div>
+                @endforeach
+                <div class="rounded-lg bg-gray-50 p-3">
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Link clicks</p>
+                    <p class="mt-1 text-sm font-semibold text-gray-500">Not tracked yet</p>
+                </div>
+            </div>
+
+            <div class="grid divide-y divide-gray-200 xl:grid-cols-2 xl:divide-x xl:divide-y-0">
+                <div class="p-5">
+                    <h3 class="font-semibold text-gray-900">Batch history</h3>
+                    <div class="mt-3 overflow-x-auto">
+                        <table class="min-w-full text-left text-sm">
+                            <thead class="text-xs uppercase tracking-wide text-gray-500"><tr><th class="pb-2 pr-3">Batch</th><th class="pb-2 pr-3">Status</th><th class="pb-2 pr-3">Accepted</th><th class="pb-2">Started</th></tr></thead>
+                            <tbody class="divide-y divide-gray-100">
+                                @foreach($analytics['campaigns'] as $campaign)
+                                    <tr>
+                                        <td class="py-2 pr-3 font-medium text-gray-900">{{ $campaign->name }}</td>
+                                        <td class="py-2 pr-3">{{ ucfirst($campaign->status) }}</td>
+                                        <td class="py-2 pr-3">{{ number_format($campaign->sent_count) }}/{{ number_format($campaign->recipients_count) }}</td>
+                                        <td class="py-2 text-gray-500">{{ $campaign->launched_at?->diffForHumans() ?? 'Not started' }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="p-5">
+                    <h3 class="font-semibold text-gray-900">Recent recipient outcomes</h3>
+                    <div class="mt-3 max-h-80 overflow-auto">
+                        <div class="divide-y divide-gray-100">
+                            @foreach($analytics['recipients'] as $outcome)
+                                <div class="flex items-start justify-between gap-4 py-2 text-sm">
+                                    <div class="min-w-0">
+                                        <p class="truncate font-medium text-gray-900">{{ $outcome->name }}</p>
+                                        <p class="truncate text-xs text-gray-500">{{ $outcome->email }} · {{ $outcome->campaign?->name }}</p>
+                                    </div>
+                                    <div class="shrink-0 text-right">
+                                        <p class="font-semibold {{ $outcome->status === 'sent' ? 'text-emerald-700' : ($outcome->status === 'failed' ? 'text-red-700' : 'text-gray-700') }}">{{ ucfirst($outcome->status) }}</p>
+                                        <p class="text-xs text-gray-500">{{ str_replace('_', ' ', $outcome->congressionalOutreachDraftRecipient?->staffEmail?->verification_status ?? 'unverified') }}</p>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+    </section>
 
     <section class="app-surface overflow-hidden">
         <header class="border-b border-gray-200 p-5 space-y-4">
