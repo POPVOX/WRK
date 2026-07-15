@@ -525,6 +525,56 @@ test('provisional email generation uses bounded database work as a list grows', 
         ->and($queryCount)->toBeLessThan(20);
 });
 
+test('database wide provisional generation preserves evidence and uses latest reported positions', function () {
+    $user = User::factory()->create();
+    $house = workbenchProfile('Jane Doe', false);
+    $house->update(['status' => 'reported_historical']);
+    $senate = workbenchProfile('Alex Smith', false);
+    $senate->update(['chamber' => 'Senate', 'status' => 'reported_historical']);
+    $senate->positions()->firstOrFail()->office->update([
+        'chamber' => 'Senate',
+        'name' => 'SENATOR JOHN R. THUNE',
+        'normalized_name' => 'senator john r thune',
+    ]);
+    $committee = workbenchProfile('Casey Clerk', false);
+    $committee->update(['chamber' => 'Senate']);
+    $committee->positions()->firstOrFail()->office->update([
+        'chamber' => 'Senate',
+        'name' => 'SENATE COMMITTEE ON DEMONSTRATIONS',
+        'normalized_name' => 'senate committee on demonstrations',
+    ]);
+    $existing = workbenchProfile('Existing Evidence', false);
+    app(CongressionalEmailEvidenceService::class)
+        ->addAddress($existing, 'existing@mail.house.gov', 'observed');
+    $guesses = app(CongressionalEmailGuessService::class);
+
+    $estimate = $guesses->estimateAllProfiles();
+    $result = $guesses->generateForAllProfiles($user->id, 'Global formula test');
+
+    expect($estimate)->toMatchArray([
+        'total' => 4,
+        'already_addressed' => 1,
+        'candidates' => 3,
+        'guessable' => 2,
+        'house' => 1,
+        'senate' => 1,
+        'unresolved' => 1,
+        'reported_historical' => 2,
+    ])->and($result)->toMatchArray([
+        'candidates' => 3,
+        'generated' => 2,
+        'skipped' => 0,
+        'unresolved' => 1,
+        'house' => 1,
+        'senate' => 1,
+    ])->and($house->emails()->sole()->email)->toBe('jane.doe@mail.house.gov')
+        ->and($senate->emails()->sole()->email)->toBe('alex_smith@thune.senate.gov')
+        ->and($committee->emails()->count())->toBe(0)
+        ->and($existing->emails()->sole()->email)->toBe('existing@mail.house.gov')
+        ->and(data_get($house->emails()->sole()->metadata, 'guess.scope'))->toBe('global')
+        ->and(CongressionalStaffEmailEvent::query()->where('event_type', 'address_added')->count())->toBe(3);
+});
+
 test('congressional outreach sends only approved recipients in batches of ten without duplicates', function () {
     Queue::fake();
     $owner = User::factory()->create();
