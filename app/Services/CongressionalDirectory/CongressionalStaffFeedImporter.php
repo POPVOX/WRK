@@ -19,7 +19,8 @@ class CongressionalStaffFeedImporter
         ?int $limit = null,
         ?string $chamber = null,
         bool $dryRun = false,
-        ?string $expectedGzipSha256 = null
+        ?string $expectedGzipSha256 = null,
+        ?string $runSource = null
     ): array {
         [$path, $temporary] = $this->materializeSource($source);
         $expectedGzipSha256 = strtolower(trim((string) $expectedGzipSha256));
@@ -78,7 +79,7 @@ class CongressionalStaffFeedImporter
                     $manifest = $this->validateManifest($record, $lineNumber);
                     if (! $dryRun) {
                         $run = CongressionalImportRun::query()->create([
-                            'source' => $source,
+                            'source' => $runSource ?: $source,
                             'schema_version' => (int) $manifest['schemaVersion'],
                             'status' => 'running',
                             'manifest' => $manifest,
