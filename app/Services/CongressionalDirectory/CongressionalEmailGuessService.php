@@ -247,6 +247,54 @@ class CongressionalEmailGuessService
         return $result;
     }
 
+    /**
+     * @param  array<int,int>  $profileIds
+     * @return array{total:int,already_addressed:int,candidates:int,generated:int,skipped:int,unresolved:int,house:int,senate:int}
+     */
+    public function generateForProfileIds(
+        array $profileIds,
+        int $userId,
+        string $instructions,
+        string $sourceLabel = 'Directory-source provisional guess.',
+        string $scope = 'directory_import'
+    ): array {
+        $profileIds = array_values(array_unique(array_map('intval', $profileIds)));
+        $result = [
+            'total' => count($profileIds),
+            'already_addressed' => CongressionalStaffProfile::query()->whereIn('id', $profileIds)->whereHas('emails')->count(),
+            'candidates' => CongressionalStaffProfile::query()->whereIn('id', $profileIds)->whereDoesntHave('emails')->count(),
+            'generated' => 0,
+            'skipped' => 0,
+            'unresolved' => 0,
+            'house' => 0,
+            'senate' => 0,
+        ];
+
+        CongressionalStaffProfile::query()
+            ->whereIn('id', $profileIds)
+            ->whereDoesntHave('emails')
+            ->with(['currentPosition.office', 'latestPosition.office', 'latestObservation', 'emails'])
+            ->orderBy('id')
+            ->chunkById(100, function ($profiles) use (&$result, $userId, $instructions, $sourceLabel, $scope): void {
+                $batch = $this->generateProfileBatch(
+                    $profiles,
+                    $userId,
+                    $instructions,
+                    self::HOUSE_PATTERN,
+                    self::SENATE_PATTERN,
+                    $sourceLabel,
+                    $scope,
+                    true
+                );
+
+                foreach (['generated', 'skipped', 'unresolved', 'house', 'senate'] as $key) {
+                    $result[$key] += $batch[$key];
+                }
+            });
+
+        return $result;
+    }
+
     public function estimateFormulaRepairs(
         string $housePattern = self::HOUSE_PATTERN,
         string $senatePattern = self::SENATE_PATTERN
