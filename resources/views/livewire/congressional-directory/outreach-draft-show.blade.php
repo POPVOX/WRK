@@ -191,6 +191,10 @@
                 </div>
                 @if($canManage && $snapshotReviewable)
                     <div class="flex flex-wrap justify-end gap-2">
+                        <button type="button" wire:click="refreshPreview" class="rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">
+                            <span wire:loading.remove wire:target="refreshPreview">Refresh preview</span>
+                            <span wire:loading wire:target="refreshPreview">Refreshing…</span>
+                        </button>
                         <button type="submit" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Save message</button>
                         <button type="button" wire:click="markReady" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Mark review ready</button>
                     </div>
@@ -202,7 +206,11 @@
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <h2 class="text-lg font-semibold text-gray-900">Personalization preview</h2>
-                    <p class="mt-1 text-sm text-gray-500">Preview uses the last saved message. Green highlights show inserted personalization.</p>
+                    @if($previewUsesUnsavedMessage)
+                        <p class="mt-1 text-sm font-medium text-amber-700">Previewing current editor text. These changes are not saved yet.</p>
+                    @else
+                        <p class="mt-1 text-sm text-gray-500">Preview matches the saved message. Green highlights show inserted personalization.</p>
+                    @endif
                 </div>
                 @if($previewRecipient)
                     <div class="text-right">

@@ -32,6 +32,10 @@ class OutreachDraftShow extends Component
 
     public string $bodyText = '';
 
+    public string $previewSubject = '';
+
+    public string $previewBodyText = '';
+
     public string $recipientSearch = '';
 
     public string $statusFilter = 'all';
@@ -57,6 +61,8 @@ class OutreachDraftShow extends Component
         $this->canManage = $draft->canBeManagedBy(Auth::user());
         $this->subject = (string) $draft->subject;
         $this->bodyText = (string) $draft->body_text;
+        $this->previewSubject = $this->subject;
+        $this->previewBodyText = $this->bodyText;
         $this->previewRecipientId = $draft->recipients()
             ->orderByRaw("CASE review_status WHEN 'approved' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END")
             ->value('id');
@@ -91,7 +97,23 @@ class OutreachDraftShow extends Component
 
         $workbench->updateMessage($this->draft, $this->subject, $this->bodyText);
         $this->draft->refresh();
+        $this->previewSubject = (string) $this->draft->subject;
+        $this->previewBodyText = (string) $this->draft->body_text;
         $this->dispatch('notify', type: 'success', message: 'Dry-run message saved. No email was sent.');
+    }
+
+    public function refreshPreview(): void
+    {
+        $this->authorizeManage();
+
+        $this->validate([
+            'subject' => ['nullable', 'string', 'max:255'],
+            'bodyText' => ['nullable', 'string', 'max:50000'],
+        ]);
+
+        $this->previewSubject = $this->subject;
+        $this->previewBodyText = $this->bodyText;
+        $this->dispatch('notify', type: 'info', message: 'Preview refreshed from the editor. The message has not been saved.');
     }
 
     public function refreshSnapshot(): void
@@ -475,7 +497,14 @@ class OutreachDraftShow extends Component
             'summary' => $workbench->summary($this->draft),
             'emailGuessEstimate' => $guesses->estimate($this->draft),
             'previewRecipient' => $previewRecipient,
-            'preview' => $previewRecipient ? $workbench->preview($this->draft, $previewRecipient) : null,
+            'preview' => $previewRecipient ? $workbench->preview(
+                $this->draft,
+                $previewRecipient,
+                $this->previewSubject,
+                $this->previewBodyText
+            ) : null,
+            'previewUsesUnsavedMessage' => $this->previewSubject !== (string) $this->draft->subject
+                || $this->previewBodyText !== (string) $this->draft->body_text,
             'previewNavigation' => $previewNavigation,
             'viewers' => $viewers,
             'availableViewers' => $availableViewers,
