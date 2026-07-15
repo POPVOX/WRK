@@ -79,7 +79,7 @@ test('congress explorer searches and filters staff separately from contacts', fu
     config()->set('features.congressional_directory_ui', true);
 
     explorerProfile('Avery House', 'House', 'Office of Representative Example', 'Member office', 'Legislative Director');
-    explorerProfile('Bailey Senate', 'Senate', 'Committee on Technology', 'Committee', 'Communications Director');
+    explorerProfile('Bailey Senate', 'Senate', 'COMMITTEE ON TECHNOLOGY', 'Committee', 'COMMUNICATIONS DIRECTOR');
     explorerProfile('Casey Former', 'House', 'Office of Representative Former', 'Member office', 'Policy Adviser', false);
 
     Livewire::actingAs(User::factory()->create())
@@ -91,7 +91,10 @@ test('congress explorer searches and filters staff separately from contacts', fu
         ->assertSee('Bailey Senate')
         ->assertDontSee('Avery House')
         ->set('officeType', 'Committee')
-        ->set('title', 'Communications')
+        ->set('title', 'communications')
+        ->assertSee('Bailey Senate')
+        ->set('title', '')
+        ->set('search', 'committee on technology')
         ->assertSee('Bailey Senate')
         ->set('search', 'not present')
         ->assertSee('No staff profiles match these filters');

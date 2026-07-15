@@ -60,12 +60,12 @@ class StaffIndex extends Component
             ->when($this->search !== '', function (Builder $query): void {
                 $term = '%'.trim($this->search).'%';
                 $query->where(function (Builder $query) use ($term): void {
-                    $query->where('display_name', 'like', $term)
+                    $query->whereLike('display_name', $term)
                         ->orWhereHas('positions', function (Builder $query) use ($term): void {
-                            $query->where('title', 'like', $term)
+                            $query->whereLike('title', $term)
                                 ->orWhereHas('office', fn (Builder $query) => $query
-                                    ->where('name', 'like', $term)
-                                    ->orWhere('office_code', 'like', $term));
+                                    ->whereLike('name', $term)
+                                    ->orWhereLike('office_code', $term));
                         });
                 });
             })
@@ -77,7 +77,7 @@ class StaffIndex extends Component
             ->when($this->officeType !== '', fn (Builder $query) => $query
                 ->whereHas('positions.office', fn (Builder $query) => $query->where('office_type', $this->officeType)))
             ->when($this->title !== '', fn (Builder $query) => $query
-                ->whereHas('positions', fn (Builder $query) => $query->where('title', 'like', '%'.trim($this->title).'%')))
+                ->whereHas('positions', fn (Builder $query) => $query->whereLike('title', '%'.trim($this->title).'%')))
             ->orderBy('display_name')
             ->paginate(25);
 
