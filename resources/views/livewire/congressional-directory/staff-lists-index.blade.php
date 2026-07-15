@@ -49,6 +49,39 @@
                         <button type="button" wire:click="deleteList({{ $selectedList->id }})" wire:confirm="Delete this list? Staff profiles will not be deleted." class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100">Delete list</button>
                     </div>
                     <input type="search" wire:model.live.debounce.250ms="memberSearch" placeholder="Search this list by name, title, or office" class="mt-4 block w-full rounded-lg border-gray-300 text-sm">
+
+                    <div class="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                            <div>
+                                <h3 class="text-sm font-semibold text-indigo-950">Create an outreach dry run</h3>
+                                <p class="mt-1 text-xs text-indigo-800">Resolve addresses, remove duplicates and blocked records, review every recipient, and preview a message. Sending remains disabled.</p>
+                            </div>
+                            <form wire:submit="createDryRun" class="flex w-full max-w-xl flex-col gap-2 sm:flex-row">
+                                <div class="min-w-0 flex-1">
+                                    <input type="text" wire:model.defer="draftName" placeholder="Dry-run name" class="block w-full rounded-lg border-indigo-200 text-sm">
+                                    @error('draftName') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                                </div>
+                                <button type="submit" class="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Build workbench</button>
+                            </form>
+                        </div>
+
+                        @if($drafts->isNotEmpty())
+                            <div class="mt-4 border-t border-indigo-200 pt-3">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-indigo-800">Existing dry runs</p>
+                                <div class="mt-2 grid gap-2 md:grid-cols-2">
+                                    @foreach($drafts as $draft)
+                                        <a href="{{ route('congress.outreach.show', $draft) }}" wire:navigate class="rounded-lg border border-indigo-200 bg-white px-3 py-2 hover:border-indigo-400">
+                                            <span class="flex items-center justify-between gap-2">
+                                                <span class="truncate text-sm font-semibold text-gray-900">{{ $draft->name }}</span>
+                                                <span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ $draft->status === 'ready' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700' }}">{{ $draft->status === 'ready' ? 'Review ready' : 'Draft' }}</span>
+                                            </span>
+                                            <span class="mt-1 block text-xs text-gray-500">{{ number_format($draft->approved_recipients_count) }} approved of {{ number_format($draft->recipients_count) }}</span>
+                                        </a>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+                    </div>
                 </header>
 
                 <div class="divide-y divide-gray-200">

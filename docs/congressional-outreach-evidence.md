@@ -10,6 +10,20 @@ This foundation separates address evidence from sending. It does not schedule or
 
 The eligibility service evaluates these rules at use time. Suppression is also checked when recipients are added to a campaign and immediately before Gmail delivery.
 
+## Dry-run outreach workbench
+
+A saved congressional staff list can be copied into a persistent dry-run snapshot. The snapshot is intentionally separate from `outreach_campaigns` and has no send or scheduling action.
+
+- One preferred address is selected per profile, prioritizing eligible evidence over a primary-but-provisional guess.
+- Profiles without a current position, profiles without an address, blocked addresses, and duplicate addresses are automatically excluded.
+- Sourced, observed, and confirmed addresses can be approved in bulk.
+- Guessed or manual addresses remain provisional and require individual approval.
+- Reviewers can choose another recorded address, remove or restore recipients, and preview `first_name`, `name`, `title`, and `office` personalization.
+- Refreshing the snapshot re-reads the source list and deliberately resets approvals.
+- A dry run can be marked review-ready only after every sendable recipient is approved or excluded and a subject and body have been saved.
+
+“Review ready” is documentation of a completed human review. It does not queue or send email.
+
 ## Evidence semantics
 
 - Gmail accepting a send records `send_accepted`; it does not prove delivery.
@@ -25,6 +39,6 @@ The eligibility service evaluates these rules at use time. Suppression is also c
 1. Connect outbound Gmail message IDs to address events and apply a seven-day `not_bounced` observation window.
 2. Classify inbound replies, auto-replies, and unsubscribe requests into reviewable events.
 3. Add topic/newsletter preferences without weakening the global suppression rule.
-4. Create human-approved outreach sequences from congressional staff lists with low daily caps, office throttles, and pause controls.
+4. Convert a review-ready dry run into a separately authorized sequence with low daily caps, office throttles, idempotency, and pause controls.
 5. Add privacy-conscious redirect links for click evidence; do not add open-tracking pixels.
 6. Integrate newsletter subscription state from its source-of-truth provider.
