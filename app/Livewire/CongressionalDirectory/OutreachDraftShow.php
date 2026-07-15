@@ -3,10 +3,12 @@
 namespace App\Livewire\CongressionalDirectory;
 
 use App\Jobs\BuildCongressionalOutreachDraftSnapshot;
+use App\Jobs\GenerateCongressionalEmailGuesses;
 use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalOutreachDraftRecipient;
 use App\Models\CongressionalStaffEmail;
 use App\Models\User;
+use App\Services\CongressionalDirectory\CongressionalEmailGuessService;
 use App\Services\CongressionalDirectory\CongressionalOutreachWorkbenchService;
 use DomainException;
 use Illuminate\Database\Eloquent\Builder;
@@ -38,6 +40,12 @@ class OutreachDraftShow extends Component
 
     public bool $canManage = false;
 
+    public string $batchInstructions = 'Generate provisional addresses only for staff with no known address, using the chamber patterns below.';
+
+    public string $batchHousePattern = CongressionalEmailGuessService::HOUSE_PATTERN;
+
+    public string $batchSenatePattern = CongressionalEmailGuessService::SENATE_PATTERN;
+
     public function mount(CongressionalOutreachDraft $draft): void
     {
         abort_unless(config('features.congressional_directory_ui'), 404);
@@ -50,6 +58,11 @@ class OutreachDraftShow extends Component
         $this->previewRecipientId = $draft->recipients()
             ->orderByRaw("CASE review_status WHEN 'approved' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END")
             ->value('id');
+
+        $batch = data_get($draft->metadata, 'email_guess_batch', []);
+        $this->batchInstructions = (string) ($batch['instructions'] ?? $this->batchInstructions);
+        $this->batchHousePattern = (string) ($batch['house_pattern'] ?? $this->batchHousePattern);
+        $this->batchSenatePattern = (string) ($batch['senate_pattern'] ?? $this->batchSenatePattern);
     }
 
     public function updatedRecipientSearch(): void
@@ -99,6 +112,75 @@ class OutreachDraftShow extends Component
         BuildCongressionalOutreachDraftSnapshot::dispatch($this->draft->id)->afterCommit();
         $this->draft->refresh();
         $this->dispatch('notify', type: 'success', message: 'Recipient snapshot is rebuilding in the background. Previous approvals will be reset.');
+    }
+
+    public function generateEmailGuesses(CongressionalEmailGuessService $guesses): void
+    {
+        $this->authorizeManage();
+        $this->draft->refresh();
+        if ($this->draft->status === 'building') {
+            $this->dispatch('notify', type: 'info', message: 'Wait for the current background work to finish first.');
+
+            return;
+        }
+
+        $this->validate([
+            'batchInstructions' => ['nullable', 'string', 'max:2000'],
+            'batchHousePattern' => ['required', 'string', 'max:160'],
+            'batchSenatePattern' => ['required', 'string', 'max:160'],
+        ]);
+
+        try {
+            $guesses->renderPattern($this->batchHousePattern, ['first' => 'jane', 'last' => 'doe']);
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError('batchHousePattern', $exception->getMessage());
+
+            return;
+        }
+
+        try {
+            $guesses->renderPattern($this->batchSenatePattern, [
+                'first' => 'jane',
+                'last' => 'doe',
+                'senator_last' => 'example',
+            ]);
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError('batchSenatePattern', $exception->getMessage());
+
+            return;
+        }
+
+        $estimate = $guesses->estimate($this->draft);
+        if ($estimate['guessable'] === 0) {
+            $this->dispatch('notify', type: 'info', message: 'There are no no-address recipients in member offices available for this batch.');
+
+            return;
+        }
+
+        $metadata = $this->draft->metadata ?? [];
+        $metadata['email_guess_batch'] = [
+            'status' => 'queued',
+            'instructions' => trim($this->batchInstructions),
+            'house_pattern' => trim($this->batchHousePattern),
+            'senate_pattern' => trim($this->batchSenatePattern),
+            'requested_by' => Auth::id(),
+            'queued_at' => now()->toIso8601String(),
+            'estimated' => $estimate,
+        ];
+        $this->draft->update([
+            'status' => 'building',
+            'reviewed_at' => null,
+            'metadata' => $metadata,
+        ]);
+        GenerateCongressionalEmailGuesses::dispatch(
+            $this->draft->id,
+            Auth::id(),
+            trim($this->batchInstructions),
+            trim($this->batchHousePattern),
+            trim($this->batchSenatePattern)
+        )->afterCommit();
+        $this->draft->refresh();
+        $this->dispatch('notify', type: 'success', message: "Generating up to {$estimate['guessable']} provisional addresses in the background.");
     }
 
     public function selectEmail(
@@ -264,8 +346,10 @@ class OutreachDraftShow extends Component
         }
     }
 
-    public function render(CongressionalOutreachWorkbenchService $workbench)
-    {
+    public function render(
+        CongressionalOutreachWorkbenchService $workbench,
+        CongressionalEmailGuessService $guesses
+    ) {
         $previousStatus = $this->draft->status;
         $this->draft->refresh();
         abort_unless($this->draft->canBeViewedBy(Auth::user()), 404);
@@ -312,6 +396,7 @@ class OutreachDraftShow extends Component
         return view('livewire.congressional-directory.outreach-draft-show', [
             'recipients' => $recipients,
             'summary' => $workbench->summary($this->draft),
+            'emailGuessEstimate' => $guesses->estimate($this->draft),
             'previewRecipient' => $previewRecipient,
             'preview' => $previewRecipient ? $workbench->preview($this->draft, $previewRecipient) : null,
             'viewers' => $viewers,

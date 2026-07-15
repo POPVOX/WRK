@@ -57,6 +57,11 @@ class CongressionalStaffProfile extends Model
         return $this->hasMany(CongressionalStaffObservation::class, 'profile_id');
     }
 
+    public function latestObservation(): HasOne
+    {
+        return $this->hasOne(CongressionalStaffObservation::class, 'profile_id')->latestOfMany();
+    }
+
     public function emails(): HasMany
     {
         return $this->hasMany(CongressionalStaffEmail::class, 'profile_id');

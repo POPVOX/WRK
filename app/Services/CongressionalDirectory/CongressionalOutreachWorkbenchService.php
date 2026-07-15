@@ -226,13 +226,13 @@ class CongressionalOutreachWorkbenchService
     }
 
     /**
-     * @return array{total:int,approved:int,pending:int,excluded:int,eligible:int,limited:int,blocked:int}
+     * @return array{total:int,approved:int,pending:int,excluded:int,eligible:int,limited:int,blocked:int,unavailable:int,suppressed:int}
      */
     public function summary(CongressionalOutreachDraft $draft): array
     {
         $counts = $draft->recipients()
-            ->selectRaw('review_status, eligibility_tier, COUNT(*) as aggregate')
-            ->groupBy('review_status', 'eligibility_tier')
+            ->selectRaw('review_status, eligibility_tier, exclusion_reason, COUNT(*) as aggregate')
+            ->groupBy('review_status', 'eligibility_tier', 'exclusion_reason')
             ->get();
 
         return [
@@ -243,6 +243,8 @@ class CongressionalOutreachWorkbenchService
             'eligible' => $counts->where('eligibility_tier', 'eligible')->sum('aggregate'),
             'limited' => $counts->where('eligibility_tier', 'limited')->sum('aggregate'),
             'blocked' => $counts->where('eligibility_tier', 'blocked')->sum('aggregate'),
+            'unavailable' => $counts->whereIn('exclusion_reason', ['no_address', 'inactive_profile'])->sum('aggregate'),
+            'suppressed' => $counts->where('exclusion_reason', 'blocked_address')->sum('aggregate'),
         ];
     }
 

@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\BuildCongressionalOutreachDraftSnapshot;
+use App\Jobs\GenerateCongressionalEmailGuesses;
 use App\Livewire\CongressionalDirectory\OutreachDraftShow;
 use App\Livewire\CongressionalDirectory\StaffListsIndex;
 use App\Models\CongressionalOffice;
@@ -8,11 +9,13 @@ use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalOutreachDraftRecipient;
 use App\Models\CongressionalPosition;
 use App\Models\CongressionalStaffList;
+use App\Models\CongressionalStaffObservation;
 use App\Models\CongressionalStaffProfile;
 use App\Models\OutreachCampaign;
 use App\Models\OutreachEmailSuppression;
 use App\Models\User;
 use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
+use App\Services\CongressionalDirectory\CongressionalEmailGuessService;
 use App\Services\CongressionalDirectory\CongressionalOutreachWorkbenchService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -82,6 +85,33 @@ function builtWorkbenchDraft(
     $workbench->refreshSnapshot($draft);
 
     return $draft->fresh();
+}
+
+function addWorkbenchObservation(
+    CongressionalStaffProfile $profile,
+    string $rawName,
+    string $sourceKind
+): CongressionalStaffObservation {
+    $position = $profile->currentPosition()->with('office')->firstOrFail();
+
+    return CongressionalStaffObservation::query()->create([
+        'profile_id' => $profile->id,
+        'office_id' => $position->office_id,
+        'position_id' => $position->id,
+        'observation_id' => strtolower($profile->chamber).':'.hash('sha256', $profile->id.'|'.$rawName.'|'.$sourceKind),
+        'source_record_hash' => hash('sha256', $rawName.'|'.$sourceKind),
+        'chamber' => $profile->chamber,
+        'name_raw' => $rawName,
+        'identity_hint' => preg_replace('/[^A-Z0-9]/', '', strtoupper($rawName)),
+        'office_raw' => $position->office->name,
+        'office_code' => $position->office->office_code,
+        'office_type' => 'Member office',
+        'title_raw' => $position->title,
+        'period_start' => '2026-01-01',
+        'period_end' => '2026-03-31',
+        'active_in_latest_report' => true,
+        'source_data' => ['kind' => $sourceKind],
+    ]);
 }
 
 test('dry run resolves the safest address and excludes unsafe recipient records', function () {
@@ -247,6 +277,7 @@ test('campaign owners can grant and revoke view-only access for active team memb
         ->assertSee('View-only campaign shared by Campaign Owner')
         ->assertDontSee('Add viewer')
         ->assertDontSee('Approve all eligible')
+        ->assertDontSee('Generate provisional email guesses')
         ->call('approveAllEligible')
         ->assertStatus(403);
 
@@ -342,4 +373,112 @@ test('a failed background snapshot is visible and can be retried safely', functi
         fn (BuildCongressionalOutreachDraftSnapshot $queuedJob) => $queuedJob->draftId === $draft->id
     );
     expect($draft->fresh()->status)->toBe('building');
+});
+
+test('email guesses follow source-aware house and senate conventions', function () {
+    $guesses = app(CongressionalEmailGuessService::class);
+    $house = workbenchProfile('Abbott Olivia H.');
+    $house->currentPosition->office->update([
+        'name' => 'HON. ANDREA SALINAS',
+        'normalized_name' => 'hon. andrea salinas',
+    ]);
+    addWorkbenchObservation($house, 'ABBOTT OLIVIA H.', 'house_statement_of_disbursements_csv');
+
+    $senate = workbenchProfile('Aalicyah D Moreno');
+    $senate->update(['chamber' => 'Senate']);
+    $senate->currentPosition->office->update([
+        'chamber' => 'Senate',
+        'name' => 'SENATOR TOM COTTON',
+        'normalized_name' => 'senator tom cotton',
+    ]);
+    addWorkbenchObservation($senate, 'MORENO, AALICYAH D', 'senate_secretary_report_pdf');
+
+    $compound = workbenchProfile('Taylor Example');
+    $compound->update(['chamber' => 'Senate']);
+    $compound->currentPosition->office->update([
+        'chamber' => 'Senate',
+        'name' => 'SENATOR CHRIS VAN HOLLEN',
+        'normalized_name' => 'senator chris van hollen',
+    ]);
+    addWorkbenchObservation($compound, 'EXAMPLE, TAYLOR', 'senate_secretary_report_pdf');
+
+    expect($guesses->guess($house)['email'])->toBe('olivia.abbott@mail.house.gov')
+        ->and($guesses->guess($senate)['email'])->toBe('aalicyah_moreno@cotton.senate.gov')
+        ->and($guesses->guess($compound)['email'])->toBe('taylor_example@vanhollen.senate.gov');
+});
+
+test('owners can queue a traceable provisional guess batch without sending', function () {
+    config()->set('features.congressional_directory_ui', true);
+    Queue::fake();
+    $owner = User::factory()->create();
+    $house = workbenchProfile('Abbott Olivia H.');
+    $house->currentPosition->office->update([
+        'name' => 'HON. ANDREA SALINAS',
+        'normalized_name' => 'hon. andrea salinas',
+    ]);
+    addWorkbenchObservation($house, 'ABBOTT OLIVIA H.', 'house_statement_of_disbursements_csv');
+    $senate = workbenchProfile('Aalicyah D Moreno');
+    $senate->update(['chamber' => 'Senate']);
+    $senate->currentPosition->office->update([
+        'chamber' => 'Senate',
+        'name' => 'SENATOR TOM COTTON',
+        'normalized_name' => 'senator tom cotton',
+    ]);
+    addWorkbenchObservation($senate, 'MORENO, AALICYAH D', 'senate_secretary_report_pdf');
+    $committee = workbenchProfile('Committee Staffer');
+    $committee->currentPosition->office->update([
+        'name' => 'DEMOCRATIC WOMENS CAUCUS',
+        'normalized_name' => 'democratic womens caucus',
+    ]);
+    addWorkbenchObservation($committee, 'STAFFER COMMITTEE', 'house_statement_of_disbursements_csv');
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft(
+        $workbench,
+        workbenchList($owner, [$house, $senate, $committee]),
+        $owner,
+        'Pattern pilot'
+    );
+
+    Livewire::actingAs($owner)
+        ->test(OutreachDraftShow::class, ['draft' => $draft])
+        ->set('batchSenatePattern', '{first}_{last}@{unknown}.senate.gov')
+        ->call('generateEmailGuesses')
+        ->assertHasErrors('batchSenatePattern');
+    Queue::assertNothingPushed();
+
+    Livewire::actingAs($owner)
+        ->test(OutreachDraftShow::class, ['draft' => $draft])
+        ->assertSeeText('2 guessable')
+        ->set('batchInstructions', 'Use the standard conventions for this pilot.')
+        ->call('generateEmailGuesses')
+        ->assertHasNoErrors()
+        ->assertSee('Generating provisional email guesses');
+
+    Queue::assertPushed(
+        GenerateCongressionalEmailGuesses::class,
+        fn (GenerateCongressionalEmailGuesses $job) => $job->draftId === $draft->id
+            && $job->instructions === 'Use the standard conventions for this pilot.'
+    );
+
+    (new GenerateCongressionalEmailGuesses(
+        $draft->id,
+        $owner->id,
+        'Use the standard conventions for this pilot.',
+        CongressionalEmailGuessService::HOUSE_PATTERN,
+        CongressionalEmailGuessService::SENATE_PATTERN
+    ))->handle(app(CongressionalEmailGuessService::class), $workbench);
+    $draft->refresh();
+
+    expect($house->emails()->sole()->email)->toBe('olivia.abbott@mail.house.gov')
+        ->and($house->emails()->sole()->source_type)->toBe('guessed')
+        ->and($house->emails()->sole()->verification_status)->toBe('unverified')
+        ->and(data_get($house->emails()->sole()->metadata, 'guess.instructions'))->toBe('Use the standard conventions for this pilot.')
+        ->and($senate->emails()->sole()->email)->toBe('aalicyah_moreno@cotton.senate.gov')
+        ->and($committee->emails()->count())->toBe(0)
+        ->and($draft->recipients()->where('profile_id', $house->id)->sole()->eligibility_tier)->toBe('limited')
+        ->and($draft->recipients()->where('profile_id', $house->id)->sole()->review_status)->toBe('pending')
+        ->and($draft->recipients()->where('profile_id', $committee->id)->sole()->exclusion_reason)->toBe('no_address')
+        ->and(data_get($draft->metadata, 'email_guess_batch.status'))->toBe('completed')
+        ->and(data_get($draft->metadata, 'email_guess_batch.generated'))->toBe(2)
+        ->and(OutreachCampaign::query()->count())->toBe(0);
 });
