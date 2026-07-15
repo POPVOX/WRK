@@ -9,10 +9,16 @@
             </p>
         </div>
         <div class="space-y-3">
-            <a href="{{ route('congress.changes') }}" wire:navigate class="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 hover:bg-amber-100">
-                <span>Gmail staff-change review</span>
-                <span class="rounded-full bg-white px-2 py-0.5">{{ number_format($pendingChangeSignals) }} pending</span>
-            </a>
+            <div class="grid gap-2 sm:grid-cols-2">
+                <a href="{{ route('congress.lists') }}" wire:navigate class="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-900 hover:bg-indigo-100">
+                    <span>Staff lists</span>
+                    <span class="rounded-full bg-white px-2 py-0.5">{{ number_format($lists->count()) }}</span>
+                </a>
+                <a href="{{ route('congress.changes') }}" wire:navigate class="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                    <span>Gmail changes</span>
+                    <span class="rounded-full bg-white px-2 py-0.5">{{ number_format($pendingChangeSignals) }}</span>
+                </a>
+            </div>
             <div class="grid grid-cols-3 gap-3 text-center">
             <div class="app-surface px-4 py-3">
                 <p class="text-2xl font-semibold text-gray-900">{{ number_format($totalProfiles) }}</p>
@@ -80,13 +86,58 @@
         </div>
     </section>
 
+    <section class="app-surface p-5 space-y-4" aria-label="Congressional staff list builder">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+                <h2 class="font-semibold text-gray-900">Build a staff list</h2>
+                <p class="mt-1 text-sm text-gray-600">Check individual results or add every result matching the filters above. You can remove individual people afterward.</p>
+            </div>
+            <a href="{{ route('congress.lists') }}" wire:navigate class="text-sm font-semibold text-indigo-700 hover:text-indigo-900">Manage saved lists</a>
+        </div>
+
+        <form wire:submit="createList" class="flex flex-col gap-2 sm:flex-row">
+            <input type="text" wire:model.defer="newListName" placeholder="New list name" class="min-w-0 flex-1 rounded-lg border-gray-300 text-sm">
+            <button type="submit" class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">Create list</button>
+        </form>
+        @error('newListName') <p class="text-xs text-red-600">{{ $message }}</p> @enderror
+
+        @if($lists->isNotEmpty())
+            <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-end">
+                <label class="text-sm font-medium text-gray-700">
+                    Add to
+                    <select wire:model.live="selectedListId" class="mt-1 block w-full rounded-lg border-gray-300 text-sm">
+                        @foreach($lists as $list)
+                            <option value="{{ $list->id }}">{{ $list->name }} ({{ number_format($list->profiles_count) }})</option>
+                        @endforeach
+                    </select>
+                </label>
+                <button type="button" wire:click="addCheckedToList" @disabled(count($checkedProfileIds) === 0) class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40">
+                    Add {{ number_format(count($checkedProfileIds)) }} checked
+                </button>
+                <button type="button" wire:click="addAllMatchesToList" wire:confirm="Add all {{ number_format($staff->total()) }} matching staff to {{ $selectedList?->name ?? 'this list' }}?" @disabled($staff->total() === 0) class="rounded-lg border border-indigo-300 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-40">
+                    Add all {{ number_format($staff->total()) }} matches
+                </button>
+            </div>
+        @else
+            <p class="rounded-lg border border-dashed border-gray-300 p-3 text-sm text-gray-500">Create a list above, then add checked staff or all matching results.</p>
+        @endif
+    </section>
+
     <section class="app-surface overflow-hidden">
         <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
             <div>
                 <h2 class="font-semibold text-gray-900">Staff profiles</h2>
                 <p class="text-sm app-muted">{{ number_format($staff->total()) }} matching {{ Str::plural('profile', $staff->total()) }}</p>
             </div>
-            <div wire:loading class="text-sm font-medium text-indigo-600">Updating…</div>
+            <div class="flex items-center gap-3">
+                @if($staff->isNotEmpty())
+                    <button type="button" wire:click="checkProfiles({{ Js::from($staff->pluck('id')->all()) }})" class="text-sm font-semibold text-indigo-700 hover:text-indigo-900">Check this page</button>
+                @endif
+                @if(count($checkedProfileIds) > 0)
+                    <button type="button" wire:click="clearCheckedProfiles" class="text-sm font-medium text-gray-600 hover:text-gray-900">Clear checks</button>
+                @endif
+                <div wire:loading class="text-sm font-medium text-indigo-600">Updating…</div>
+            </div>
         </div>
 
         @if($staff->isEmpty())
@@ -98,8 +149,12 @@
             <div class="divide-y divide-gray-200">
                 @foreach($staff as $profile)
                     @php($position = $profile->currentPosition)
-                    <a href="{{ route('congress.staff.show', $profile) }}" wire:navigate class="block px-5 py-4 hover:bg-gray-50">
-                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex items-start gap-3 px-5 py-4 hover:bg-gray-50">
+                        <label class="mt-1 flex shrink-0 items-center" aria-label="Select {{ $profile->display_name }}">
+                            <input type="checkbox" wire:model.live="checkedProfileIds" value="{{ $profile->id }}" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                        </label>
+                        <a href="{{ route('congress.staff.show', $profile) }}" wire:navigate class="min-w-0 flex-1">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div class="min-w-0">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <h3 class="font-semibold text-gray-900">{{ $profile->display_name }}</h3>
@@ -124,8 +179,9 @@
                                     {{ number_format($profile->observations_count) }} source {{ Str::plural('observation', $profile->observations_count) }}
                                 </p>
                             </div>
-                        </div>
-                    </a>
+                            </div>
+                        </a>
+                    </div>
                 @endforeach
             </div>
 
