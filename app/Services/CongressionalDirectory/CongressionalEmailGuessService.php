@@ -6,6 +6,7 @@ use App\Models\CongressionalOffice;
 use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalStaffEmail;
 use App\Models\CongressionalStaffProfile;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -15,6 +16,31 @@ class CongressionalEmailGuessService
     public const HOUSE_PATTERN = '{first}.{last}@mail.house.gov';
 
     public const SENATE_PATTERN = '{first}_{last}@{senator_last}.senate.gov';
+
+    public const CBO_PATTERN = '{first}.{last}@cbo.gov';
+
+    public const SENATE_OFFICE_PATTERN = '{first}_{last}@{office_domain}';
+
+    /** @var array<string,string> */
+    protected const SENATE_COMMITTEE_DOMAINS = [
+        'AGRICULTURE, NUTRITION AND FORESTRY' => 'ag.senate.gov',
+        'APPROPRIATIONS' => 'appro.senate.gov',
+        'ARMED SERVICES' => 'armed-services.senate.gov',
+        'BANKING, HOUSING AND URBAN AFFAIRS' => 'banking.senate.gov',
+        'BUDGET' => 'budget.senate.gov',
+        'COMMERCE, SCIENCE AND TRANSPORTATION' => 'commerce.senate.gov',
+        'ENERGY AND NATURAL RESOURCES' => 'energy.senate.gov',
+        'ENVIRONMENT AND PUBLIC WORKS' => 'epw.senate.gov',
+        'FINANCE' => 'finance.senate.gov',
+        'FOREIGN RELATIONS' => 'foreign.senate.gov',
+        'HEALTH, EDUCATION, LABOR, AND PENSIONS' => 'help.senate.gov',
+        'HOMELAND SECURITY AND GOVERNMENTAL AFFAIRS' => 'hsgac.senate.gov',
+        'INDIAN AFFAIRS' => 'indian.senate.gov',
+        'JOINT ECONOMIC COMMITTEE' => 'jec.senate.gov',
+        'SMALL BUSINESS AND ENTREPRENEURSHIP' => 'sbc.senate.gov',
+        'SPECIAL COMMITTEE ON AGING' => 'aging.senate.gov',
+        "VETERANS' AFFAIRS" => 'vetstaff.senate.gov',
+    ];
 
     /** @var array<int,string|null> */
     protected array $senateDomains = [];
@@ -45,7 +71,7 @@ class CongressionalEmailGuessService
     }
 
     /**
-     * @return array{email:string,chamber:string,method:string,components:array<string,string>}|null
+     * @return array{email:string,chamber:string,method:string,pattern:string,components:array<string,string>}|null
      */
     public function guess(
         CongressionalStaffProfile $profile,
@@ -54,12 +80,23 @@ class CongressionalEmailGuessService
         bool $allowAllHouseOffices = false
     ): ?array {
         $profile->loadMissing(['currentPosition.office', 'latestPosition.office', 'latestObservation']);
-        $name = $this->staffNameParts($profile);
+        $office = $profile->currentPosition?->office ?: $profile->latestPosition?->office;
+        $isCbo = $this->isCboOffice($office, $profile);
+        $name = $this->staffNameParts($profile, $isCbo);
         if (! $name) {
             return null;
         }
 
-        $office = $profile->currentPosition?->office ?: $profile->latestPosition?->office;
+        if ($isCbo) {
+            return [
+                'email' => $this->renderPattern(self::CBO_PATTERN, $name),
+                'chamber' => $profile->chamber,
+                'method' => 'cbo_first_dot_last',
+                'pattern' => self::CBO_PATTERN,
+                'components' => $name,
+            ];
+        }
+
         $houseOfficeIsSupported = $office
             && $office->chamber === 'House'
             && preg_match('/^HON\./i', $office->name) === 1;
@@ -70,11 +107,29 @@ class CongressionalEmailGuessService
                 'email' => $this->renderPattern($housePattern, $components),
                 'chamber' => 'House',
                 'method' => 'house_first_dot_last',
+                'pattern' => $housePattern,
                 'components' => $components,
             ];
         }
 
         if ($profile->chamber === 'Senate' && $office) {
+            $officeDomain = $this->senateCommitteeDomain($office);
+            if ($officeDomain) {
+                $components = [
+                    'first' => $name['first'],
+                    'last' => $name['last'],
+                    'office_domain' => $officeDomain,
+                ];
+
+                return [
+                    'email' => $this->renderPattern(self::SENATE_OFFICE_PATTERN, $components),
+                    'chamber' => 'Senate',
+                    'method' => 'senate_committee_first_underscore_last',
+                    'pattern' => self::SENATE_OFFICE_PATTERN,
+                    'components' => $components,
+                ];
+            }
+
             $senatorLast = $this->senatorDomainName($office);
             if (! $senatorLast) {
                 return null;
@@ -90,6 +145,7 @@ class CongressionalEmailGuessService
                 'email' => $this->renderPattern($senatePattern, $components),
                 'chamber' => 'Senate',
                 'method' => 'senate_first_underscore_last',
+                'pattern' => $senatePattern,
                 'components' => $components,
             ];
         }
@@ -191,6 +247,141 @@ class CongressionalEmailGuessService
         return $result;
     }
 
+    public function estimateFormulaRepairs(
+        string $housePattern = self::HOUSE_PATTERN,
+        string $senatePattern = self::SENATE_PATTERN
+    ): int {
+        $repairable = 0;
+
+        $this->repairCandidateQuery()
+            ->with(['profile.currentPosition.office', 'profile.latestPosition.office', 'profile.latestObservation'])
+            ->orderBy('id')
+            ->chunkById(500, function ($emails) use (&$repairable, $housePattern, $senatePattern): void {
+                foreach ($emails as $staffEmail) {
+                    if (data_get($staffEmail->metadata, 'guess.scope') !== 'global' || ! $staffEmail->profile) {
+                        continue;
+                    }
+
+                    $guess = $this->guess($staffEmail->profile, $housePattern, $senatePattern, true);
+                    if ($guess && Str::lower($guess['email']) !== $staffEmail->email_normalized) {
+                        $repairable++;
+                    }
+                }
+            });
+
+        return $repairable;
+    }
+
+    public function repairFormulaGuesses(
+        int $userId,
+        string $instructions,
+        string $housePattern = self::HOUSE_PATTERN,
+        string $senatePattern = self::SENATE_PATTERN
+    ): int {
+        $corrected = 0;
+
+        $this->repairCandidateQuery()
+            ->with(['profile.currentPosition.office', 'profile.latestPosition.office', 'profile.latestObservation'])
+            ->orderBy('id')
+            ->chunkById(100, function ($emails) use (
+                &$corrected,
+                $userId,
+                $instructions,
+                $housePattern,
+                $senatePattern
+            ): void {
+                foreach ($emails as $staffEmail) {
+                    if (data_get($staffEmail->metadata, 'guess.scope') !== 'global' || ! $staffEmail->profile) {
+                        continue;
+                    }
+
+                    $guess = $this->guess($staffEmail->profile, $housePattern, $senatePattern, true);
+                    $newEmail = $guess ? Str::lower($guess['email']) : null;
+                    if (! $newEmail || $newEmail === $staffEmail->email_normalized) {
+                        continue;
+                    }
+
+                    DB::transaction(function () use (
+                        $staffEmail,
+                        $guess,
+                        $newEmail,
+                        $userId,
+                        $instructions,
+                        &$corrected
+                    ): void {
+                        $locked = CongressionalStaffEmail::query()->lockForUpdate()->find($staffEmail->id);
+                        if (! $locked
+                            || $locked->source_type !== 'guessed'
+                            || $locked->verification_status !== 'unverified'
+                            || $locked->last_sent_at
+                            || $locked->last_replied_at
+                            || $locked->hard_bounced_at
+                            || $locked->unsubscribed_at
+                            || data_get($locked->metadata, 'guess.scope') !== 'global'
+                            || $locked->events()->where('event_type', '!=', 'address_added')->exists()) {
+                            return;
+                        }
+
+                        $oldEmail = $locked->email_normalized;
+                        $metadata = $locked->metadata ?? [];
+                        data_set($metadata, 'guess.method', $guess['method']);
+                        data_set($metadata, 'guess.pattern', $guess['pattern']);
+                        data_set($metadata, 'guess.components', $guess['components']);
+                        data_set($metadata, 'guess.repaired_by', $userId);
+                        data_set($metadata, 'guess.repaired_at', now()->toIso8601String());
+                        $repairNote = implode(' ', array_filter([
+                            "Formula correction from {$oldEmail} to {$newEmail}.",
+                            $instructions !== '' ? 'Instructions: '.$instructions : null,
+                        ]));
+
+                        $locked->forceFill([
+                            'email' => $newEmail,
+                            'email_normalized' => $newEmail,
+                            'source_notes' => Str::limit(trim($locked->source_notes.' '.$repairNote), 4000, ''),
+                            'metadata' => $metadata,
+                            'added_by' => $userId,
+                        ])->save();
+
+                        DB::table('congressional_outreach_draft_recipients')
+                            ->where('staff_email_id', $locked->id)
+                            ->where('review_status', 'pending')
+                            ->whereNotExists(fn ($query) => $query
+                                ->selectRaw('1')
+                                ->from('outreach_campaign_recipients')
+                                ->whereColumn(
+                                    'outreach_campaign_recipients.congressional_outreach_draft_recipient_id',
+                                    'congressional_outreach_draft_recipients.id'
+                                ))
+                            ->update([
+                                'email' => $newEmail,
+                                'email_normalized' => $newEmail,
+                                'updated_at' => now(),
+                            ]);
+
+                        DB::table('congressional_staff_email_events')->insertOrIgnore([
+                            'staff_email_id' => $locked->id,
+                            'user_id' => $userId,
+                            'event_key' => hash('sha256', "address-corrected|{$locked->id}|{$newEmail}"),
+                            'event_type' => 'address_corrected',
+                            'evidence_strength' => 'low',
+                            'evidence_excerpt' => Str::limit($repairNote, 4000, ''),
+                            'metadata' => json_encode([
+                                'old_email' => $oldEmail,
+                                'new_email' => $newEmail,
+                                'source_type' => 'guessed',
+                            ], JSON_THROW_ON_ERROR),
+                            'occurred_at' => now(),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                        $corrected++;
+                    });
+                }
+            });
+
+        return $corrected;
+    }
+
     /**
      * @return array{generated:int,skipped:int}
      */
@@ -276,7 +467,7 @@ class CongressionalEmailGuessService
             $result[Str::lower($guess['chamber'])]++;
             $notes = implode(' ', array_filter([
                 $sourceLabel,
-                'Pattern: '.($guess['chamber'] === 'House' ? $housePattern : $senatePattern).'.',
+                'Pattern: '.$guess['pattern'].'.',
                 $instructions !== '' ? 'Instructions: '.$instructions : null,
             ]));
             $email = Str::lower($guess['email']);
@@ -290,7 +481,7 @@ class CongressionalEmailGuessService
                 'source_notes' => Str::limit($notes, 4000, ''),
                 'metadata' => json_encode(['guess' => [
                     'method' => $guess['method'],
-                    'pattern' => $guess['chamber'] === 'House' ? $housePattern : $senatePattern,
+                    'pattern' => $guess['pattern'],
                     'components' => $guess['components'],
                     'instructions' => $instructions,
                     'scope' => $scope,
@@ -369,7 +560,7 @@ class CongressionalEmailGuessService
     /**
      * @return array{first:string,last:string}|null
      */
-    protected function staffNameParts(CongressionalStaffProfile $profile): ?array
+    protected function staffNameParts(CongressionalStaffProfile $profile, bool $preserveHyphens = false): ?array
     {
         $raw = Str::squish((string) ($profile->latestObservation?->name_raw ?: $profile->display_name));
         $sourceKind = (string) data_get($profile->latestObservation?->source_data, 'kind');
@@ -378,30 +569,33 @@ class CongressionalEmailGuessService
             [$lastName, $remaining] = array_map('trim', explode(',', $raw, 2));
             $firstName = Str::before($remaining, ' ');
 
-            return $this->cleanNameParts($firstName, $lastName);
+            return $this->cleanNameParts($firstName, $lastName, $preserveHyphens);
         }
 
         $tokens = preg_split('/\s+/', $raw) ?: [];
         if ($profile->chamber === 'House'
             && str_starts_with($sourceKind, 'house_statement_of_disbursements')
             && count($tokens) >= 2) {
-            return $this->cleanNameParts($tokens[1], $tokens[0]);
+            return $this->cleanNameParts($tokens[1], $tokens[0], $preserveHyphens);
         }
 
         if (count($tokens) < 2) {
             return null;
         }
 
-        return $this->cleanNameParts($tokens[0], $this->lastNonSuffixToken($tokens));
+        return $this->cleanNameParts($tokens[0], $this->lastNonSuffixToken($tokens), $preserveHyphens);
     }
 
     /**
      * @return array{first:string,last:string}|null
      */
-    protected function cleanNameParts(string $firstName, string $lastName): ?array
-    {
-        $first = $this->emailToken($firstName);
-        $last = $this->emailToken($lastName);
+    protected function cleanNameParts(
+        string $firstName,
+        string $lastName,
+        bool $preserveHyphens = false
+    ): ?array {
+        $first = $this->emailToken($firstName, $preserveHyphens);
+        $last = $this->emailToken($lastName, $preserveHyphens);
 
         return $first !== '' && $last !== '' ? compact('first', 'last') : null;
     }
@@ -427,7 +621,16 @@ class CongressionalEmailGuessService
             return $this->senateDomains[$office->id] = Str::before($observedDomain, '.senate.gov');
         }
 
-        if (preg_match('/^SENATOR\s+(.+)$/i', Str::squish($office->name), $matches) !== 1) {
+        $officeName = Str::squish($office->name);
+        if (preg_match('/^INTERN COMPENSATION\s*-\s*(.+)$/i', $officeName, $matches) === 1) {
+            $tokens = preg_split('/\s+/', $matches[1]) ?: [];
+            $tokens = array_values(array_filter($tokens, fn (string $token) => ! $this->isInitialOrSuffix($token)));
+            $domainName = $this->emailToken(implode('', $tokens));
+
+            return $this->senateDomains[$office->id] = ($domainName !== '' ? $domainName : null);
+        }
+
+        if (preg_match('/^SENATOR\s+(.+)$/i', $officeName, $matches) !== 1) {
             return $this->senateDomains[$office->id] = null;
         }
 
@@ -439,7 +642,7 @@ class CongressionalEmailGuessService
             return $this->senateDomains[$office->id] = null;
         }
 
-        $compoundMarkers = ['van', 'von', 'de', 'del', 'la', 'cortez'];
+        $compoundMarkers = ['van', 'von', 'de', 'del', 'la', 'cortez', 'blunt'];
         $surnameTokens = [$lastName];
         while ($tokens !== [] && in_array(Str::lower((string) end($tokens)), $compoundMarkers, true)) {
             array_unshift($surnameTokens, (string) array_pop($tokens));
@@ -448,6 +651,42 @@ class CongressionalEmailGuessService
         $domainName = $this->emailToken(implode('', $surnameTokens));
 
         return $this->senateDomains[$office->id] = ($domainName !== '' ? $domainName : null);
+    }
+
+    protected function senateCommitteeDomain(CongressionalOffice $office): ?string
+    {
+        $officeName = Str::upper(Str::squish($office->name));
+
+        foreach (self::SENATE_COMMITTEE_DOMAINS as $prefix => $domain) {
+            if (str_starts_with($officeName, $prefix)) {
+                return $domain;
+            }
+        }
+
+        return null;
+    }
+
+    protected function repairCandidateQuery(): Builder
+    {
+        return CongressionalStaffEmail::query()
+            ->where('source_type', 'guessed')
+            ->where('verification_status', 'unverified')
+            ->whereNull('last_sent_at')
+            ->whereNull('last_replied_at')
+            ->whereNull('hard_bounced_at')
+            ->whereNull('unsubscribed_at')
+            ->whereDoesntHave('events', fn ($query) => $query->where('event_type', '!=', 'address_added'));
+    }
+
+    protected function isCboOffice(?CongressionalOffice $office, CongressionalStaffProfile $profile): bool
+    {
+        if (! $office) {
+            return false;
+        }
+
+        return Str::upper((string) $office->office_code) === 'CBO'
+            || str_contains(Str::upper($office->name), 'CONGRESSIONAL BUDGET OFFICE')
+            || str_contains(Str::upper((string) $profile->latestObservation?->office_raw), 'CONGRESSIONAL BUDGET OFFICE');
     }
 
     /** @param array<int,string> $tokens */
@@ -470,8 +709,10 @@ class CongressionalEmailGuessService
         return in_array(Str::upper(trim($value, '., ')), ['JR', 'SR', 'II', 'III', 'IV'], true);
     }
 
-    protected function emailToken(string $value): string
+    protected function emailToken(string $value, bool $preserveHyphens = false): string
     {
-        return preg_replace('/[^a-z0-9]+/', '', Str::lower(Str::ascii($value))) ?? '';
+        $pattern = $preserveHyphens ? '/[^a-z0-9-]+/' : '/[^a-z0-9]+/';
+
+        return trim(preg_replace($pattern, '', Str::lower(Str::ascii($value))) ?? '', '-');
     }
 }

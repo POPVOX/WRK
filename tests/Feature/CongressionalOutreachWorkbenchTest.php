@@ -525,6 +525,104 @@ test('provisional email generation uses bounded database work as a list grows', 
         ->and($queryCount)->toBeLessThan(20);
 });
 
+test('institution-specific formulas cover CBO senator intern accounts and verified Senate committees', function () {
+    $cbo = workbenchProfile('Molly Saunders-Scott');
+    $cbo->currentPosition->office->update([
+        'name' => 'CONGRESSIONAL BUDGET OFFICE',
+        'normalized_name' => 'congressional budget office',
+        'office_code' => 'CBO',
+        'office_type' => 'Institutional',
+    ]);
+    addWorkbenchObservation($cbo, 'SAUNDERS-SCOTT, MOLLY', 'cbo_staff_directory');
+
+    $intern = workbenchProfile('Taylor Morgan');
+    $intern->update(['chamber' => 'Senate']);
+    $intern->currentPosition->office->update([
+        'chamber' => 'Senate',
+        'name' => 'INTERN COMPENSATION - BLUNT ROCHESTER',
+        'normalized_name' => 'intern compensation - blunt rochester',
+        'office_type' => 'Senator offices',
+    ]);
+
+    $committee = workbenchProfile('Jordan Rivera');
+    $committee->update(['chamber' => 'Senate']);
+    $committee->currentPosition->office->update([
+        'chamber' => 'Senate',
+        'name' => 'BUDGET S.RES. 94B (119TH) EXPENSES OF INQUIRIES AND INVESTIGATIONS',
+        'normalized_name' => 'budget s res 94b 119th expenses of inquiries and investigations',
+        'office_type' => 'Other Senate offices',
+    ]);
+
+    $unsupported = workbenchProfile('Casey Unknown');
+    $unsupported->update(['chamber' => 'Senate']);
+    $unsupported->currentPosition->office->update([
+        'chamber' => 'Senate',
+        'name' => 'SERGEANT AT ARMS AND DOORKEEPER OF THE SENATE',
+        'normalized_name' => 'sergeant at arms and doorkeeper of the senate',
+        'office_type' => 'Institutional',
+    ]);
+    $guesses = app(CongressionalEmailGuessService::class);
+
+    expect($guesses->guess($cbo, allowAllHouseOffices: true))->toMatchArray([
+        'email' => 'molly.saunders-scott@cbo.gov',
+        'method' => 'cbo_first_dot_last',
+        'pattern' => CongressionalEmailGuessService::CBO_PATTERN,
+    ])->and($guesses->guess($intern, allowAllHouseOffices: true))->toMatchArray([
+        'email' => 'taylor_morgan@bluntrochester.senate.gov',
+        'method' => 'senate_first_underscore_last',
+    ])->and($guesses->guess($committee, allowAllHouseOffices: true))->toMatchArray([
+        'email' => 'jordan_rivera@budget.senate.gov',
+        'method' => 'senate_committee_first_underscore_last',
+        'pattern' => CongressionalEmailGuessService::SENATE_OFFICE_PATTERN,
+    ])->and($guesses->guess($unsupported, allowAllHouseOffices: true))->toBeNull();
+});
+
+test('formula repairs correct only untouched global guesses and pending workbench snapshots', function () {
+    $user = User::factory()->create();
+    $profile = workbenchProfile('Taylor Morgan');
+    $profile->update(['chamber' => 'Senate']);
+    $profile->currentPosition->office->update([
+        'chamber' => 'Senate',
+        'name' => 'SENATOR LISA BLUNT ROCHESTER',
+        'normalized_name' => 'senator lisa blunt rochester',
+    ]);
+    $email = $profile->emails()->create([
+        'email' => 'taylor_morgan@rochester.senate.gov',
+        'email_normalized' => 'taylor_morgan@rochester.senate.gov',
+        'source_type' => 'guessed',
+        'verification_status' => 'unverified',
+        'metadata' => ['guess' => [
+            'scope' => 'global',
+            'method' => 'senate_first_underscore_last',
+            'pattern' => CongressionalEmailGuessService::SENATE_PATTERN,
+        ]],
+        'added_by' => $user->id,
+    ]);
+    $email->events()->create([
+        'user_id' => $user->id,
+        'event_key' => hash('sha256', 'address-added|'.$email->id),
+        'event_type' => 'address_added',
+        'evidence_strength' => 'low',
+        'occurred_at' => now(),
+    ]);
+    $draft = builtWorkbenchDraft(
+        app(CongressionalOutreachWorkbenchService::class),
+        workbenchList($user, [$profile]),
+        $user,
+        'Formula repair test'
+    );
+    $guesses = app(CongressionalEmailGuessService::class);
+
+    expect($guesses->estimateFormulaRepairs())->toBe(1)
+        ->and($guesses->repairFormulaGuesses($user->id, 'Verified compound member domain'))->toBe(1)
+        ->and($email->refresh()->email_normalized)->toBe('taylor_morgan@bluntrochester.senate.gov')
+        ->and(data_get($email->metadata, 'guess.components.senator_last'))->toBe('bluntrochester')
+        ->and($draft->recipients()->sole()->email_normalized)->toBe('taylor_morgan@bluntrochester.senate.gov')
+        ->and($draft->recipients()->sole()->review_status)->toBe('pending')
+        ->and($email->events()->where('event_type', 'address_corrected')->count())->toBe(1)
+        ->and($guesses->estimateFormulaRepairs())->toBe(0);
+});
+
 test('database wide provisional generation preserves evidence and uses latest reported positions', function () {
     $user = User::factory()->create();
     $house = workbenchProfile('Jane Doe', false);

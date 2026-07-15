@@ -28,6 +28,7 @@ class GenerateCongressionalEmailGuesses extends Command
         if ((bool) $this->option('dry-run')) {
             $this->info('Estimating database-wide provisional congressional addresses...');
             $result = $guesses->estimateAllProfiles();
+            $result['correctable'] = $guesses->estimateFormulaRepairs();
             $this->resultTable($result, 'dry run');
 
             return self::SUCCESS;
@@ -44,6 +45,10 @@ class GenerateCongressionalEmailGuesses extends Command
             $userId,
             trim((string) $this->option('instructions'))
         );
+        $result['corrected'] = $guesses->repairFormulaGuesses(
+            $userId,
+            trim((string) $this->option('instructions'))
+        );
         $this->resultTable($result, 'write');
 
         return self::SUCCESS;
@@ -53,13 +58,14 @@ class GenerateCongressionalEmailGuesses extends Command
     protected function resultTable(array $result, string $mode): void
     {
         $this->table(
-            ['Mode', 'Profiles', 'Already addressed', 'Candidates', 'Guessable/generated', 'House', 'Senate', 'Unresolved', 'Skipped'],
+            ['Mode', 'Profiles', 'Already addressed', 'Candidates', 'Guessable/generated', 'Correctable/corrected', 'House', 'Senate', 'Unresolved', 'Skipped'],
             [[
                 $mode,
                 number_format($result['total'] ?? 0),
                 number_format($result['already_addressed'] ?? 0),
                 number_format($result['candidates'] ?? 0),
                 number_format($result['guessable'] ?? $result['generated'] ?? 0),
+                number_format($result['correctable'] ?? $result['corrected'] ?? 0),
                 number_format($result['house'] ?? 0),
                 number_format($result['senate'] ?? 0),
                 number_format($result['unresolved'] ?? 0),
