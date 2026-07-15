@@ -8,7 +8,12 @@
                 Profiles remain provisional until evidence or team review confirms an identity.
             </p>
         </div>
-        <div class="grid grid-cols-3 gap-3 text-center">
+        <div class="space-y-3">
+            <a href="{{ route('congress.changes') }}" wire:navigate class="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                <span>Gmail staff-change review</span>
+                <span class="rounded-full bg-white px-2 py-0.5">{{ number_format($pendingChangeSignals) }} pending</span>
+            </a>
+            <div class="grid grid-cols-3 gap-3 text-center">
             <div class="app-surface px-4 py-3">
                 <p class="text-2xl font-semibold text-gray-900">{{ number_format($totalProfiles) }}</p>
                 <p class="text-xs app-muted">Profiles</p>
@@ -20,6 +25,7 @@
             <div class="app-surface px-4 py-3">
                 <p class="text-2xl font-semibold text-indigo-700">{{ number_format($linkedProfiles) }}</p>
                 <p class="text-xs app-muted">Linked</p>
+            </div>
             </div>
         </div>
     </div>

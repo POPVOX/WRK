@@ -3,6 +3,7 @@
 namespace App\Livewire\CongressionalDirectory;
 
 use App\Models\CongressionalOffice;
+use App\Models\CongressionalStaffChangeSignal;
 use App\Models\CongressionalStaffProfile;
 use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Layout;
@@ -92,6 +93,7 @@ class StaffIndex extends Component
                 ->whereHas('positions', fn (Builder $query) => $query->where('is_current', true))
                 ->count(),
             'linkedProfiles' => CongressionalStaffProfile::query()->whereNotNull('person_id')->count(),
+            'pendingChangeSignals' => CongressionalStaffChangeSignal::query()->where('status', 'pending')->count(),
         ]);
     }
 }

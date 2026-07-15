@@ -16,6 +16,7 @@ class GmailMessage extends Model
         'history_id',
         'subject',
         'snippet',
+        'body_text',
         'from_email',
         'from_name',
         'to_emails',
@@ -48,5 +49,10 @@ class GmailMessage extends Model
     public function inboxActionLogs(): HasMany
     {
         return $this->hasMany(InboxActionLog::class);
+    }
+
+    public function congressionalStaffChangeSignals(): HasMany
+    {
+        return $this->hasMany(CongressionalStaffChangeSignal::class);
     }
 }

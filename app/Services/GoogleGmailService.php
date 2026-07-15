@@ -7,6 +7,7 @@ use App\Models\GmailMessage;
 use App\Models\Person;
 use App\Models\User;
 use App\Services\Agents\AgentCredentialService;
+use App\Services\CongressionalDirectory\CongressionalStaffChangeDetector;
 use Carbon\Carbon;
 use Google\Client as GoogleClient;
 use Google\Service\Gmail as GoogleGmail;
@@ -14,6 +15,7 @@ use Google\Service\Gmail\Draft as GoogleDraft;
 use Google\Service\Gmail\Message as GoogleMessage;
 use Google\Service\Gmail\ModifyThreadRequest;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 
@@ -22,7 +24,8 @@ class GoogleGmailService
     protected GoogleClient $client;
 
     public function __construct(
-        protected AgentCredentialService $agentCredentialService
+        protected AgentCredentialService $agentCredentialService,
+        protected CongressionalStaffChangeDetector $congressionalStaffChangeDetector
     ) {
         $this->client = new GoogleClient;
         $this->client->setClientId(config('services.google.client_id'));
@@ -129,6 +132,15 @@ class GoogleGmailService
                         }
 
                         $payload = $this->mapMessageToRecord($user, $message);
+                        if ($this->congressionalStaffChangeDetector->mightContainSignal(
+                            trim(($payload['subject'] ?? '').' '.($payload['snippet'] ?? ''))
+                        )) {
+                            $fullMessage = $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($messageRef) {
+                                return $gmail->users_messages->get('me', $messageRef->getId(), ['format' => 'full']);
+                            });
+                            $payload['body_text'] = $this->extractMessageBody($fullMessage);
+                        }
+
                         $record = GmailMessage::firstOrNew([
                             'user_id' => $user->id,
                             'gmail_message_id' => $payload['gmail_message_id'],
@@ -141,6 +153,7 @@ class GoogleGmailService
                             'history_id' => $payload['history_id'],
                             'subject' => $payload['subject'],
                             'snippet' => $payload['snippet'],
+                            'body_text' => $payload['body_text'] ?? null,
                             'from_email' => $payload['from_email'],
                             'from_name' => $payload['from_name'],
                             'to_emails' => $payload['to_emails'],
@@ -151,6 +164,7 @@ class GoogleGmailService
                             'labels' => $payload['labels'],
                         ]);
                         $record->save();
+                        $this->congressionalStaffChangeDetector->detect($record);
 
                         if ($isNew) {
                             $imported++;
@@ -413,6 +427,7 @@ class GoogleGmailService
             'history_id' => (string) ($message->getHistoryId() ?? ''),
             'subject' => $this->decodeMimeHeader((string) ($headers['subject'] ?? '')),
             'snippet' => (string) ($message->getSnippet() ?? ''),
+            'body_text' => null,
             'from_email' => $fromEmail !== '' ? $fromEmail : null,
             'from_name' => (string) ($from['name'] ?? '') !== '' ? (string) $from['name'] : null,
             'to_emails' => $to,
@@ -422,6 +437,44 @@ class GoogleGmailService
             'is_inbound' => $isInbound,
             'labels' => array_values(array_filter((array) ($message->getLabelIds() ?? []))),
         ];
+    }
+
+    protected function extractMessageBody(GoogleMessage $message): ?string
+    {
+        $plain = [];
+        $html = [];
+        $this->collectMessagePartText($message->getPayload(), $plain, $html);
+        $parts = $plain !== [] ? $plain : array_map(
+            fn (string $value) => html_entity_decode(strip_tags($value), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+            $html
+        );
+        $body = trim(implode("\n\n", array_filter($parts)));
+
+        return $body !== '' ? Str::limit($body, 50000, '') : null;
+    }
+
+    protected function collectMessagePartText(mixed $part, array &$plain, array &$html): void
+    {
+        if (! $part) {
+            return;
+        }
+
+        $mimeType = strtolower((string) ($part->getMimeType() ?? ''));
+        $data = (string) ($part->getBody()?->getData() ?? '');
+        if ($data !== '' && in_array($mimeType, ['text/plain', 'text/html'], true)) {
+            $decoded = base64_decode(strtr($data, '-_', '+/'), true);
+            if ($decoded !== false) {
+                if ($mimeType === 'text/plain') {
+                    $plain[] = $decoded;
+                } else {
+                    $html[] = $decoded;
+                }
+            }
+        }
+
+        foreach ((array) ($part->getParts() ?? []) as $child) {
+            $this->collectMessagePartText($child, $plain, $html);
+        }
     }
 
     protected function buildRawMessage(string|array $to, string $subject, string $body, array $options = []): string

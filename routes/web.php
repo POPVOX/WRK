@@ -84,6 +84,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Congress Explorer (kept separate from the general contacts database)
     Route::get('/congress', \App\Livewire\CongressionalDirectory\StaffIndex::class)->name('congress.index');
+    Route::get('/congress/changes', \App\Livewire\CongressionalDirectory\ChangeSignalIndex::class)->name('congress.changes');
     Route::get('/congress/staff/{profile}', \App\Livewire\CongressionalDirectory\StaffShow::class)->name('congress.staff.show');
 
     // Google Calendar OAuth
