@@ -12,6 +12,8 @@ use RuntimeException;
 
 class OutreachCampaignService
 {
+    public function __construct(protected OutreachSuppressionService $suppressionService) {}
+
     /**
      * @param  array<int,array{email:string,name:?string,person_id:?int}>  $recipients
      */
@@ -19,9 +21,10 @@ class OutreachCampaignService
     {
         $rows = [];
         $now = now();
+        $suppressed = array_fill_keys($this->suppressionService->suppressedEmails(array_column($recipients, 'email')), true);
         foreach ($recipients as $recipient) {
             $email = strtolower(trim((string) ($recipient['email'] ?? '')));
-            if ($email === '') {
+            if ($email === '' || isset($suppressed[$email])) {
                 continue;
             }
 
@@ -86,6 +89,24 @@ class OutreachCampaignService
             'failed_count' => 0,
         ]);
 
+        $candidateEmails = OutreachCampaignRecipient::query()
+            ->where('campaign_id', $campaign->id)
+            ->whereIn('status', ['pending', 'failed'])
+            ->pluck('email')
+            ->all();
+        $suppressed = $this->suppressionService->suppressedEmails($candidateEmails);
+        if ($suppressed !== []) {
+            OutreachCampaignRecipient::query()
+                ->where('campaign_id', $campaign->id)
+                ->whereIn('status', ['pending', 'failed'])
+                ->whereIn('email', $suppressed)
+                ->update([
+                    'status' => 'suppressed',
+                    'error_message' => 'Suppressed by the central outreach policy.',
+                    'updated_at' => now(),
+                ]);
+        }
+
         OutreachCampaignRecipient::query()
             ->where('campaign_id', $campaign->id)
             ->whereIn('status', ['pending', 'failed'])
@@ -103,6 +124,10 @@ class OutreachCampaignService
 
         foreach ($recipientIds as $recipientId) {
             SendOutreachCampaignRecipient::dispatch((int) $recipientId)->onQueue($queueName);
+        }
+
+        if ($recipientIds->isEmpty()) {
+            $this->finalizeCampaignIfComplete((int) $campaign->id);
         }
 
         $this->log(

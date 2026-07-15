@@ -3,6 +3,7 @@
 namespace App\Livewire\CongressionalDirectory;
 
 use App\Models\CongressionalStaffChangeSignal;
+use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -41,6 +42,10 @@ class ChangeSignalIndex extends Component
             'reviewed_by' => $status === 'pending' ? null : auth()->id(),
             'reviewed_at' => $status === 'pending' ? null : now(),
         ]);
+
+        if ($status === 'accepted') {
+            app(CongressionalEmailEvidenceService::class)->recordAcceptedChangeSignal($signal->fresh());
+        }
 
         $this->dispatch('notify', type: 'success', message: match ($status) {
             'accepted' => 'Staff-change evidence confirmed.',

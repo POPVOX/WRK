@@ -2,8 +2,10 @@
 
 use App\Livewire\CongressionalDirectory\ChangeSignalIndex;
 use App\Models\CongressionalStaffChangeSignal;
+use App\Models\CongressionalStaffEmail;
 use App\Models\GmailMessage;
 use App\Models\User;
+use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
 use App\Services\CongressionalDirectory\CongressionalStaffChangeDetector;
 use Livewire\Livewire;
 
@@ -88,4 +90,36 @@ test('team members can confirm or dismiss evidence without creating contacts', f
         ->and($signal->fresh()->reviewed_by)->toBe($reviewer->id)
         ->and($signal->fresh()->reviewed_at)->not->toBeNull()
         ->and(\App\Models\Person::query()->count())->toBe(0);
+});
+
+test('accepted delivery failure records a hard bounce for a known congressional address', function () {
+    config()->set('features.congressional_directory_ui', true);
+    $reviewer = User::factory()->create();
+    $profile = \App\Models\CongressionalStaffProfile::query()->create([
+        'profile_key' => hash('sha256', 'known-bounce-profile'),
+        'chamber' => 'House',
+        'display_name' => 'Former Staff',
+        'normalized_name' => 'FORMER STAFF',
+        'identity_hint' => 'FORMERSTAFF',
+        'status' => 'reported_active',
+        'review_status' => 'provisional',
+    ]);
+    $staffEmail = app(CongressionalEmailEvidenceService::class)
+        ->addAddress($profile, 'former.staff@mail.house.gov', 'observed');
+    $signal = app(CongressionalStaffChangeDetector::class)->detect(changeSignalMessage([
+        'subject' => 'Delivery Status Notification (Failure)',
+        'snippet' => 'Address not found. Your message was not delivered to former.staff@mail.house.gov.',
+        'body_text' => null,
+        'from_email' => 'mailer-daemon@googlemail.com',
+    ]));
+
+    Livewire::actingAs($reviewer)
+        ->test(ChangeSignalIndex::class)
+        ->call('review', $signal->id, 'accepted');
+
+    expect(CongressionalStaffEmail::query()->find($staffEmail->id)->verification_status)->toBe('hard_bounced')
+        ->and(\App\Models\OutreachEmailSuppression::query()
+            ->where('email_normalized', 'former.staff@mail.house.gov')
+            ->where('reason', 'hard_bounce')
+            ->exists())->toBeTrue();
 });

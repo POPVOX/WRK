@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\OutreachCampaignRecipient;
 use App\Services\GoogleGmailService;
 use App\Services\Outreach\OutreachCampaignService;
+use App\Services\Outreach\OutreachSuppressionService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -22,8 +23,11 @@ class SendOutreachCampaignRecipient implements ShouldQueue
 
     public function __construct(public int $recipientId) {}
 
-    public function handle(GoogleGmailService $gmailService, OutreachCampaignService $campaignService): void
-    {
+    public function handle(
+        GoogleGmailService $gmailService,
+        OutreachCampaignService $campaignService,
+        OutreachSuppressionService $suppressionService
+    ): void {
         $recipient = OutreachCampaignRecipient::query()
             ->with('campaign.user')
             ->find($this->recipientId);
@@ -33,6 +37,16 @@ class SendOutreachCampaignRecipient implements ShouldQueue
         }
 
         if (! in_array($recipient->status, ['queued', 'pending'], true)) {
+            $campaignService->finalizeCampaignIfComplete((int) $recipient->campaign_id);
+
+            return;
+        }
+
+        if ($suppressionService->isSuppressed($recipient->email)) {
+            $recipient->update([
+                'status' => 'suppressed',
+                'error_message' => 'Suppressed by the central outreach policy.',
+            ]);
             $campaignService->finalizeCampaignIfComplete((int) $recipient->campaign_id);
 
             return;
@@ -96,4 +110,3 @@ class SendOutreachCampaignRecipient implements ShouldQueue
         }
     }
 }
-
