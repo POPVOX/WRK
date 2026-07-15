@@ -258,7 +258,7 @@ class CongressionalEmailGuessService
             ->orderBy('id')
             ->chunkById(500, function ($emails) use (&$repairable, $housePattern, $senatePattern): void {
                 foreach ($emails as $staffEmail) {
-                    if (data_get($staffEmail->metadata, 'guess.scope') !== 'global' || ! $staffEmail->profile) {
+                    if (! $staffEmail->profile || ! data_get($staffEmail->metadata, 'guess.method')) {
                         continue;
                     }
 
@@ -291,7 +291,7 @@ class CongressionalEmailGuessService
                 $senatePattern
             ): void {
                 foreach ($emails as $staffEmail) {
-                    if (data_get($staffEmail->metadata, 'guess.scope') !== 'global' || ! $staffEmail->profile) {
+                    if (! $staffEmail->profile || ! data_get($staffEmail->metadata, 'guess.method')) {
                         continue;
                     }
 
@@ -317,7 +317,7 @@ class CongressionalEmailGuessService
                             || $locked->last_replied_at
                             || $locked->hard_bounced_at
                             || $locked->unsubscribed_at
-                            || data_get($locked->metadata, 'guess.scope') !== 'global'
+                            || ! data_get($locked->metadata, 'guess.method')
                             || $locked->events()->where('event_type', '!=', 'address_added')->exists()) {
                             return;
                         }

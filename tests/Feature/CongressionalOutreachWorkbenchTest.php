@@ -577,7 +577,7 @@ test('institution-specific formulas cover CBO senator intern accounts and verifi
     ])->and($guesses->guess($unsupported, allowAllHouseOffices: true))->toBeNull();
 });
 
-test('formula repairs correct only untouched global guesses and pending workbench snapshots', function () {
+test('formula repairs correct only untouched generated guesses and pending workbench snapshots', function () {
     $user = User::factory()->create();
     $profile = workbenchProfile('Taylor Morgan');
     $profile->update(['chamber' => 'Senate']);
@@ -592,7 +592,7 @@ test('formula repairs correct only untouched global guesses and pending workbenc
         'source_type' => 'guessed',
         'verification_status' => 'unverified',
         'metadata' => ['guess' => [
-            'scope' => 'global',
+            'scope' => 'draft',
             'method' => 'senate_first_underscore_last',
             'pattern' => CongressionalEmailGuessService::SENATE_PATTERN,
         ]],
