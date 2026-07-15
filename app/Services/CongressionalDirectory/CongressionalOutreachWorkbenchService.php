@@ -7,6 +7,7 @@ use App\Models\CongressionalOutreachDraftRecipient;
 use App\Models\CongressionalStaffEmail;
 use App\Models\CongressionalStaffList;
 use App\Models\CongressionalStaffProfile;
+use App\Models\OutreachEmailSuppression;
 use DomainException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -29,10 +30,8 @@ class CongressionalOutreachWorkbenchService
                 'congressional_staff_list_id' => $list->id,
                 'user_id' => $userId,
                 'name' => trim($name),
-                'status' => 'draft',
+                'status' => 'building',
             ]);
-
-            $this->refreshSnapshot($draft);
 
             return $draft->fresh();
         });
@@ -48,15 +47,31 @@ class CongressionalOutreachWorkbenchService
                 ->orderBy('display_name')
                 ->get();
 
-            foreach ($profiles as $profile) {
-                $this->snapshotProfile($draft, $profile);
+            $suppressions = OutreachEmailSuppression::query()
+                ->whereIn(
+                    'email_normalized',
+                    $profiles->flatMap->emails->pluck('email_normalized')->filter()->unique()
+                )
+                ->get()
+                ->keyBy('email_normalized');
+
+            $now = now();
+            $rows = $profiles
+                ->map(fn (CongressionalStaffProfile $profile) => $this->snapshotProfile($draft, $profile, $suppressions, $now))
+                ->all();
+
+            foreach (array_chunk($rows, 500) as $chunk) {
+                DB::table('congressional_outreach_draft_recipients')->insert($chunk);
             }
 
-            $this->reconcileDuplicates($draft);
+            $this->reconcileDuplicates($draft, resetExisting: false);
+            $metadata = $draft->metadata ?? [];
+            unset($metadata['snapshot_error'], $metadata['snapshot_failed_at']);
             $draft->update([
                 'status' => 'draft',
-                'snapshot_at' => now(),
+                'snapshot_at' => $now,
                 'reviewed_at' => null,
+                'metadata' => $metadata ?: null,
             ]);
 
             return $profiles->count();
@@ -231,10 +246,18 @@ class CongressionalOutreachWorkbenchService
         ];
     }
 
-    protected function snapshotProfile(CongressionalOutreachDraft $draft, CongressionalStaffProfile $profile): void
-    {
+    /**
+     * @param  Collection<string,OutreachEmailSuppression>  $suppressions
+     * @return array<string,mixed>
+     */
+    protected function snapshotProfile(
+        CongressionalOutreachDraft $draft,
+        CongressionalStaffProfile $profile,
+        Collection $suppressions,
+        mixed $now
+    ): array {
         $position = $profile->currentPosition;
-        $preferred = $this->preferredEmail($profile->emails);
+        $preferred = $this->preferredEmail($profile->emails, $suppressions);
         /** @var CongressionalStaffEmail|null $staffEmail */
         $staffEmail = $preferred['email'] ?? null;
         $evaluation = $preferred['evaluation'] ?? [
@@ -243,7 +266,7 @@ class CongressionalOutreachWorkbenchService
         ];
         $baseExclusion = $this->baseExclusionReason($profile, $evaluation['tier'], $staffEmail);
 
-        CongressionalOutreachDraftRecipient::query()->create([
+        return [
             'draft_id' => $draft->id,
             'profile_id' => $profile->id,
             'staff_email_id' => $staffEmail?->id,
@@ -258,23 +281,29 @@ class CongressionalOutreachWorkbenchService
             'review_status' => $baseExclusion ? 'excluded' : 'pending',
             'exclusion_reason' => $baseExclusion,
             'selection_reason' => $evaluation['reason'],
-            'metadata' => [
+            'metadata' => json_encode([
                 'base_exclusion_reason' => $baseExclusion,
                 'available_email_count' => $profile->emails->count(),
-            ],
-        ]);
+            ], JSON_THROW_ON_ERROR),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
     }
 
     /**
      * @param  Collection<int,CongressionalStaffEmail>  $emails
+     * @param  Collection<string,OutreachEmailSuppression>  $suppressions
      * @return array{email:CongressionalStaffEmail,evaluation:array<string,mixed>}|null
      */
-    protected function preferredEmail(Collection $emails): ?array
+    protected function preferredEmail(Collection $emails, Collection $suppressions): ?array
     {
         return $emails
             ->map(fn (CongressionalStaffEmail $email) => [
                 'email' => $email,
-                'evaluation' => $this->eligibility->evaluate($email),
+                'evaluation' => $this->eligibility->evaluateWithSuppression(
+                    $email,
+                    $suppressions->get($email->email_normalized)
+                ),
             ])
             ->sort(function (array $left, array $right): int {
                 /** @var CongressionalStaffEmail $leftEmail */
@@ -321,26 +350,36 @@ class CongressionalOutreachWorkbenchService
         return null;
     }
 
-    protected function reconcileDuplicates(CongressionalOutreachDraft $draft): void
+    protected function reconcileDuplicates(CongressionalOutreachDraft $draft, bool $resetExisting = true): void
     {
-        $recipients = $draft->recipients()->orderBy('id')->get();
+        if ($resetExisting) {
+            $recipients = $draft->recipients()->orderBy('id')->get();
 
-        foreach ($recipients as $recipient) {
-            if ($recipient->exclusion_reason === 'manual_exclusion') {
-                continue;
+            foreach ($recipients as $recipient) {
+                if ($recipient->exclusion_reason === 'manual_exclusion') {
+                    continue;
+                }
+
+                $baseExclusion = data_get($recipient->metadata, 'base_exclusion_reason');
+                $recipient->update([
+                    'review_status' => $baseExclusion ? 'excluded' : ($recipient->review_status === 'approved' ? 'approved' : 'pending'),
+                    'exclusion_reason' => $baseExclusion,
+                    'approved_by' => $baseExclusion ? null : $recipient->approved_by,
+                    'reviewed_at' => $baseExclusion ? null : $recipient->reviewed_at,
+                ]);
             }
-
-            $baseExclusion = data_get($recipient->metadata, 'base_exclusion_reason');
-            $recipient->update([
-                'review_status' => $baseExclusion ? 'excluded' : ($recipient->review_status === 'approved' ? 'approved' : 'pending'),
-                'exclusion_reason' => $baseExclusion,
-                'approved_by' => $baseExclusion ? null : $recipient->approved_by,
-                'reviewed_at' => $baseExclusion ? null : $recipient->reviewed_at,
-            ]);
         }
 
-        $draft->recipients()
+        $duplicateEmails = $draft->recipients()
             ->whereNotNull('email_normalized')
+            ->whereNull('exclusion_reason')
+            ->select('email_normalized')
+            ->groupBy('email_normalized')
+            ->havingRaw('COUNT(*) > 1')
+            ->pluck('email_normalized');
+
+        $draft->recipients()
+            ->whereIn('email_normalized', $duplicateEmails)
             ->whereNull('exclusion_reason')
             ->get()
             ->groupBy('email_normalized')

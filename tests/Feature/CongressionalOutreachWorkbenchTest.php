@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\BuildCongressionalOutreachDraftSnapshot;
 use App\Livewire\CongressionalDirectory\OutreachDraftShow;
 use App\Livewire\CongressionalDirectory\StaffListsIndex;
 use App\Models\CongressionalOffice;
@@ -13,6 +14,8 @@ use App\Models\OutreachEmailSuppression;
 use App\Models\User;
 use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
 use App\Services\CongressionalDirectory\CongressionalOutreachWorkbenchService;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 function workbenchProfile(string $name, bool $current = true): CongressionalStaffProfile
@@ -69,6 +72,18 @@ function workbenchList(User $user, array $profiles): CongressionalStaffList
     return $list;
 }
 
+function builtWorkbenchDraft(
+    CongressionalOutreachWorkbenchService $workbench,
+    CongressionalStaffList $list,
+    User $user,
+    string $name
+): CongressionalOutreachDraft {
+    $draft = $workbench->createDraft($list, $user->id, $name);
+    $workbench->refreshSnapshot($draft);
+
+    return $draft->fresh();
+}
+
 test('dry run resolves the safest address and excludes unsafe recipient records', function () {
     $user = User::factory()->create();
     $evidence = app(CongressionalEmailEvidenceService::class);
@@ -93,9 +108,11 @@ test('dry run resolves the safest address and excludes unsafe recipient records'
     $evidence->addAddress($duplicateOne, 'shared.office@house.gov', 'sourced');
     $evidence->addAddress($duplicateTwo, 'shared.office@house.gov', 'sourced');
 
-    $draft = app(CongressionalOutreachWorkbenchService::class)->createDraft(
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft(
+        $workbench,
         workbenchList($user, [$preferred, $noAddress, $inactive, $suppressed, $duplicateOne, $duplicateTwo]),
-        $user->id,
+        $user,
         'Safety review'
     );
 
@@ -117,9 +134,10 @@ test('bulk review skips provisional addresses while individual review can approv
     $evidence->addAddress($eligibleProfile, 'grace@house.gov', 'sourced');
     $evidence->addAddress($limitedProfile, 'harper.guess@house.gov', 'guessed');
     $workbench = app(CongressionalOutreachWorkbenchService::class);
-    $draft = $workbench->createDraft(
+    $draft = builtWorkbenchDraft(
+        $workbench,
         workbenchList($user, [$eligibleProfile, $limitedProfile]),
-        $user->id,
+        $user,
         'Approval review'
     );
 
@@ -151,6 +169,7 @@ test('bulk review skips provisional addresses while individual review can approv
 
 test('staff can create and inspect a persistent dry run without sending', function () {
     config()->set('features.congressional_directory_ui', true);
+    Queue::fake();
     $user = User::factory()->create();
     $profile = workbenchProfile('Jordan Review');
     app(CongressionalEmailEvidenceService::class)->addAddress($profile, 'jordan@house.gov', 'observed');
@@ -162,6 +181,21 @@ test('staff can create and inspect a persistent dry run without sending', functi
         ->call('createDryRun');
 
     $draft = CongressionalOutreachDraft::query()->sole();
+
+    expect($draft->status)->toBe('building')
+        ->and($draft->recipients()->count())->toBe(0);
+    Queue::assertPushed(
+        BuildCongressionalOutreachDraftSnapshot::class,
+        fn (BuildCongressionalOutreachDraftSnapshot $job) => $job->draftId === $draft->id
+    );
+
+    Livewire::actingAs($user)
+        ->test(OutreachDraftShow::class, ['draft' => $draft])
+        ->assertSee('Building the recipient snapshot');
+
+    (new BuildCongressionalOutreachDraftSnapshot($draft->id))
+        ->handle(app(CongressionalOutreachWorkbenchService::class));
+    $draft->refresh();
 
     Livewire::actingAs($user)
         ->test(OutreachDraftShow::class, ['draft' => $draft])
@@ -188,9 +222,11 @@ test('campaign owners can grant and revoke view-only access for active team memb
     $inactive = User::factory()->create(['name' => 'Former Viewer', 'is_active' => false]);
     $profile = workbenchProfile('Morgan Shared');
     app(CongressionalEmailEvidenceService::class)->addAddress($profile, 'morgan@house.gov', 'sourced');
-    $draft = app(CongressionalOutreachWorkbenchService::class)->createDraft(
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft(
+        $workbench,
         workbenchList($owner, [$profile]),
-        $owner->id,
+        $owner,
         'Shared resource campaign'
     );
 
@@ -236,9 +272,11 @@ test('inactive team members cannot be added as campaign viewers', function () {
     $inactive = User::factory()->create(['is_active' => false]);
     $profile = workbenchProfile('Riley Owner');
     app(CongressionalEmailEvidenceService::class)->addAddress($profile, 'riley@house.gov', 'sourced');
-    $draft = app(CongressionalOutreachWorkbenchService::class)->createDraft(
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft(
+        $workbench,
         workbenchList($owner, [$profile]),
-        $owner->id,
+        $owner,
         'Private campaign'
     );
 
@@ -249,4 +287,59 @@ test('inactive team members cannot be added as campaign viewers', function () {
         ->assertHasErrors('selectedViewerId');
 
     expect($draft->viewers()->count())->toBe(0);
+});
+
+test('snapshot building uses bounded database work as a staff list grows', function () {
+    $user = User::factory()->create();
+    $evidence = app(CongressionalEmailEvidenceService::class);
+    $profiles = collect(range(1, 75))->map(function (int $index) use ($evidence) {
+        $profile = workbenchProfile(sprintf('Scale Test %03d', $index));
+        $evidence->addAddress($profile, "scale{$index}@house.gov", 'sourced');
+
+        return $profile;
+    })->all();
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = $workbench->createDraft(workbenchList($user, $profiles), $user->id, 'Scale review');
+    $queryCount = 0;
+    DB::listen(function () use (&$queryCount): void {
+        $queryCount++;
+    });
+
+    $count = $workbench->refreshSnapshot($draft);
+
+    expect($count)->toBe(75)
+        ->and($draft->fresh()->status)->toBe('draft')
+        ->and($draft->recipients()->count())->toBe(75)
+        ->and($queryCount)->toBeLessThan(25);
+});
+
+test('a failed background snapshot is visible and can be retried safely', function () {
+    config()->set('features.congressional_directory_ui', true);
+    Queue::fake();
+    $user = User::factory()->create();
+    $profile = workbenchProfile('Failure Test');
+    $draft = app(CongressionalOutreachWorkbenchService::class)->createDraft(
+        workbenchList($user, [$profile]),
+        $user->id,
+        'Retry review'
+    );
+    $job = new BuildCongressionalOutreachDraftSnapshot($draft->id);
+    $job->failed(new RuntimeException('Internal test detail'));
+    $draft->refresh();
+
+    expect($draft->status)->toBe('failed')
+        ->and(data_get($draft->metadata, 'snapshot_error'))->toBe('The recipient snapshot could not be built. Please retry.')
+        ->and(json_encode($draft->metadata))->not->toContain('Internal test detail');
+
+    Livewire::actingAs($user)
+        ->test(OutreachDraftShow::class, ['draft' => $draft])
+        ->assertSee('The recipient snapshot could not be built')
+        ->call('refreshSnapshot')
+        ->assertSee('Building the recipient snapshot');
+
+    Queue::assertPushed(
+        BuildCongressionalOutreachDraftSnapshot::class,
+        fn (BuildCongressionalOutreachDraftSnapshot $queuedJob) => $queuedJob->draftId === $draft->id
+    );
+    expect($draft->fresh()->status)->toBe('building');
 });

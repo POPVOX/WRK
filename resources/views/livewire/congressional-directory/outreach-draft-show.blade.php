@@ -1,4 +1,7 @@
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+<div @if($draft->status === 'building') wire:poll.3s @endif class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    @php
+        $snapshotReviewable = in_array($draft->status, ['draft', 'ready'], true);
+    @endphp
     <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
             <a href="{{ route('congress.lists') }}" wire:navigate class="text-sm font-semibold text-indigo-600 hover:text-indigo-800">← Congressional staff lists</a>
@@ -8,8 +11,8 @@
         </div>
         @if($canManage)
             <div class="flex flex-wrap gap-2">
-                <button type="button" wire:click="refreshSnapshot" wire:confirm="Refresh from the staff list? This resets all recipient approvals and exclusions." class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
-                    Refresh snapshot
+                <button type="button" wire:click="refreshSnapshot" wire:confirm="Refresh from the staff list? This resets all recipient approvals and exclusions." @disabled($draft->status === 'building') class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60">
+                    {{ $draft->status === 'building' ? 'Building snapshot…' : 'Refresh snapshot' }}
                 </button>
                 <button type="button" wire:click="deleteDraft" wire:confirm="Delete this dry run? The staff list and profiles will not be changed." class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">
                     Delete dry run
@@ -22,6 +25,23 @@
         <p class="font-semibold">Dry run only — this workbench cannot send or schedule email.</p>
         <p class="mt-1">“Ready” means the recipient and message review is complete. It does not place anything in the outreach queue.</p>
     </section>
+
+    @if($draft->status === 'building')
+        <section class="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4 text-sm text-indigo-950" role="status">
+            <div class="flex items-start gap-3">
+                <svg class="mt-0.5 h-5 w-5 shrink-0 animate-spin text-indigo-600" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                <div>
+                    <p class="font-semibold">Building the recipient snapshot…</p>
+                    <p class="mt-1 text-indigo-800">The workbench is resolving addresses and removing duplicates in the background. You can safely leave this page; it will update automatically.</p>
+                </div>
+            </div>
+        </section>
+    @elseif($draft->status === 'failed')
+        <section class="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-900" role="alert">
+            <p class="font-semibold">The recipient snapshot could not be built.</p>
+            <p class="mt-1">No email was sent. Use “Refresh snapshot” to try again.</p>
+        </section>
+    @endif
 
     @if($canManage)
         <section class="app-surface p-5">
@@ -90,6 +110,10 @@
                 </div>
                 @if($draft->status === 'ready')
                     <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Review ready</span>
+                @elseif($draft->status === 'building')
+                    <span class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-800">Building</span>
+                @elseif($draft->status === 'failed')
+                    <span class="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-800">Build failed</span>
                 @else
                     <span class="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">Draft</span>
                 @endif
@@ -98,15 +122,15 @@
             <form wire:submit="saveMessage" class="mt-4 space-y-4">
                 <div>
                     <label for="dry-run-subject" class="text-sm font-semibold text-gray-700">Subject</label>
-                    <input id="dry-run-subject" type="text" wire:model.defer="subject" @disabled(!$canManage) class="mt-1 block w-full rounded-lg border-gray-300 text-sm disabled:bg-gray-50 disabled:text-gray-700" placeholder="A useful resource for @{{office}}">
+                    <input id="dry-run-subject" type="text" wire:model.defer="subject" @disabled(!$canManage || !$snapshotReviewable) class="mt-1 block w-full rounded-lg border-gray-300 text-sm disabled:bg-gray-50 disabled:text-gray-700" placeholder="A useful resource for @{{office}}">
                     @error('subject') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label for="dry-run-body" class="text-sm font-semibold text-gray-700">Plain-text message</label>
-                    <textarea id="dry-run-body" wire:model.defer="bodyText" rows="10" @disabled(!$canManage) class="mt-1 block w-full rounded-lg border-gray-300 text-sm disabled:bg-gray-50 disabled:text-gray-700" placeholder="Hi @{{first_name}},&#10;&#10;I wanted to share..."></textarea>
+                    <textarea id="dry-run-body" wire:model.defer="bodyText" rows="10" @disabled(!$canManage || !$snapshotReviewable) class="mt-1 block w-full rounded-lg border-gray-300 text-sm disabled:bg-gray-50 disabled:text-gray-700" placeholder="Hi @{{first_name}},&#10;&#10;I wanted to share..."></textarea>
                     @error('bodyText') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                 </div>
-                @if($canManage)
+                @if($canManage && $snapshotReviewable)
                     <div class="flex flex-wrap justify-end gap-2">
                         <button type="submit" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Save message</button>
                         <button type="button" wire:click="markReady" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Mark review ready</button>
@@ -146,7 +170,7 @@
                     <h2 class="text-lg font-semibold text-gray-900">Recipient review</h2>
                     <p class="mt-1 text-sm text-gray-500">Bulk approval applies only to sourced, observed, or confirmed addresses. Guesses always require individual approval.</p>
                 </div>
-                @if($canManage)
+                @if($canManage && $snapshotReviewable)
                     <button type="button" wire:click="approveAllEligible" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Approve all eligible</button>
                 @endif
             </div>
@@ -189,7 +213,7 @@
 
                         <div>
                             @if($profileEmails->isNotEmpty())
-                                <select wire:change="selectEmail({{ $recipient->id }}, $event.target.value)" @disabled(!$canManage) class="block w-full rounded-lg border-gray-300 text-sm disabled:bg-gray-50 disabled:text-gray-700">
+                                <select wire:change="selectEmail({{ $recipient->id }}, $event.target.value)" @disabled(!$canManage || !$snapshotReviewable) class="block w-full rounded-lg border-gray-300 text-sm disabled:bg-gray-50 disabled:text-gray-700">
                                     @foreach($profileEmails as $emailOption)
                                         <option value="{{ $emailOption->id }}" @selected($recipient->staff_email_id === $emailOption->id)>{{ $emailOption->email }} · {{ str_replace('_', ' ', $emailOption->verification_status) }}</option>
                                     @endforeach
@@ -210,7 +234,7 @@
 
                         <div class="flex flex-wrap justify-start gap-2 xl:justify-end">
                             <button type="button" wire:click="showPreview({{ $recipient->id }})" class="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">Preview</button>
-                            @if($canManage)
+                            @if($canManage && $snapshotReviewable)
                                 @if($recipient->review_status === 'pending' && !$recipient->exclusion_reason)
                                     <button type="button" wire:click="approveRecipient({{ $recipient->id }})" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">{{ $recipient->eligibility_tier === 'limited' ? 'Approve provisional' : 'Approve' }}</button>
                                     <button type="button" wire:click="excludeRecipient({{ $recipient->id }})" class="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">Exclude</button>
@@ -224,7 +248,7 @@
                     </div>
                 </article>
             @empty
-                <div class="px-6 py-14 text-center text-sm text-gray-500">No recipients match these filters.</div>
+                <div class="px-6 py-14 text-center text-sm text-gray-500">{{ $draft->status === 'building' ? 'Recipients will appear here as soon as the snapshot is ready.' : 'No recipients match these filters.' }}</div>
             @endforelse
         </div>
 
