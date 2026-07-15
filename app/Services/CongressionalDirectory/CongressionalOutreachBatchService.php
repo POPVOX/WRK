@@ -4,6 +4,8 @@ namespace App\Services\CongressionalDirectory;
 
 use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalOutreachDraftRecipient;
+use App\Models\CongressionalStaffChangeSignal;
+use App\Models\CongressionalStaffEmailEvent;
 use App\Models\OutreachCampaign;
 use App\Models\OutreachCampaignRecipient;
 use App\Models\User;
@@ -101,6 +103,9 @@ class CongressionalOutreachBatchService
             $now = now();
             $rows = $recipients->map(function (CongressionalOutreachDraftRecipient $recipient) use ($campaign, $lockedDraft, $now): array {
                 $preview = $this->workbench->preview($lockedDraft, $recipient);
+                if ($preview['unresolved'] !== []) {
+                    throw new DomainException('Resolve these message placeholders before sending: '.implode(', ', $preview['unresolved']).'.');
+                }
 
                 return [
                     'campaign_id' => $campaign->id,
@@ -204,6 +209,66 @@ class CongressionalOutreachBatchService
                 ->count(),
             'active' => (clone $campaigns)->whereIn('status', ['draft', 'scheduled', 'sending'])->count(),
             'last_campaign' => (clone $campaigns)->latest('id')->first(),
+        ];
+    }
+
+    /**
+     * @return array{campaigns:mixed,recipients:mixed,statuses:array<string,int>,events:array<string,int>,bounce_signals:int,clicks_tracked:bool}
+     */
+    public function analytics(CongressionalOutreachDraft $draft): array
+    {
+        $campaigns = $draft->outreachCampaigns()
+            ->withCount([
+                'recipients as queued_count' => fn ($query) => $query->whereIn('status', ['queued', 'sending']),
+                'recipients as suppressed_count' => fn ($query) => $query->where('status', 'suppressed'),
+            ])
+            ->latest('id')
+            ->get();
+        $recipientQuery = OutreachCampaignRecipient::query()
+            ->whereHas('campaign', fn ($query) => $query->where('congressional_outreach_draft_id', $draft->id));
+        $statuses = (clone $recipientQuery)
+            ->selectRaw('status, COUNT(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status')
+            ->map(fn ($count) => (int) $count)
+            ->all();
+        $recipientIds = (clone $recipientQuery)->pluck('id');
+        $recipientEmails = (clone $recipientQuery)->pluck('email')->map(fn ($email) => strtolower((string) $email))->unique();
+        $events = $recipientIds->isEmpty()
+            ? []
+            : CongressionalStaffEmailEvent::query()
+                ->whereIn('campaign_recipient_id', $recipientIds)
+                ->selectRaw('event_type, COUNT(*) as aggregate')
+                ->groupBy('event_type')
+                ->pluck('aggregate', 'event_type')
+                ->map(fn ($count) => (int) $count)
+                ->all();
+        $recipients = (clone $recipientQuery)
+            ->with(['campaign:id,name', 'congressionalOutreachDraftRecipient.staffEmail:id,verification_status'])
+            ->latest('id')
+            ->limit(100)
+            ->get();
+        $firstLaunch = $campaigns->pluck('launched_at')->filter()->sort()->first();
+        $bounceSignals = $recipientEmails->isEmpty()
+            ? 0
+            : CongressionalStaffChangeSignal::query()
+                ->where('user_id', $draft->user_id)
+                ->where('signal_type', 'delivery_failure')
+                ->when($firstLaunch, fn ($query) => $query->where('detected_at', '>=', $firstLaunch))
+                ->get(['target_emails'])
+                ->filter(fn (CongressionalStaffChangeSignal $signal) => collect($signal->target_emails ?? [])
+                    ->map(fn ($email) => strtolower((string) $email))
+                    ->intersect($recipientEmails)
+                    ->isNotEmpty())
+                ->count();
+
+        return [
+            'campaigns' => $campaigns,
+            'recipients' => $recipients,
+            'statuses' => $statuses,
+            'events' => $events,
+            'bounce_signals' => $bounceSignals,
+            'clicks_tracked' => false,
         ];
     }
 }

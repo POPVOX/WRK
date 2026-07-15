@@ -6,6 +6,7 @@ use App\Models\CongressionalStaffChangeSignal;
 use App\Models\CongressionalStaffEmail;
 use App\Models\CongressionalStaffEmailEvent;
 use App\Models\CongressionalStaffProfile;
+use App\Models\OutreachCampaignRecipient;
 use App\Models\OutreachEmailSuppression;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -276,11 +277,21 @@ class CongressionalEmailEvidenceService
             ->get();
 
         foreach ($matched as $staffEmail) {
+            $campaignRecipient = OutreachCampaignRecipient::query()
+                ->where('email', $staffEmail->email_normalized)
+                ->whereNotNull('sent_at')
+                ->whereHas('campaign', fn ($query) => $query
+                    ->where('user_id', $signal->user_id)
+                    ->whereNotNull('congressional_outreach_draft_id'))
+                ->when($signal->detected_at, fn ($query) => $query->where('sent_at', '<=', $signal->detected_at))
+                ->latest('sent_at')
+                ->first();
             $this->recordEvent(
                 $staffEmail,
                 $eventType,
                 userId: $signal->reviewed_by,
                 gmailMessageId: $signal->gmail_message_id,
+                campaignRecipientId: $campaignRecipient?->id,
                 evidenceExcerpt: $signal->evidence_excerpt,
                 metadata: ['change_signal_id' => $signal->id, 'signal_type' => $signal->signal_type],
                 occurredAt: $signal->detected_at,

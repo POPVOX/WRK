@@ -453,6 +453,7 @@ class OutreachDraftShow extends Component
                 ->get(['id', 'name', 'email'])
             : collect();
         $sendingSummary = $batches->summary($this->draft);
+        $analytics = $batches->analytics($this->draft);
 
         return view('livewire.congressional-directory.outreach-draft-show', [
             'recipients' => $recipients,
@@ -463,6 +464,7 @@ class OutreachDraftShow extends Component
             'viewers' => $viewers,
             'availableViewers' => $availableViewers,
             'sendingSummary' => $sendingSummary,
+            'analytics' => $analytics,
             'gmailConnected' => $this->canManage && $gmail->isConnected(Auth::user()),
             'reasonLabels' => [
                 'inactive_profile' => 'No current position',

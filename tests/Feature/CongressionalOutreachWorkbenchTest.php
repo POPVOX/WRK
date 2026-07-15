@@ -13,6 +13,7 @@ use App\Models\CongressionalStaffEmailEvent;
 use App\Models\CongressionalStaffList;
 use App\Models\CongressionalStaffObservation;
 use App\Models\CongressionalStaffProfile;
+use App\Models\GmailMessage;
 use App\Models\OutreachCampaign;
 use App\Models\OutreachCampaignRecipient;
 use App\Models\OutreachEmailSuppression;
@@ -21,6 +22,7 @@ use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
 use App\Services\CongressionalDirectory\CongressionalEmailGuessService;
 use App\Services\CongressionalDirectory\CongressionalOutreachBatchService;
 use App\Services\CongressionalDirectory\CongressionalOutreachWorkbenchService;
+use App\Services\CongressionalDirectory\CongressionalStaffChangeDetector;
 use App\Services\GoogleGmailService;
 use App\Services\Outreach\OutreachCampaignService;
 use App\Services\Outreach\OutreachSuppressionService;
@@ -592,7 +594,7 @@ test('congressional delivery uses the personalized preview and records accepted-
     $workbench = app(CongressionalOutreachWorkbenchService::class);
     $draft = builtWorkbenchDraft($workbench, workbenchList($owner, [$profile]), $owner, 'Personalized send');
     $workbench->approveAllEligible($draft, $owner->id);
-    $workbench->updateMessage($draft, 'Hello {{first_name}}', 'Your role is {{title}} at {{office}}.');
+    $workbench->updateMessage($draft, 'Hello [Name]', 'Your role is [Title] at [Office]. Visit https://CongressH3.io.');
     $batch = app(CongressionalOutreachBatchService::class)->sendNextBatch($draft->fresh(), $owner);
     $recipient = $batch['campaign']->recipients()->sole();
     $gmail = Mockery::mock(GoogleGmailService::class);
@@ -601,7 +603,8 @@ test('congressional delivery uses the personalized preview and records accepted-
         ->withArgs(fn ($user, $to, $subject, $body) => $user->is($owner)
             && $to === 'taylor@mail.house.gov'
             && $subject === 'Hello Taylor'
-            && str_contains($body, 'Legislative Assistant'))
+            && str_contains($body, 'Legislative Assistant')
+            && str_contains($body, 'https://CongressH3.io'))
         ->andReturn(['message_id' => 'gmail-message-1']);
 
     (new SendOutreachCampaignRecipient($recipient->id))->handle(
@@ -619,4 +622,59 @@ test('congressional delivery uses the personalized preview and records accepted-
             ->where('campaign_recipient_id', $recipient->id)
             ->where('event_type', 'send_accepted')
             ->exists())->toBeTrue();
+
+    $reply = GmailMessage::query()->create([
+        'user_id' => $owner->id,
+        'gmail_message_id' => 'gmail-reply-1',
+        'gmail_thread_id' => 'gmail-thread-1',
+        'subject' => 'Re: Hello Taylor',
+        'snippet' => 'Thanks, this is useful.',
+        'from_email' => 'taylor@mail.house.gov',
+        'from_name' => 'Taylor Recipient',
+        'to_emails' => [$owner->email],
+        'sent_at' => now()->addMinute(),
+        'is_inbound' => true,
+        'labels' => ['INBOX'],
+    ]);
+
+    expect(app(CongressionalStaffChangeDetector::class)->detect($reply))->toBeNull()
+        ->and($staffEmail->fresh()->verification_status)->toBe('replied')
+        ->and(CongressionalStaffEmailEvent::query()
+            ->where('campaign_recipient_id', $recipient->id)
+            ->where('event_type', 'human_reply')
+            ->exists())->toBeTrue();
+
+    $analytics = app(CongressionalOutreachBatchService::class)->analytics($draft->fresh());
+    expect($analytics['statuses']['sent'])->toBe(1)
+        ->and($analytics['events']['send_accepted'])->toBe(1)
+        ->and($analytics['events']['human_reply'])->toBe(1)
+        ->and($analytics['clicks_tracked'])->toBeFalse();
+});
+
+test('batch delivery refuses unresolved personalization placeholders', function () {
+    Queue::fake();
+    $owner = User::factory()->create();
+    $profile = workbenchProfile('Unresolved Recipient');
+    app(CongressionalEmailEvidenceService::class)->addAddress($profile, 'unresolved@mail.house.gov', 'sourced');
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($owner, [$profile]), $owner, 'Unresolved message');
+    $workbench->approveAllEligible($draft, $owner->id);
+    $workbench->updateMessage($draft, 'Hello [Unknown Field]', 'Hi [Name]');
+
+    expect(fn () => app(CongressionalOutreachBatchService::class)->sendNextBatch($draft->fresh(), $owner))
+        ->toThrow(DomainException::class, '[Unknown Field]')
+        ->and(OutreachCampaign::query()->count())->toBe(0);
+});
+
+test('gmail messages include plain text and clickable html alternatives', function () {
+    $service = app(GoogleGmailService::class);
+    $method = new ReflectionMethod($service, 'buildRawMessage');
+    $encoded = $method->invoke($service, 'recipient@example.com', 'Resource', 'Visit https://CongressH3.io today.');
+    $mime = base64_decode(strtr($encoded, '-_', '+/').str_repeat('=', (4 - strlen($encoded) % 4) % 4));
+
+    expect($mime)->toContain('Content-Type: multipart/alternative')
+        ->and($mime)->toContain('Content-Type: text/plain; charset=UTF-8')
+        ->and($mime)->toContain('Content-Type: text/html; charset=UTF-8')
+        ->and($mime)->toContain('<a href="https://CongressH3.io"')
+        ->and($mime)->toContain('Visit https://CongressH3.io today.');
 });
