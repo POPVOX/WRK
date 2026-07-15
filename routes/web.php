@@ -85,6 +85,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Congress Explorer (kept separate from the general contacts database)
     Route::get('/congress', \App\Livewire\CongressionalDirectory\StaffIndex::class)->name('congress.index');
     Route::get('/congress/lists', \App\Livewire\CongressionalDirectory\StaffListsIndex::class)->name('congress.lists');
+    Route::get('/congress/outreach/{draft}', \App\Livewire\CongressionalDirectory\OutreachDraftShow::class)->name('congress.outreach.show');
     Route::get('/congress/changes', \App\Livewire\CongressionalDirectory\ChangeSignalIndex::class)->name('congress.changes');
     Route::get('/congress/staff/{profile}', \App\Livewire\CongressionalDirectory\StaffShow::class)->name('congress.staff.show');
 

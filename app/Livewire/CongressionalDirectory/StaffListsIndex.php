@@ -2,8 +2,11 @@
 
 namespace App\Livewire\CongressionalDirectory;
 
+use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalStaffList;
 use App\Models\CongressionalStaffProfile;
+use App\Services\CongressionalDirectory\CongressionalOutreachWorkbenchService;
+use DomainException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
@@ -24,6 +27,8 @@ class StaffListsIndex extends Component
     public string $memberSearch = '';
 
     public ?int $selectedListId = null;
+
+    public string $draftName = '';
 
     public function mount(): void
     {
@@ -82,7 +87,32 @@ class StaffListsIndex extends Component
 
         $this->selectedListId = $listId;
         $this->memberSearch = '';
+        $this->draftName = '';
         $this->resetPage('listPage');
+    }
+
+    public function createDryRun(CongressionalOutreachWorkbenchService $workbench): mixed
+    {
+        $this->validate([
+            'draftName' => ['required', 'string', 'min:2', 'max:160'],
+        ]);
+
+        $list = $this->selectedList();
+        if (! $list) {
+            $this->dispatch('notify', type: 'error', message: 'Choose a staff list first.');
+
+            return null;
+        }
+
+        try {
+            $draft = $workbench->createDraft($list, Auth::id(), $this->draftName);
+        } catch (DomainException $exception) {
+            $this->dispatch('notify', type: 'error', message: $exception->getMessage());
+
+            return null;
+        }
+
+        return $this->redirectRoute('congress.outreach.show', ['draft' => $draft], navigate: true);
     }
 
     public function removeFromList(int $profileId): void
@@ -128,6 +158,15 @@ class StaffListsIndex extends Component
 
     public function render()
     {
+        $sharedDrafts = CongressionalOutreachDraft::query()
+            ->whereHas('viewers', fn (Builder $query) => $query->where('users.id', Auth::id()))
+            ->with(['user:id,name', 'staffList:id,name'])
+            ->withCount([
+                'recipients',
+                'recipients as approved_recipients_count' => fn (Builder $query) => $query->where('review_status', 'approved'),
+            ])
+            ->latest()
+            ->get();
         $lists = CongressionalStaffList::query()
             ->where('user_id', Auth::id())
             ->withCount('profiles')
@@ -135,8 +174,16 @@ class StaffListsIndex extends Component
             ->get();
         $selectedList = $lists->firstWhere('id', $this->selectedListId);
         $members = null;
+        $drafts = collect();
 
         if ($selectedList) {
+            $drafts = $selectedList->outreachDrafts()
+                ->withCount([
+                    'recipients',
+                    'recipients as approved_recipients_count' => fn (Builder $query) => $query->where('review_status', 'approved'),
+                ])
+                ->latest()
+                ->get();
             $members = CongressionalStaffProfile::query()
                 ->whereHas('staffLists', fn (Builder $query) => $query->where('congressional_staff_lists.id', $selectedList->id))
                 ->with('currentPosition.office')
@@ -154,9 +201,11 @@ class StaffListsIndex extends Component
         }
 
         return view('livewire.congressional-directory.staff-lists-index', [
+            'sharedDrafts' => $sharedDrafts,
             'lists' => $lists,
             'selectedList' => $selectedList,
             'members' => $members,
+            'drafts' => $drafts,
         ]);
     }
 }

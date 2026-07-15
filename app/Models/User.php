@@ -186,6 +186,21 @@ class User extends Authenticatable
         return $this->hasMany(CongressionalStaffList::class);
     }
 
+    public function congressionalOutreachDrafts(): HasMany
+    {
+        return $this->hasMany(CongressionalOutreachDraft::class);
+    }
+
+    public function sharedCongressionalOutreachDrafts(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            CongressionalOutreachDraft::class,
+            'congressional_outreach_draft_viewers',
+            'user_id',
+            'draft_id'
+        )->withPivot('added_by')->withTimestamps();
+    }
+
     /**
      * Get trips the user is traveling on.
      */
