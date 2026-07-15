@@ -64,6 +64,26 @@ test('CBO importer falls back to the latest archived official directory', functi
     ])->and(CongressionalStaffProfile::query()->count())->toBe(0);
 });
 
+test('CBO importer derives the evidence date from an explicit archive URL', function () {
+    Http::fake([
+        'https://web.archive.org/*' => Http::response(cboStaffHtml([
+            ['Molly Saunders-Scott', 'Deputy Director of Tax Analysis'],
+            ['Kathleen Burke', 'Analyst'],
+        ])),
+    ]);
+
+    $result = app(CboStaffDirectoryImporter::class)->import(
+        'https://web.archive.org/web/20260616114417id_/https://www.cbo.gov/about/organization-and-staffing',
+        true
+    );
+
+    expect($result)->toMatchArray([
+        'source_kind' => 'internet_archive_override',
+        'snapshot_date' => '2026-06-16',
+        'archive_timestamp' => '20260616114417',
+    ]);
+});
+
 test('CBO staff import is idempotent, preserves source context, and generates only provisional emails', function () {
     $path = writeCboHtmlFixture([
         ['Molly Saunders-Scott', 'Deputy Director of Tax Analysis'],

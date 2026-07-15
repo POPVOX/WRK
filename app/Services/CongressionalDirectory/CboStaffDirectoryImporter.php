@@ -191,17 +191,28 @@ class CboStaffDirectoryImporter
     /** @return array{html:string,retrieval_url:string,source_kind:string,snapshot_date:string,archive_timestamp:?string} */
     protected function fetchUrl(string $url, string $kind): array
     {
-        $response = Http::timeout(45)->connectTimeout(10)->retry(2, 500)
+        $isLive = $kind === 'cbo_live';
+        $response = Http::timeout($isLive ? 12 : 45)
+            ->connectTimeout($isLive ? 5 : 10)
+            ->retry($isLive ? 1 : 2, 500)
             ->withUserAgent('POPVOX-Foundation-Congressional-Directory/1.0 (+https://www.popvox.org)')
             ->get($url)
             ->throw();
+
+        $archiveTimestamp = null;
+        if (preg_match('#web\.archive\.org/web/(\d{14})id_/#', $url, $matches) === 1) {
+            $archiveTimestamp = $matches[1];
+            $kind = 'internet_archive_override';
+        }
 
         return [
             'html' => $response->body(),
             'retrieval_url' => $url,
             'source_kind' => $kind,
-            'snapshot_date' => now()->toDateString(),
-            'archive_timestamp' => null,
+            'snapshot_date' => $archiveTimestamp
+                ? CarbonImmutable::createFromFormat('YmdHis', $archiveTimestamp, 'UTC')->toDateString()
+                : now()->toDateString(),
+            'archive_timestamp' => $archiveTimestamp,
         ];
     }
 
