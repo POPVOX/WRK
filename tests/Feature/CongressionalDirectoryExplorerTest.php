@@ -1,8 +1,10 @@
 <?php
 
 use App\Livewire\CongressionalDirectory\StaffIndex;
+use App\Livewire\CongressionalDirectory\StaffListsIndex;
 use App\Models\CongressionalOffice;
 use App\Models\CongressionalPosition;
+use App\Models\CongressionalStaffList;
 use App\Models\CongressionalStaffObservation;
 use App\Models\CongressionalStaffProfile;
 use App\Models\User;
@@ -112,4 +114,48 @@ test('congress staff detail shows role history and source evidence', function ()
         ->assertSee('Committee on Evidence')
         ->assertSee('View source')
         ->assertSee('Not linked to Contacts');
+});
+
+test('staff can build a saved list from checked profiles or all filtered matches', function () {
+    config()->set('features.congressional_directory_ui', true);
+    $user = User::factory()->create();
+    $caseworker = explorerProfile('Alex Caseworker', 'House', 'Office of Representative Alpha', 'Member office', 'CASEWORKER');
+    $legislativeAssistant = explorerProfile('Blair Assistant', 'House', 'Office of Representative Beta', 'Member office', 'LEGISLATIVE ASSISTANT');
+    $formerCaseworker = explorerProfile('Chris Former', 'Senate', 'Office of Senator Former', 'Member office', 'CASEWORKER', false);
+
+    Livewire::actingAs($user)
+        ->test(StaffIndex::class)
+        ->set('newListName', 'District staff')
+        ->call('createList')
+        ->set('checkedProfileIds', [$legislativeAssistant->id])
+        ->call('addCheckedToList')
+        ->set('title', 'caseworker')
+        ->call('addAllMatchesToList')
+        ->assertSee('District staff');
+
+    $list = CongressionalStaffList::query()->where('user_id', $user->id)->sole();
+
+    expect($list->profiles()->pluck('congressional_staff_profiles.id')->all())
+        ->toContain($caseworker->id, $legislativeAssistant->id)
+        ->not->toContain($formerCaseworker->id);
+});
+
+test('staff can review lists and remove individual members without deleting profiles', function () {
+    config()->set('features.congressional_directory_ui', true);
+    $user = User::factory()->create();
+    $profile = explorerProfile('Dana Remove', 'Senate', 'Committee on Lists', 'Committee', 'COUNSEL');
+    $list = CongressionalStaffList::query()->create([
+        'user_id' => $user->id,
+        'name' => 'Review list',
+    ]);
+    $list->profiles()->attach($profile->id, ['added_by' => $user->id]);
+
+    Livewire::actingAs($user)
+        ->test(StaffListsIndex::class)
+        ->assertSee('Dana Remove')
+        ->call('removeFromList', $profile->id)
+        ->assertDontSee('Dana Remove');
+
+    expect($list->profiles()->count())->toBe(0)
+        ->and(CongressionalStaffProfile::query()->whereKey($profile->id)->exists())->toBeTrue();
 });

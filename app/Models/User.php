@@ -181,6 +181,11 @@ class User extends Authenticatable
         return $this->hasMany(Meeting::class);
     }
 
+    public function congressionalStaffLists(): HasMany
+    {
+        return $this->hasMany(CongressionalStaffList::class);
+    }
+
     /**
      * Get trips the user is traveling on.
      */

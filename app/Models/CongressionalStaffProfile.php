@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
@@ -54,5 +55,15 @@ class CongressionalStaffProfile extends Model
     public function observations(): HasMany
     {
         return $this->hasMany(CongressionalStaffObservation::class, 'profile_id');
+    }
+
+    public function staffLists(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            CongressionalStaffList::class,
+            'congressional_staff_list_members',
+            'congressional_staff_profile_id',
+            'congressional_staff_list_id'
+        )->withPivot(['added_by'])->withTimestamps();
     }
 }
