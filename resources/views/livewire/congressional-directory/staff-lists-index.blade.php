@@ -35,7 +35,15 @@
                                 <span class="block truncate font-semibold text-gray-900">{{ $sharedDraft->name }}</span>
                                 <span class="mt-1 block text-xs text-gray-500">{{ $sharedDraft->staffList?->name }} · shared by {{ $sharedDraft->user?->name }}</span>
                             </span>
-                            <span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ $sharedDraft->status === 'ready' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700' }}">{{ $sharedDraft->status === 'ready' ? 'Review ready' : 'Draft' }}</span>
+                            @php
+                                $sharedStatus = match($sharedDraft->status) {
+                                    'ready' => ['Review ready', 'bg-emerald-100 text-emerald-800'],
+                                    'building' => ['Building', 'bg-indigo-100 text-indigo-800'],
+                                    'failed' => ['Build failed', 'bg-red-100 text-red-800'],
+                                    default => ['Draft', 'bg-gray-100 text-gray-700'],
+                                };
+                            @endphp
+                            <span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ $sharedStatus[1] }}">{{ $sharedStatus[0] }}</span>
                         </span>
                         <span class="mt-3 block text-xs text-gray-600">{{ number_format($sharedDraft->approved_recipients_count) }} approved of {{ number_format($sharedDraft->recipients_count) }}</span>
                     </a>
@@ -85,7 +93,10 @@
                                     <input type="text" wire:model.defer="draftName" placeholder="Dry-run name" class="block w-full rounded-lg border-indigo-200 text-sm">
                                     @error('draftName') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                                 </div>
-                                <button type="submit" class="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Build workbench</button>
+                                <button type="submit" wire:loading.attr="disabled" wire:target="createDryRun" class="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-60">
+                                    <span wire:loading.remove wire:target="createDryRun">Build workbench</span>
+                                    <span wire:loading wire:target="createDryRun">Starting…</span>
+                                </button>
                             </form>
                         </div>
 
@@ -97,7 +108,15 @@
                                         <a href="{{ route('congress.outreach.show', $draft) }}" wire:navigate class="rounded-lg border border-indigo-200 bg-white px-3 py-2 hover:border-indigo-400">
                                             <span class="flex items-center justify-between gap-2">
                                                 <span class="truncate text-sm font-semibold text-gray-900">{{ $draft->name }}</span>
-                                                <span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ $draft->status === 'ready' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700' }}">{{ $draft->status === 'ready' ? 'Review ready' : 'Draft' }}</span>
+                                                @php
+                                                    $draftStatus = match($draft->status) {
+                                                        'ready' => ['Review ready', 'bg-emerald-100 text-emerald-800'],
+                                                        'building' => ['Building', 'bg-indigo-100 text-indigo-800'],
+                                                        'failed' => ['Build failed', 'bg-red-100 text-red-800'],
+                                                        default => ['Draft', 'bg-gray-100 text-gray-700'],
+                                                    };
+                                                @endphp
+                                                <span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ $draftStatus[1] }}">{{ $draftStatus[0] }}</span>
                                             </span>
                                             <span class="mt-1 block text-xs text-gray-500">{{ number_format($draft->approved_recipients_count) }} approved of {{ number_format($draft->recipients_count) }}</span>
                                         </a>

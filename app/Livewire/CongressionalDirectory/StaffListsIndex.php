@@ -2,6 +2,7 @@
 
 namespace App\Livewire\CongressionalDirectory;
 
+use App\Jobs\BuildCongressionalOutreachDraftSnapshot;
 use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalStaffList;
 use App\Models\CongressionalStaffProfile;
@@ -106,6 +107,7 @@ class StaffListsIndex extends Component
 
         try {
             $draft = $workbench->createDraft($list, Auth::id(), $this->draftName);
+            BuildCongressionalOutreachDraftSnapshot::dispatch($draft->id)->afterCommit();
         } catch (DomainException $exception) {
             $this->dispatch('notify', type: 'error', message: $exception->getMessage());
 

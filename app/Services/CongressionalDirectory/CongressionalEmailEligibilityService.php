@@ -16,6 +16,19 @@ class CongressionalEmailEligibilityService
             ->where('email_normalized', $staffEmail->email_normalized)
             ->first();
 
+        return $this->evaluateWithSuppression($staffEmail, $suppression);
+    }
+
+    /**
+     * Evaluate an address when its suppression record has already been bulk-loaded.
+     *
+     * @return array{tier:string,campaign_eligible:bool,provisional_test_eligible:bool,reason:string}
+     */
+    public function evaluateWithSuppression(
+        CongressionalStaffEmail $staffEmail,
+        ?OutreachEmailSuppression $suppression
+    ): array {
+
         if ($suppression) {
             return [
                 'tier' => 'blocked',

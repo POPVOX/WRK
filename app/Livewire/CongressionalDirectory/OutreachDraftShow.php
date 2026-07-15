@@ -2,6 +2,7 @@
 
 namespace App\Livewire\CongressionalDirectory;
 
+use App\Jobs\BuildCongressionalOutreachDraftSnapshot;
 use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalOutreachDraftRecipient;
 use App\Models\CongressionalStaffEmail;
@@ -64,6 +65,10 @@ class OutreachDraftShow extends Component
     public function saveMessage(CongressionalOutreachWorkbenchService $workbench): void
     {
         $this->authorizeManage();
+        if (! $this->snapshotIsReady()) {
+            return;
+        }
+
         $this->validate([
             'subject' => ['required', 'string', 'max:255'],
             'bodyText' => ['required', 'string', 'max:50000'],
@@ -74,13 +79,26 @@ class OutreachDraftShow extends Component
         $this->dispatch('notify', type: 'success', message: 'Dry-run message saved. No email was sent.');
     }
 
-    public function refreshSnapshot(CongressionalOutreachWorkbenchService $workbench): void
+    public function refreshSnapshot(): void
     {
         $this->authorizeManage();
-        $count = $workbench->refreshSnapshot($this->draft);
         $this->draft->refresh();
-        $this->previewRecipientId = $this->draft->recipients()->orderBy('id')->value('id');
-        $this->dispatch('notify', type: 'success', message: "Recipient snapshot refreshed with {$count} staff members. Previous approvals were reset.");
+        if ($this->draft->status === 'building') {
+            $this->dispatch('notify', type: 'info', message: 'The recipient snapshot is already building.');
+
+            return;
+        }
+
+        $metadata = $this->draft->metadata ?? [];
+        unset($metadata['snapshot_error'], $metadata['snapshot_failed_at']);
+        $this->draft->update([
+            'status' => 'building',
+            'reviewed_at' => null,
+            'metadata' => $metadata ?: null,
+        ]);
+        BuildCongressionalOutreachDraftSnapshot::dispatch($this->draft->id)->afterCommit();
+        $this->draft->refresh();
+        $this->dispatch('notify', type: 'success', message: 'Recipient snapshot is rebuilding in the background. Previous approvals will be reset.');
     }
 
     public function selectEmail(
@@ -89,6 +107,10 @@ class OutreachDraftShow extends Component
         CongressionalOutreachWorkbenchService $workbench
     ): void {
         $this->authorizeManage();
+        if (! $this->snapshotIsReady()) {
+            return;
+        }
+
         $recipient = $this->recipient($recipientId);
         $staffEmail = CongressionalStaffEmail::query()
             ->where('profile_id', $recipient->profile_id)
@@ -100,12 +122,20 @@ class OutreachDraftShow extends Component
     public function approveRecipient(int $recipientId, CongressionalOutreachWorkbenchService $workbench): void
     {
         $this->authorizeManage();
+        if (! $this->snapshotIsReady()) {
+            return;
+        }
+
         $this->attempt(fn () => $workbench->approve($this->recipient($recipientId), Auth::id()));
     }
 
     public function approveAllEligible(CongressionalOutreachWorkbenchService $workbench): void
     {
         $this->authorizeManage();
+        if (! $this->snapshotIsReady()) {
+            return;
+        }
+
         $count = $workbench->approveAllEligible($this->draft, Auth::id());
         $this->draft->refresh();
         $this->dispatch('notify', type: 'success', message: "Approved {$count} eligible recipients. Provisional addresses still require individual review.");
@@ -114,12 +144,20 @@ class OutreachDraftShow extends Component
     public function excludeRecipient(int $recipientId, CongressionalOutreachWorkbenchService $workbench): void
     {
         $this->authorizeManage();
+        if (! $this->snapshotIsReady()) {
+            return;
+        }
+
         $this->attempt(fn () => $workbench->exclude($this->recipient($recipientId), Auth::id()));
     }
 
     public function restoreRecipient(int $recipientId, CongressionalOutreachWorkbenchService $workbench): void
     {
         $this->authorizeManage();
+        if (! $this->snapshotIsReady()) {
+            return;
+        }
+
         $this->attempt(fn () => $workbench->restore($this->recipient($recipientId)));
     }
 
@@ -132,6 +170,10 @@ class OutreachDraftShow extends Component
     public function markReady(CongressionalOutreachWorkbenchService $workbench): void
     {
         $this->authorizeManage();
+        if (! $this->snapshotIsReady()) {
+            return;
+        }
+
         $this->saveMessage($workbench);
         if ($this->getErrorBag()->isNotEmpty()) {
             return;
@@ -197,6 +239,21 @@ class OutreachDraftShow extends Component
         abort_unless($this->draft->canBeManagedBy(Auth::user()), 403);
     }
 
+    protected function snapshotIsReady(): bool
+    {
+        $this->draft->refresh();
+        if (in_array($this->draft->status, ['draft', 'ready'], true)) {
+            return true;
+        }
+
+        $message = $this->draft->status === 'failed'
+            ? 'Retry the recipient snapshot before making review changes.'
+            : 'Wait for the recipient snapshot to finish building before making changes.';
+        $this->dispatch('notify', type: 'info', message: $message);
+
+        return false;
+    }
+
     protected function attempt(callable $action): void
     {
         try {
@@ -209,7 +266,13 @@ class OutreachDraftShow extends Component
 
     public function render(CongressionalOutreachWorkbenchService $workbench)
     {
+        $previousStatus = $this->draft->status;
+        $this->draft->refresh();
         abort_unless($this->draft->canBeViewedBy(Auth::user()), 404);
+
+        if ($previousStatus === 'building' && $this->draft->status === 'draft' && ! $this->previewRecipientId) {
+            $this->previewRecipientId = $this->draft->recipients()->orderBy('id')->value('id');
+        }
 
         $recipients = $this->draft->recipients()
             ->with(['profile.emails' => fn ($query) => $query->orderByDesc('is_primary')->orderBy('email')])
