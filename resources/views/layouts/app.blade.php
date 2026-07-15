@@ -44,6 +44,15 @@
             ['label' => 'Team', 'route' => 'team.hub', 'active' => ['team.*'], 'badge' => null],
         ];
 
+        if (config('features.congressional_directory_ui')) {
+            array_splice($orgNav, 2, 0, [[
+                'label' => 'Congress',
+                'route' => 'congress.index',
+                'active' => ['congress.*'],
+                'badge' => null,
+            ]]);
+        }
+
         $adminNav = [];
         if ($user && $user->isAdmin()) {
             $adminNav = [

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class CongressionalStaffProfile extends Model
 {
@@ -41,6 +42,13 @@ class CongressionalStaffProfile extends Model
     public function positions(): HasMany
     {
         return $this->hasMany(CongressionalPosition::class, 'profile_id');
+    }
+
+    public function currentPosition(): HasOne
+    {
+        return $this->hasOne(CongressionalPosition::class, 'profile_id')
+            ->where('is_current', true)
+            ->latestOfMany('last_reported_end');
     }
 
     public function observations(): HasMany

@@ -82,6 +82,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/contacts/lists', \App\Livewire\People\ContactListsIndex::class)->name('contacts.lists');
     Route::get('/contacts/{person}', \App\Livewire\People\PersonShow::class)->name('contacts.show');
 
+    // Congress Explorer (kept separate from the general contacts database)
+    Route::get('/congress', \App\Livewire\CongressionalDirectory\StaffIndex::class)->name('congress.index');
+    Route::get('/congress/staff/{profile}', \App\Livewire\CongressionalDirectory\StaffShow::class)->name('congress.staff.show');
+
     // Google Calendar OAuth
     Route::get('/google/redirect', [GoogleAuthController::class, 'redirect'])->name('google.redirect');
     Route::get('/google/callback', [GoogleAuthController::class, 'callback'])->name('google.callback');
