@@ -9,6 +9,7 @@ use App\Models\CongressionalOffice;
 use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalOutreachDraftRecipient;
 use App\Models\CongressionalPosition;
+use App\Models\CongressionalStaffChangeSignal;
 use App\Models\CongressionalStaffEmailEvent;
 use App\Models\CongressionalStaffList;
 use App\Models\CongressionalStaffObservation;
@@ -658,8 +659,12 @@ test('congressional delivery uses the personalized preview and records accepted-
         'labels' => ['INBOX'],
     ]);
 
-    expect(app(CongressionalStaffChangeDetector::class)->detect($failure)?->signal_type)
-        ->toBe('delivery_failure');
+    $failureSignal = app(CongressionalStaffChangeDetector::class)->detect($failure);
+    expect($failureSignal?->signal_type)->toBe('delivery_failure');
+
+    CongressionalStaffChangeSignal::query()->whereKey($failureSignal->id)->update([
+        'created_at' => now()->subDay(),
+    ]);
 
     $analytics = app(CongressionalOutreachBatchService::class)->analytics($draft->fresh());
     expect($analytics['statuses']['sent'])->toBe(1)
