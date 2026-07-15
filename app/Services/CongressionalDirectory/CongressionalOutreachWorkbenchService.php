@@ -8,6 +8,7 @@ use App\Models\CongressionalStaffEmail;
 use App\Models\CongressionalStaffList;
 use App\Models\CongressionalStaffProfile;
 use App\Models\OutreachEmailSuppression;
+use App\Services\EmailContentFormatter;
 use DomainException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +17,8 @@ use Illuminate\Support\Str;
 class CongressionalOutreachWorkbenchService
 {
     public function __construct(
-        protected CongressionalEmailEligibilityService $eligibility
+        protected CongressionalEmailEligibilityService $eligibility,
+        protected EmailContentFormatter $emailContentFormatter
     ) {}
 
     public function createDraft(CongressionalStaffList $list, int $userId, string $name): CongressionalOutreachDraft
@@ -207,32 +209,26 @@ class CongressionalOutreachWorkbenchService
     }
 
     /**
-     * @return array{subject:string,body:string,unresolved:array<int,string>}
+     * @return array{subject:string,body:string,subject_html:string,body_html:string,unresolved:array<int,string>,personalization:array<string,string>,links:array<int,array{display:string,url:string}>}
      */
     public function preview(CongressionalOutreachDraft $draft, CongressionalOutreachDraftRecipient $recipient): array
     {
-        $firstName = Str::before(trim($recipient->name), ' ');
-        $replacements = [
-            '{{first_name}}' => $firstName,
-            '{{name}}' => $recipient->name,
-            '{{title}}' => (string) $recipient->title,
-            '{{office}}' => (string) $recipient->office,
-        ];
-
-        $subject = strtr((string) $draft->subject, $replacements);
-        $body = strtr((string) $draft->body_text, $replacements);
-        $aliases = ['[First Name]', '[Name]', '[Full Name]', '[Title]', '[Office]'];
-        $values = [$firstName, $firstName, $recipient->name, (string) $recipient->title, (string) $recipient->office];
-        $subject = str_ireplace($aliases, $values, $subject);
-        $body = str_ireplace($aliases, $values, $body);
+        $personalization = $this->personalization($recipient);
+        $tokens = $this->personalizationTokens($personalization);
+        $subject = str_ireplace(array_keys($tokens), array_values($tokens), (string) $draft->subject);
+        $body = str_ireplace(array_keys($tokens), array_values($tokens), (string) $draft->body_text);
 
         return [
             'subject' => $subject,
             'body' => $body,
+            'subject_html' => $this->highlightedPreview((string) $draft->subject, $tokens),
+            'body_html' => $this->highlightedPreview((string) $draft->body_text, $tokens),
             'unresolved' => array_values(array_unique(array_merge(
                 $this->unresolvedPlaceholders($subject),
                 $this->unresolvedPlaceholders($body)
             ))),
+            'personalization' => $personalization,
+            'links' => $this->emailContentFormatter->links($subject."\n".$body),
         ];
     }
 
@@ -242,6 +238,67 @@ class CongressionalOutreachWorkbenchService
         preg_match_all('/\{\{[^{}\r\n]+\}\}|\[[A-Za-z][^\]\r\n]{0,40}\]/', $text, $matches);
 
         return array_values(array_unique($matches[0] ?? []));
+    }
+
+    /** @return array{first_name:string,full_name:string,title:string,office:string,name_source:string} */
+    protected function personalization(CongressionalOutreachDraftRecipient $recipient): array
+    {
+        $recipient->loadMissing('staffEmail');
+        $guessFirst = trim((string) data_get($recipient->staffEmail?->metadata, 'guess.components.first'));
+        $guessLast = trim((string) data_get($recipient->staffEmail?->metadata, 'guess.components.last'));
+        $firstName = $guessFirst !== '' ? Str::title($guessFirst) : Str::before(trim($recipient->name), ' ');
+        $fullName = $guessFirst !== '' && $guessLast !== ''
+            ? Str::title($guessFirst.' '.$guessLast)
+            : $recipient->name;
+
+        return [
+            'first_name' => $firstName,
+            'full_name' => $fullName,
+            'title' => (string) $recipient->title,
+            'office' => (string) $recipient->office,
+            'name_source' => $guessFirst !== '' ? 'provisional address evidence' : 'staff profile',
+        ];
+    }
+
+    /** @param array{first_name:string,full_name:string,title:string,office:string,name_source:string} $personalization
+     * @return array<string,string>
+     */
+    protected function personalizationTokens(array $personalization): array
+    {
+        return [
+            '{{first_name}}' => $personalization['first_name'],
+            '[First Name]' => $personalization['first_name'],
+            '[Name]' => $personalization['first_name'],
+            '{{name}}' => $personalization['full_name'],
+            '[Full Name]' => $personalization['full_name'],
+            '{{title}}' => $personalization['title'],
+            '[Title]' => $personalization['title'],
+            '{{office}}' => $personalization['office'],
+            '[Office]' => $personalization['office'],
+        ];
+    }
+
+    /** @param array<string,string> $tokens */
+    protected function highlightedPreview(string $template, array $tokens): string
+    {
+        $sentinels = [];
+        $counter = 0;
+        foreach ($tokens as $token => $value) {
+            $sentinels[$token] = '__WRK_PERSONALIZATION_'.$counter++.'__';
+        }
+        $withSentinels = str_ireplace(array_keys($sentinels), array_values($sentinels), $template);
+        $html = $this->emailContentFormatter->toHtmlFragment($withSentinels);
+
+        foreach (array_values($sentinels) as $index => $sentinel) {
+            $value = array_values($tokens)[$index];
+            $html = str_replace(
+                $sentinel,
+                '<mark class="rounded bg-emerald-100 px-1 font-semibold text-emerald-900">'.$this->emailContentFormatter->escape($value).'</mark>',
+                $html
+            );
+        }
+
+        return $html;
     }
 
     /**

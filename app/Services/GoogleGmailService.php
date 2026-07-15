@@ -25,7 +25,8 @@ class GoogleGmailService
 
     public function __construct(
         protected AgentCredentialService $agentCredentialService,
-        protected CongressionalStaffChangeDetector $congressionalStaffChangeDetector
+        protected CongressionalStaffChangeDetector $congressionalStaffChangeDetector,
+        protected EmailContentFormatter $emailContentFormatter
     ) {
         $this->client = new GoogleClient;
         $this->client->setClientId(config('services.google.client_id'));
@@ -515,7 +516,7 @@ class GoogleGmailService
 
         $normalizedBody = str_replace(["\r\n", "\r"], "\n", $body);
         $normalizedBody = preg_replace("/\n{3,}/", "\n\n", $normalizedBody) ?? $normalizedBody;
-        $htmlBody = $this->linkifyPlainTextBody($normalizedBody);
+        $htmlBody = $this->emailContentFormatter->toHtmlDocument($normalizedBody);
         $parts = [
             '--'.$boundary,
             'Content-Type: text/plain; charset=UTF-8',
@@ -533,24 +534,6 @@ class GoogleGmailService
         $mime = implode("\r\n", $headers)."\r\n\r\n".implode("\r\n", $parts);
 
         return rtrim(strtr(base64_encode($mime), '+/', '-_'), '=');
-    }
-
-    protected function linkifyPlainTextBody(string $body): string
-    {
-        $parts = preg_split('~(https?://[^\s<>"\']+)~iu', $body, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$body];
-        $linked = collect($parts)->map(function (string $part): string {
-            if (preg_match('~^https?://~i', $part) !== 1) {
-                return htmlspecialchars($part, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            }
-
-            $url = rtrim($part, '.,;:!?)]}');
-            $suffix = substr($part, strlen($url));
-            $escapedUrl = htmlspecialchars($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-
-            return '<a href="'.$escapedUrl.'" rel="noopener noreferrer">'.$escapedUrl.'</a>'.htmlspecialchars($suffix, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        })->implode('');
-
-        return '<!doctype html><html><body><div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'.$linked.'</div></body></html>';
     }
 
     protected function normalizeRecipients(string|array|null $value): array
