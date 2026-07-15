@@ -2,6 +2,7 @@
 
 namespace App\Livewire\CongressionalDirectory;
 
+use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalStaffList;
 use App\Models\CongressionalStaffProfile;
 use App\Services\CongressionalDirectory\CongressionalOutreachWorkbenchService;
@@ -157,6 +158,15 @@ class StaffListsIndex extends Component
 
     public function render()
     {
+        $sharedDrafts = CongressionalOutreachDraft::query()
+            ->whereHas('viewers', fn (Builder $query) => $query->where('users.id', Auth::id()))
+            ->with(['user:id,name', 'staffList:id,name'])
+            ->withCount([
+                'recipients',
+                'recipients as approved_recipients_count' => fn (Builder $query) => $query->where('review_status', 'approved'),
+            ])
+            ->latest()
+            ->get();
         $lists = CongressionalStaffList::query()
             ->where('user_id', Auth::id())
             ->withCount('profiles')
@@ -191,6 +201,7 @@ class StaffListsIndex extends Component
         }
 
         return view('livewire.congressional-directory.staff-lists-index', [
+            'sharedDrafts' => $sharedDrafts,
             'lists' => $lists,
             'selectedList' => $selectedList,
             'members' => $members,

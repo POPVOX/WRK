@@ -19,6 +19,7 @@ A saved congressional staff list can be copied into a persistent dry-run snapsho
 - Sourced, observed, and confirmed addresses can be approved in bulk.
 - Guessed or manual addresses remain provisional and require individual approval.
 - Reviewers can choose another recorded address, remove or restore recipients, and preview `first_name`, `name`, `title`, and `office` personalization.
+- The draft owner can grant active team members explicit view-only access. Viewers can inspect recipients, evidence, and previews, but all write actions remain owner-only and are enforced on the server.
 - Refreshing the snapshot re-reads the source list and deliberately resets approvals.
 - A dry run can be marked review-ready only after every sendable recipient is approved or excluded and a subject and body have been saved.
 

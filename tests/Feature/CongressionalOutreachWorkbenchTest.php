@@ -180,3 +180,73 @@ test('staff can create and inspect a persistent dry run without sending', functi
     expect(CongressionalOutreachDraftRecipient::query()->sole()->review_status)->toBe('approved')
         ->and(OutreachCampaign::query()->count())->toBe(0);
 });
+
+test('campaign owners can grant and revoke view-only access for active team members', function () {
+    config()->set('features.congressional_directory_ui', true);
+    $owner = User::factory()->create(['name' => 'Campaign Owner']);
+    $viewer = User::factory()->create(['name' => 'Campaign Viewer', 'is_active' => true]);
+    $inactive = User::factory()->create(['name' => 'Former Viewer', 'is_active' => false]);
+    $profile = workbenchProfile('Morgan Shared');
+    app(CongressionalEmailEvidenceService::class)->addAddress($profile, 'morgan@house.gov', 'sourced');
+    $draft = app(CongressionalOutreachWorkbenchService::class)->createDraft(
+        workbenchList($owner, [$profile]),
+        $owner->id,
+        'Shared resource campaign'
+    );
+
+    $ownerComponent = Livewire::actingAs($owner)
+        ->test(OutreachDraftShow::class, ['draft' => $draft])
+        ->assertSee('Campaign viewers')
+        ->assertSee('Campaign Viewer')
+        ->assertDontSee('Former Viewer')
+        ->set('selectedViewerId', $viewer->id)
+        ->call('addViewer')
+        ->assertHasNoErrors()
+        ->assertSee('Campaign Viewer');
+
+    expect($draft->viewers()->whereKey($viewer->id)->exists())->toBeTrue();
+
+    Livewire::actingAs($viewer)
+        ->test(OutreachDraftShow::class, ['draft' => $draft->fresh()])
+        ->assertSee('View-only campaign shared by Campaign Owner')
+        ->assertDontSee('Add viewer')
+        ->assertDontSee('Approve all eligible')
+        ->call('approveAllEligible')
+        ->assertStatus(403);
+
+    Livewire::actingAs($viewer)
+        ->test(StaffListsIndex::class)
+        ->assertSee('Shared with me')
+        ->assertSee('Shared resource campaign');
+
+    Livewire::actingAs($owner)
+        ->test(OutreachDraftShow::class, ['draft' => $draft->fresh()])
+        ->call('removeViewer', $viewer->id);
+
+    expect($draft->viewers()->whereKey($viewer->id)->exists())->toBeFalse();
+
+    $this->actingAs($viewer)
+        ->get(route('congress.outreach.show', $draft))
+        ->assertNotFound();
+});
+
+test('inactive team members cannot be added as campaign viewers', function () {
+    config()->set('features.congressional_directory_ui', true);
+    $owner = User::factory()->create();
+    $inactive = User::factory()->create(['is_active' => false]);
+    $profile = workbenchProfile('Riley Owner');
+    app(CongressionalEmailEvidenceService::class)->addAddress($profile, 'riley@house.gov', 'sourced');
+    $draft = app(CongressionalOutreachWorkbenchService::class)->createDraft(
+        workbenchList($owner, [$profile]),
+        $owner->id,
+        'Private campaign'
+    );
+
+    Livewire::actingAs($owner)
+        ->test(OutreachDraftShow::class, ['draft' => $draft])
+        ->set('selectedViewerId', $inactive->id)
+        ->call('addViewer')
+        ->assertHasErrors('selectedViewerId');
+
+    expect($draft->viewers()->count())->toBe(0);
+});

@@ -5,6 +5,7 @@ namespace App\Livewire\CongressionalDirectory;
 use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalOutreachDraftRecipient;
 use App\Models\CongressionalStaffEmail;
+use App\Models\User;
 use App\Services\CongressionalDirectory\CongressionalOutreachWorkbenchService;
 use DomainException;
 use Illuminate\Database\Eloquent\Builder;
@@ -32,12 +33,17 @@ class OutreachDraftShow extends Component
 
     public ?int $previewRecipientId = null;
 
+    public ?int $selectedViewerId = null;
+
+    public bool $canManage = false;
+
     public function mount(CongressionalOutreachDraft $draft): void
     {
         abort_unless(config('features.congressional_directory_ui'), 404);
-        abort_unless($draft->user_id === Auth::id(), 404);
+        abort_unless($draft->canBeViewedBy(Auth::user()), 404);
 
         $this->draft = $draft;
+        $this->canManage = $draft->canBeManagedBy(Auth::user());
         $this->subject = (string) $draft->subject;
         $this->bodyText = (string) $draft->body_text;
         $this->previewRecipientId = $draft->recipients()
@@ -57,6 +63,7 @@ class OutreachDraftShow extends Component
 
     public function saveMessage(CongressionalOutreachWorkbenchService $workbench): void
     {
+        $this->authorizeManage();
         $this->validate([
             'subject' => ['required', 'string', 'max:255'],
             'bodyText' => ['required', 'string', 'max:50000'],
@@ -69,6 +76,7 @@ class OutreachDraftShow extends Component
 
     public function refreshSnapshot(CongressionalOutreachWorkbenchService $workbench): void
     {
+        $this->authorizeManage();
         $count = $workbench->refreshSnapshot($this->draft);
         $this->draft->refresh();
         $this->previewRecipientId = $this->draft->recipients()->orderBy('id')->value('id');
@@ -80,6 +88,7 @@ class OutreachDraftShow extends Component
         int $staffEmailId,
         CongressionalOutreachWorkbenchService $workbench
     ): void {
+        $this->authorizeManage();
         $recipient = $this->recipient($recipientId);
         $staffEmail = CongressionalStaffEmail::query()
             ->where('profile_id', $recipient->profile_id)
@@ -90,11 +99,13 @@ class OutreachDraftShow extends Component
 
     public function approveRecipient(int $recipientId, CongressionalOutreachWorkbenchService $workbench): void
     {
+        $this->authorizeManage();
         $this->attempt(fn () => $workbench->approve($this->recipient($recipientId), Auth::id()));
     }
 
     public function approveAllEligible(CongressionalOutreachWorkbenchService $workbench): void
     {
+        $this->authorizeManage();
         $count = $workbench->approveAllEligible($this->draft, Auth::id());
         $this->draft->refresh();
         $this->dispatch('notify', type: 'success', message: "Approved {$count} eligible recipients. Provisional addresses still require individual review.");
@@ -102,11 +113,13 @@ class OutreachDraftShow extends Component
 
     public function excludeRecipient(int $recipientId, CongressionalOutreachWorkbenchService $workbench): void
     {
+        $this->authorizeManage();
         $this->attempt(fn () => $workbench->exclude($this->recipient($recipientId), Auth::id()));
     }
 
     public function restoreRecipient(int $recipientId, CongressionalOutreachWorkbenchService $workbench): void
     {
+        $this->authorizeManage();
         $this->attempt(fn () => $workbench->restore($this->recipient($recipientId)));
     }
 
@@ -118,6 +131,7 @@ class OutreachDraftShow extends Component
 
     public function markReady(CongressionalOutreachWorkbenchService $workbench): void
     {
+        $this->authorizeManage();
         $this->saveMessage($workbench);
         if ($this->getErrorBag()->isNotEmpty()) {
             return;
@@ -128,15 +142,59 @@ class OutreachDraftShow extends Component
 
     public function deleteDraft(): mixed
     {
+        $this->authorizeManage();
         $this->draft->delete();
         $this->dispatch('notify', type: 'success', message: 'Dry run deleted. No staff profiles were changed.');
 
         return $this->redirectRoute('congress.lists', navigate: true);
     }
 
+    public function addViewer(): void
+    {
+        $this->authorizeManage();
+        $this->validate([
+            'selectedViewerId' => ['required', 'integer'],
+        ]);
+
+        $viewer = User::query()
+            ->active()
+            ->whereKey($this->selectedViewerId)
+            ->where('id', '!=', $this->draft->user_id)
+            ->first();
+
+        if (! $viewer) {
+            $this->addError('selectedViewerId', 'Choose an active team member.');
+
+            return;
+        }
+
+        $this->draft->viewers()->syncWithoutDetaching([
+            $viewer->id => ['added_by' => Auth::id()],
+        ]);
+        $this->selectedViewerId = null;
+        $this->dispatch('notify', type: 'success', message: "{$viewer->name} can now view this campaign.");
+    }
+
+    public function removeViewer(int $userId): void
+    {
+        $this->authorizeManage();
+        $viewer = $this->draft->viewers()->whereKey($userId)->first();
+        if (! $viewer) {
+            return;
+        }
+
+        $this->draft->viewers()->detach($viewer->id);
+        $this->dispatch('notify', type: 'success', message: "{$viewer->name} no longer has access to this campaign.");
+    }
+
     protected function recipient(int $recipientId): CongressionalOutreachDraftRecipient
     {
         return $this->draft->recipients()->findOrFail($recipientId);
+    }
+
+    protected function authorizeManage(): void
+    {
+        abort_unless($this->draft->canBeManagedBy(Auth::user()), 403);
     }
 
     protected function attempt(callable $action): void
@@ -151,6 +209,8 @@ class OutreachDraftShow extends Component
 
     public function render(CongressionalOutreachWorkbenchService $workbench)
     {
+        abort_unless($this->draft->canBeViewedBy(Auth::user()), 404);
+
         $recipients = $this->draft->recipients()
             ->with(['profile.emails' => fn ($query) => $query->orderByDesc('is_primary')->orderBy('email')])
             ->when($this->statusFilter !== 'all', function (Builder $query): void {
@@ -176,12 +236,23 @@ class OutreachDraftShow extends Component
         $previewRecipient = $this->previewRecipientId
             ? $this->draft->recipients()->find($this->previewRecipientId)
             : null;
+        $viewers = $this->draft->viewers()->orderBy('name')->get();
+        $availableViewers = $this->canManage
+            ? User::query()
+                ->active()
+                ->where('id', '!=', $this->draft->user_id)
+                ->whereNotIn('id', $viewers->pluck('id'))
+                ->orderBy('name')
+                ->get(['id', 'name', 'email'])
+            : collect();
 
         return view('livewire.congressional-directory.outreach-draft-show', [
             'recipients' => $recipients,
             'summary' => $workbench->summary($this->draft),
             'previewRecipient' => $previewRecipient,
             'preview' => $previewRecipient ? $workbench->preview($this->draft, $previewRecipient) : null,
+            'viewers' => $viewers,
+            'availableViewers' => $availableViewers,
             'reasonLabels' => [
                 'inactive_profile' => 'No current position',
                 'no_address' => 'No address available',

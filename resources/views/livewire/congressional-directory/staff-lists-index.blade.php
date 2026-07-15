@@ -20,6 +20,30 @@
         @error('newListDescription') <p class="mt-2 text-xs text-red-600">{{ $message }}</p> @enderror
     </section>
 
+    @if($sharedDrafts->isNotEmpty())
+        <section class="app-surface p-5">
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Shared with me</p>
+                <h2 class="mt-1 text-lg font-semibold text-gray-900">Campaigns from teammates</h2>
+                <p class="mt-1 text-sm text-gray-500">You have view-only access to these outreach dry runs.</p>
+            </div>
+            <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                @foreach($sharedDrafts as $sharedDraft)
+                    <a href="{{ route('congress.outreach.show', $sharedDraft) }}" wire:navigate class="rounded-xl border border-gray-200 p-4 hover:border-indigo-300 hover:bg-indigo-50/40">
+                        <span class="flex items-start justify-between gap-3">
+                            <span class="min-w-0">
+                                <span class="block truncate font-semibold text-gray-900">{{ $sharedDraft->name }}</span>
+                                <span class="mt-1 block text-xs text-gray-500">{{ $sharedDraft->staffList?->name }} · shared by {{ $sharedDraft->user?->name }}</span>
+                            </span>
+                            <span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ $sharedDraft->status === 'ready' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700' }}">{{ $sharedDraft->status === 'ready' ? 'Review ready' : 'Draft' }}</span>
+                        </span>
+                        <span class="mt-3 block text-xs text-gray-600">{{ number_format($sharedDraft->approved_recipients_count) }} approved of {{ number_format($sharedDraft->recipients_count) }}</span>
+                    </a>
+                @endforeach
+            </div>
+        </section>
+    @endif
+
     <div class="grid gap-5 xl:grid-cols-[20rem_minmax(0,1fr)]">
         <aside class="app-surface p-4">
             <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your staff lists</h2>
