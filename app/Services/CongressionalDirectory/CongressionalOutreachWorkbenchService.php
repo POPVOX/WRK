@@ -211,18 +211,24 @@ class CongressionalOutreachWorkbenchService
     /**
      * @return array{subject:string,body:string,subject_html:string,body_html:string,unresolved:array<int,string>,personalization:array<string,string>,links:array<int,array{display:string,url:string}>}
      */
-    public function preview(CongressionalOutreachDraft $draft, CongressionalOutreachDraftRecipient $recipient): array
-    {
+    public function preview(
+        CongressionalOutreachDraft $draft,
+        CongressionalOutreachDraftRecipient $recipient,
+        ?string $subjectTemplate = null,
+        ?string $bodyTemplate = null
+    ): array {
         $personalization = $this->personalization($recipient);
         $tokens = $this->personalizationTokens($personalization);
-        $subject = str_ireplace(array_keys($tokens), array_values($tokens), (string) $draft->subject);
-        $body = str_ireplace(array_keys($tokens), array_values($tokens), (string) $draft->body_text);
+        $subjectTemplate ??= (string) $draft->subject;
+        $bodyTemplate ??= (string) $draft->body_text;
+        $subject = str_ireplace(array_keys($tokens), array_values($tokens), $subjectTemplate);
+        $body = str_ireplace(array_keys($tokens), array_values($tokens), $bodyTemplate);
 
         return [
             'subject' => $subject,
             'body' => $body,
-            'subject_html' => $this->highlightedPreview((string) $draft->subject, $tokens),
-            'body_html' => $this->highlightedPreview((string) $draft->body_text, $tokens),
+            'subject_html' => $this->highlightedPreview($subjectTemplate, $tokens),
+            'body_html' => $this->highlightedPreview($bodyTemplate, $tokens),
             'unresolved' => array_values(array_unique(array_merge(
                 $this->unresolvedPlaceholders($subject),
                 $this->unresolvedPlaceholders($body)

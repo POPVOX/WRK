@@ -704,9 +704,18 @@ test('approved recipient preview uses guess evidence for names links and carouse
         ->assertSee('Approved recipient 1 of 2')
         ->assertSee('Braiden')
         ->assertSee('CongressH3.io')
+        ->set('subject', 'Updated preview for [Name]')
+        ->set('bodyText', 'Review Example.org with [Name].')
+        ->call('refreshPreview')
+        ->assertSee('Previewing current editor text. These changes are not saved yet.')
+        ->assertSee('Updated preview for')
+        ->assertSee('Example.org')
         ->call('showPreview', $secondRecipient->id)
         ->assertSee('Approved recipient 2 of 2')
         ->assertSee('Casey');
+
+    expect($draft->fresh()->subject)->toBe('Hello [Name]')
+        ->and($draft->fresh()->body_text)->toBe('Hi [Name], visit CongressH3.io.');
 });
 
 test('gmail messages include plain text and clickable html alternatives', function () {
