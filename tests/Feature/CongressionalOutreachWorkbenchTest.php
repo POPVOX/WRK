@@ -644,10 +644,28 @@ test('congressional delivery uses the personalized preview and records accepted-
             ->where('event_type', 'human_reply')
             ->exists())->toBeTrue();
 
+    $failure = GmailMessage::query()->create([
+        'user_id' => $owner->id,
+        'gmail_message_id' => 'gmail-bounce-1',
+        'gmail_thread_id' => 'gmail-bounce-thread-1',
+        'subject' => 'Delivery Status Notification (Failure)',
+        'snippet' => 'Address not found. Your message was not delivered to taylor@mail.house.gov.',
+        'from_email' => 'mailer-daemon@googlemail.com',
+        'from_name' => 'Mail Delivery Subsystem',
+        'to_emails' => [$owner->email],
+        'sent_at' => now()->subHours(12),
+        'is_inbound' => true,
+        'labels' => ['INBOX'],
+    ]);
+
+    expect(app(CongressionalStaffChangeDetector::class)->detect($failure)?->signal_type)
+        ->toBe('delivery_failure');
+
     $analytics = app(CongressionalOutreachBatchService::class)->analytics($draft->fresh());
     expect($analytics['statuses']['sent'])->toBe(1)
         ->and($analytics['events']['send_accepted'])->toBe(1)
         ->and($analytics['events']['human_reply'])->toBe(1)
+        ->and($analytics['bounce_signals'])->toBe(1)
         ->and($analytics['clicks_tracked'])->toBeFalse();
 });
 

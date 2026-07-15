@@ -248,13 +248,16 @@ class CongressionalOutreachBatchService
             ->latest('id')
             ->limit(100)
             ->get();
-        $firstLaunch = $campaigns->pluck('launched_at')->filter()->sort()->first();
+        // Use database creation timestamps for campaign association. Gmail Date headers can
+        // carry a sender-local timezone, while campaign timestamps use the app timezone.
+        // Comparing those parsed values caused valid bounce signals to disappear from analytics.
+        $firstCampaignCreatedAt = $draft->outreachCampaigns()->min('created_at');
         $bounceSignals = $recipientEmails->isEmpty()
             ? 0
             : CongressionalStaffChangeSignal::query()
                 ->where('user_id', $draft->user_id)
                 ->where('signal_type', 'delivery_failure')
-                ->when($firstLaunch, fn ($query) => $query->where('detected_at', '>=', $firstLaunch))
+                ->when($firstCampaignCreatedAt, fn ($query) => $query->where('created_at', '>=', $firstCampaignCreatedAt))
                 ->get(['target_emails'])
                 ->filter(fn (CongressionalStaffChangeSignal $signal) => collect($signal->target_emails ?? [])
                     ->map(fn ($email) => strtolower((string) $email))
