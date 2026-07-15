@@ -135,6 +135,48 @@ test('staff feed dry run validates and filters without writing', function () {
     }
 });
 
+test('staff feed imports source titles longer than 255 characters', function () {
+    $path = tempnam(sys_get_temp_dir(), 'congressional-feed-long-title-test-');
+    $title = 'CONSULTANT '.implode(', ', array_fill(0, 28, 'MAR 26-28'));
+    $records = [
+        [
+            'recordType' => 'manifest',
+            'schemaVersion' => 1,
+            'generatedAt' => '2026-07-15T00:00:00Z',
+            'totals' => ['observations' => 1],
+        ],
+        congressionalObservation(
+            'e',
+            'Senate',
+            'Jordan Example',
+            'JORDANEXAMPLE',
+            'Senator Example',
+            null,
+            $title,
+            '2025-04-01',
+            '2025-09-30',
+            true
+        ),
+    ];
+
+    $handle = gzopen($path, 'wb9');
+    foreach ($records as $record) {
+        gzwrite($handle, json_encode($record, JSON_THROW_ON_ERROR)."\n");
+    }
+    gzclose($handle);
+
+    try {
+        $result = app(CongressionalStaffFeedImporter::class)->import($path);
+
+        expect(strlen($title))->toBeGreaterThan(255)
+            ->and($result['processed'])->toBe(1)
+            ->and(CongressionalPosition::query()->firstOrFail()->title)->toBe($title)
+            ->and(CongressionalStaffObservation::query()->firstOrFail()->title_raw)->toBe($title);
+    } finally {
+        @unlink($path);
+    }
+});
+
 test('congressional directory interface is disabled by default', function () {
     expect(config('features.congressional_directory_ui'))->toBeFalse();
 });
