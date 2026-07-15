@@ -45,6 +45,11 @@ class CongressionalOutreachDraft extends Model
         return $this->hasMany(CongressionalOutreachDraftRecipient::class, 'draft_id');
     }
 
+    public function outreachCampaigns(): HasMany
+    {
+        return $this->hasMany(OutreachCampaign::class, 'congressional_outreach_draft_id');
+    }
+
     public function viewers(): BelongsToMany
     {
         return $this->belongsToMany(

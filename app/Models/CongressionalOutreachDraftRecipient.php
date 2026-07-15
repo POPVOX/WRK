@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CongressionalOutreachDraftRecipient extends Model
 {
@@ -53,5 +54,10 @@ class CongressionalOutreachDraftRecipient extends Model
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function outreachCampaignRecipients(): HasMany
+    {
+        return $this->hasMany(OutreachCampaignRecipient::class, 'congressional_outreach_draft_recipient_id');
     }
 }

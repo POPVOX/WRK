@@ -1,4 +1,4 @@
-<div @if($draft->status === 'building') wire:poll.3s @endif class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+<div @if($draft->status === 'building' || $sendingSummary['active'] > 0) wire:poll.3s @endif class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
     @php
         $snapshotReviewable = in_array($draft->status, ['draft', 'ready'], true);
         $guessBatch = data_get($draft->metadata, 'email_guess_batch', []);
@@ -9,7 +9,7 @@
             <a href="{{ route('congress.lists') }}" wire:navigate class="text-sm font-semibold text-indigo-600 hover:text-indigo-800">← Congressional staff lists</a>
             <p class="mt-4 text-sm font-semibold uppercase tracking-[0.14em] text-indigo-600">Outreach workbench</p>
             <h1 class="mt-1 text-3xl font-bold text-gray-900">{{ $draft->name }}</h1>
-            <p class="mt-2 text-gray-600">Review a fixed recipient snapshot and preview personalization before any sending capability is enabled.</p>
+            <p class="mt-2 text-gray-600">Review a fixed recipient snapshot, preview personalization, and send approved recipients in controlled batches of 10.</p>
         </div>
         @if($canManage)
             <div class="flex flex-wrap gap-2">
@@ -23,9 +23,9 @@
         @endif
     </div>
 
-    <section class="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
-        <p class="font-semibold">Dry run only — this workbench cannot send or schedule email.</p>
-        <p class="mt-1">“Ready” means the recipient and message review is complete. It does not place anything in the outreach queue.</p>
+    <section class="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4 text-sm text-indigo-950">
+        <p class="font-semibold">Controlled Gmail delivery is enabled for the campaign owner.</p>
+        <p class="mt-1">Only individually approved, unsent recipients are selected. Each click sends at most 10, with suppression rechecked immediately before delivery.</p>
     </section>
 
     @if($draft->status === 'building')
@@ -220,6 +220,59 @@
             @endif
         </section>
     </div>
+
+    @if($canManage)
+        @php
+            $nextBatchCount = min(10, $sendingSummary['approved_unsent']);
+            $lastCampaign = $sendingSummary['last_campaign'];
+        @endphp
+        <section class="app-surface p-5">
+            <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Controlled delivery</p>
+                    <h2 class="mt-1 text-lg font-semibold text-gray-900">Send the next batch through Gmail</h2>
+                    <p class="mt-1 max-w-3xl text-sm text-gray-500">The subject and sample message above are personalized per recipient when the batch is created. Pending, excluded, previously selected, and centrally suppressed addresses are not included.</p>
+                    <div class="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-700">
+                        <span><strong>{{ number_format($sendingSummary['approved_unsent']) }}</strong> approved and unsent</span>
+                        <span><strong>{{ number_format($sendingSummary['sent']) }}</strong> sent</span>
+                        <span><strong>{{ number_format($sendingSummary['failed']) }}</strong> failed</span>
+                        <span><strong>{{ number_format($sendingSummary['suppressed']) }}</strong> suppressed at send time</span>
+                    </div>
+                    @if($lastCampaign)
+                        <p class="mt-2 text-xs text-gray-500">Latest: {{ $lastCampaign->name }} · {{ ucfirst($lastCampaign->status) }} · {{ number_format($lastCampaign->sent_count) }}/{{ number_format($lastCampaign->recipients_count) }} sent</p>
+                    @endif
+                    @if(!$gmailConnected)
+                        <p class="mt-3 text-sm font-semibold text-red-700">Gmail is not connected. <a href="{{ route('admin.integrations') }}" wire:navigate class="underline">Open Admin → Integrations</a>.</p>
+                    @endif
+                </div>
+                <div class="flex shrink-0 flex-col gap-2">
+                    <button
+                        type="button"
+                        wire:click="sendNextBatch"
+                        wire:loading.attr="disabled"
+                        wire:target="sendNextBatch"
+                        wire:confirm="Send a real Gmail message to the next {{ $nextBatchCount }} approved recipients? This cannot be undone."
+                        @disabled(!$gmailConnected || !$snapshotReviewable || $nextBatchCount === 0 || $sendingSummary['active'] > 0)
+                        class="rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        <span wire:loading.remove wire:target="sendNextBatch">{{ $sendingSummary['active'] > 0 ? 'Batch in progress…' : "Send next {$nextBatchCount}" }}</span>
+                        <span wire:loading wire:target="sendNextBatch">Queuing batch…</span>
+                    </button>
+                    @if($sendingSummary['retryable'] > 0)
+                        <button
+                            type="button"
+                            wire:click="retryFailedBatch"
+                            wire:loading.attr="disabled"
+                            wire:target="retryFailedBatch"
+                            wire:confirm="Retry {{ $sendingSummary['retryable'] }} failed Gmail deliveries?"
+                            @disabled(!$gmailConnected || $sendingSummary['active'] > 0)
+                            class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >Retry failed ({{ $sendingSummary['retryable'] }})</button>
+                    @endif
+                </div>
+            </div>
+        </section>
+    @endif
 
     <section class="app-surface overflow-hidden">
         <header class="border-b border-gray-200 p-5 space-y-4">

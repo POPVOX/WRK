@@ -12,6 +12,7 @@ class OutreachCampaign extends Model
         'newsletter_id',
         'user_id',
         'project_id',
+        'congressional_outreach_draft_id',
         'name',
         'campaign_type',
         'channel',
@@ -55,6 +56,11 @@ class OutreachCampaign extends Model
         return $this->belongsTo(Project::class);
     }
 
+    public function congressionalOutreachDraft(): BelongsTo
+    {
+        return $this->belongsTo(CongressionalOutreachDraft::class, 'congressional_outreach_draft_id');
+    }
+
     public function recipients(): HasMany
     {
         return $this->hasMany(OutreachCampaignRecipient::class, 'campaign_id')->orderBy('id');
@@ -65,4 +71,3 @@ class OutreachCampaign extends Model
         return $this->hasMany(OutreachActivityLog::class, 'campaign_id')->latest('created_at');
     }
 }
-

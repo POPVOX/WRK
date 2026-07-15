@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\OutreachCampaignRecipient;
+use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
 use App\Services\GoogleGmailService;
 use App\Services\Outreach\OutreachCampaignService;
 use App\Services\Outreach\OutreachSuppressionService;
@@ -26,7 +27,8 @@ class SendOutreachCampaignRecipient implements ShouldQueue
     public function handle(
         GoogleGmailService $gmailService,
         OutreachCampaignService $campaignService,
-        OutreachSuppressionService $suppressionService
+        OutreachSuppressionService $suppressionService,
+        CongressionalEmailEvidenceService $emailEvidence
     ): void {
         $recipient = OutreachCampaignRecipient::query()
             ->with('campaign.user')
@@ -61,11 +63,12 @@ class SendOutreachCampaignRecipient implements ShouldQueue
         ]);
 
         try {
+            $metadata = $recipient->metadata ?? [];
             $result = $gmailService->sendMessage(
                 $user,
                 $recipient->email,
-                (string) ($campaign->subject ?? ''),
-                (string) ($campaign->body_text ?? ''),
+                (string) ($metadata['subject'] ?? $campaign->subject ?? ''),
+                (string) ($metadata['body_text'] ?? $campaign->body_text ?? ''),
                 []
             );
 
@@ -76,18 +79,38 @@ class SendOutreachCampaignRecipient implements ShouldQueue
                 'error_message' => null,
             ]);
 
-            $campaignService->log(
-                campaignId: $campaign->id,
-                userId: $campaign->user_id,
-                action: 'recipient_sent',
-                summary: 'Sent campaign message.',
-                details: [
-                    'recipient_email' => $recipient->email,
-                    'recipient_name' => $recipient->name,
-                    'gmail_message_id' => $result['message_id'] ?? null,
-                ],
-                newsletterId: $campaign->newsletter_id
-            );
+            try {
+                $staffEmailId = (int) ($metadata['congressional_staff_email_id'] ?? 0);
+                if ($staffEmailId > 0) {
+                    $staffEmail = \App\Models\CongressionalStaffEmail::query()->find($staffEmailId);
+                    if ($staffEmail) {
+                        $emailEvidence->recordEvent(
+                            $staffEmail,
+                            'send_accepted',
+                            userId: $campaign->user_id,
+                            campaignRecipientId: $recipient->id,
+                            evidenceExcerpt: 'Gmail accepted the message for delivery.',
+                            metadata: ['external_message_id' => $result['message_id'] ?? null],
+                            eventKey: hash('sha256', "campaign-send-accepted|{$recipient->id}")
+                        );
+                    }
+                }
+
+                $campaignService->log(
+                    campaignId: $campaign->id,
+                    userId: $campaign->user_id,
+                    action: 'recipient_sent',
+                    summary: 'Sent campaign message.',
+                    details: [
+                        'recipient_email' => $recipient->email,
+                        'recipient_name' => $recipient->name,
+                        'gmail_message_id' => $result['message_id'] ?? null,
+                    ],
+                    newsletterId: $campaign->newsletter_id
+                );
+            } catch (\Throwable $postSendException) {
+                report($postSendException);
+            }
         } catch (\Throwable $exception) {
             $recipient->update([
                 'status' => 'failed',

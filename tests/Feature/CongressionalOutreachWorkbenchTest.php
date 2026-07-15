@@ -2,21 +2,28 @@
 
 use App\Jobs\BuildCongressionalOutreachDraftSnapshot;
 use App\Jobs\GenerateCongressionalEmailGuesses;
+use App\Jobs\SendOutreachCampaignRecipient;
 use App\Livewire\CongressionalDirectory\OutreachDraftShow;
 use App\Livewire\CongressionalDirectory\StaffListsIndex;
 use App\Models\CongressionalOffice;
 use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalOutreachDraftRecipient;
 use App\Models\CongressionalPosition;
+use App\Models\CongressionalStaffEmailEvent;
 use App\Models\CongressionalStaffList;
 use App\Models\CongressionalStaffObservation;
 use App\Models\CongressionalStaffProfile;
 use App\Models\OutreachCampaign;
+use App\Models\OutreachCampaignRecipient;
 use App\Models\OutreachEmailSuppression;
 use App\Models\User;
 use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
 use App\Services\CongressionalDirectory\CongressionalEmailGuessService;
+use App\Services\CongressionalDirectory\CongressionalOutreachBatchService;
 use App\Services\CongressionalDirectory\CongressionalOutreachWorkbenchService;
+use App\Services\GoogleGmailService;
+use App\Services\Outreach\OutreachCampaignService;
+use App\Services\Outreach\OutreachSuppressionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -229,7 +236,7 @@ test('staff can create and inspect a persistent dry run without sending', functi
 
     Livewire::actingAs($user)
         ->test(OutreachDraftShow::class, ['draft' => $draft])
-        ->assertSee('Dry run only')
+        ->assertSee('Controlled Gmail delivery')
         ->assertSee('Jordan Review')
         ->call('approveAllEligible')
         ->set('subject', 'Hello {{first_name}}')
@@ -481,4 +488,135 @@ test('owners can queue a traceable provisional guess batch without sending', fun
         ->and(data_get($draft->metadata, 'email_guess_batch.status'))->toBe('completed')
         ->and(data_get($draft->metadata, 'email_guess_batch.generated'))->toBe(2)
         ->and(OutreachCampaign::query()->count())->toBe(0);
+});
+
+test('provisional email generation uses bounded database work as a list grows', function () {
+    $user = User::factory()->create();
+    $profiles = collect(range(1, 75))->map(function (int $index) {
+        $profile = workbenchProfile(sprintf('GUESS%03d PERSON%03d', $index, $index));
+        $profile->currentPosition->office->update([
+            'name' => 'HON. TEST MEMBER '.$index,
+            'normalized_name' => 'hon. test member '.$index,
+        ]);
+        addWorkbenchObservation($profile, sprintf('PERSON%03d GUESS%03d', $index, $index), 'house_statement_of_disbursements_csv');
+
+        return $profile;
+    })->all();
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($user, $profiles), $user, 'Guess scale review');
+    $queryCount = 0;
+    DB::listen(function () use (&$queryCount): void {
+        $queryCount++;
+    });
+
+    $result = app(CongressionalEmailGuessService::class)->generateForDraft(
+        $draft,
+        $user->id,
+        'Scale test',
+    );
+
+    expect($result['generated'])->toBe(75)
+        ->and($result['skipped'])->toBe(0)
+        ->and(DB::table('congressional_staff_emails')->count())->toBe(75)
+        ->and(DB::table('congressional_staff_email_events')->where('event_type', 'address_added')->count())->toBe(75)
+        ->and($queryCount)->toBeLessThan(20);
+});
+
+test('congressional outreach sends only approved recipients in batches of ten without duplicates', function () {
+    Queue::fake();
+    $owner = User::factory()->create();
+    $evidence = app(CongressionalEmailEvidenceService::class);
+    $profiles = collect(range(1, 12))->map(function (int $index) use ($evidence) {
+        $profile = workbenchProfile(sprintf('Batch Person %02d', $index));
+        $evidence->addAddress($profile, "batch{$index}@mail.house.gov", 'sourced');
+
+        return $profile;
+    })->all();
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($owner, $profiles), $owner, 'Ten at a time');
+    $workbench->approveAllEligible($draft, $owner->id);
+    $workbench->updateMessage($draft, 'Hello {{first_name}}', 'A resource for {{office}}.');
+    $batches = app(CongressionalOutreachBatchService::class);
+
+    expect(fn () => $batches->sendNextBatch($draft->fresh(), User::factory()->create()))
+        ->toThrow(DomainException::class, 'Only the campaign owner');
+    $first = $batches->sendNextBatch($draft->fresh(), $owner);
+
+    expect($first['queued'])->toBe(10)
+        ->and($first['campaign']->recipients()->count())->toBe(10)
+        ->and($first['campaign']->recipients()->pluck('congressional_outreach_draft_recipient_id')->unique()->count())->toBe(10)
+        ->and(data_get($first['campaign']->recipients()->first()->metadata, 'subject'))->toStartWith('Hello Batch');
+    expect(fn () => $batches->sendNextBatch($draft->fresh(), $owner))
+        ->toThrow(DomainException::class, 'current batch is still in progress');
+
+    $first['campaign']->recipients()->update(['status' => 'sent', 'sent_at' => now()]);
+    app(\App\Services\Outreach\OutreachCampaignService::class)->finalizeCampaignIfComplete($first['campaign']->id);
+    $second = $batches->sendNextBatch($draft->fresh(), $owner);
+
+    expect($second['queued'])->toBe(2)
+        ->and(OutreachCampaignRecipient::query()->count())->toBe(12)
+        ->and(OutreachCampaignRecipient::query()->pluck('congressional_outreach_draft_recipient_id')->unique()->count())->toBe(12)
+        ->and($batches->summary($draft->fresh())['approved_unsent'])->toBe(0);
+});
+
+test('campaign owners can retry failed recipients without selecting a new batch', function () {
+    Queue::fake();
+    $owner = User::factory()->create();
+    $profile = workbenchProfile('Retry Recipient');
+    app(CongressionalEmailEvidenceService::class)->addAddress($profile, 'retry@mail.house.gov', 'sourced');
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($owner, [$profile]), $owner, 'Retry batch');
+    $workbench->approveAllEligible($draft, $owner->id);
+    $workbench->updateMessage($draft, 'Hello', 'Resource');
+    $batches = app(CongressionalOutreachBatchService::class);
+    $batch = $batches->sendNextBatch($draft->fresh(), $owner);
+    $recipient = $batch['campaign']->recipients()->sole();
+    $recipient->update(['status' => 'failed', 'error_message' => 'Temporary Gmail error']);
+    app(OutreachCampaignService::class)->finalizeCampaignIfComplete($batch['campaign']->id);
+
+    $retry = $batches->retryFailedBatch($draft->fresh(), $owner);
+
+    expect($retry['queued'])->toBe(1)
+        ->and($batch['campaign']->fresh()->status)->toBe('sending')
+        ->and($recipient->fresh()->status)->toBe('queued')
+        ->and(OutreachCampaign::query()->count())->toBe(1)
+        ->and(OutreachCampaignRecipient::query()->count())->toBe(1);
+});
+
+test('congressional delivery uses the personalized preview and records accepted-send evidence', function () {
+    Queue::fake();
+    $owner = User::factory()->create();
+    $profile = workbenchProfile('Taylor Recipient');
+    $staffEmail = app(CongressionalEmailEvidenceService::class)
+        ->addAddress($profile, 'taylor@mail.house.gov', 'sourced');
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($owner, [$profile]), $owner, 'Personalized send');
+    $workbench->approveAllEligible($draft, $owner->id);
+    $workbench->updateMessage($draft, 'Hello {{first_name}}', 'Your role is {{title}} at {{office}}.');
+    $batch = app(CongressionalOutreachBatchService::class)->sendNextBatch($draft->fresh(), $owner);
+    $recipient = $batch['campaign']->recipients()->sole();
+    $gmail = Mockery::mock(GoogleGmailService::class);
+    $gmail->shouldReceive('sendMessage')
+        ->once()
+        ->withArgs(fn ($user, $to, $subject, $body) => $user->is($owner)
+            && $to === 'taylor@mail.house.gov'
+            && $subject === 'Hello Taylor'
+            && str_contains($body, 'Legislative Assistant'))
+        ->andReturn(['message_id' => 'gmail-message-1']);
+
+    (new SendOutreachCampaignRecipient($recipient->id))->handle(
+        $gmail,
+        app(OutreachCampaignService::class),
+        app(OutreachSuppressionService::class),
+        app(CongressionalEmailEvidenceService::class)
+    );
+
+    expect($recipient->fresh()->status)->toBe('sent')
+        ->and($recipient->fresh()->external_message_id)->toBe('gmail-message-1')
+        ->and($staffEmail->fresh()->last_sent_at)->not->toBeNull()
+        ->and(CongressionalStaffEmailEvent::query()
+            ->where('staff_email_id', $staffEmail->id)
+            ->where('campaign_recipient_id', $recipient->id)
+            ->where('event_type', 'send_accepted')
+            ->exists())->toBeTrue();
 });
