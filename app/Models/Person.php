@@ -174,6 +174,14 @@ class Person extends Model
         return $this->hasMany(OutreachCampaignRecipient::class, 'person_id');
     }
 
+    /**
+     * Congressional directory identities explicitly linked to this CRM contact.
+     */
+    public function congressionalStaffProfiles(): HasMany
+    {
+        return $this->hasMany(CongressionalStaffProfile::class, 'person_id');
+    }
+
     // ===== Scopes =====
 
     /**
@@ -210,7 +218,7 @@ class Person extends Model
      */
     public function getDisplayLinkedinAttribute(): ?string
     {
-        if (!$this->linkedin_url) {
+        if (! $this->linkedin_url) {
             return null;
         }
 
