@@ -321,8 +321,13 @@
 
     <section class="app-surface overflow-hidden">
         <header class="border-b border-gray-200 p-5">
-            <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Send analytics</p>
-            <h2 class="mt-1 text-lg font-semibold text-gray-900">Campaign delivery and response dashboard</h2>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Send analytics</p>
+                    <h2 class="mt-1 text-lg font-semibold text-gray-900">Campaign delivery and response dashboard</h2>
+                </div>
+                <a href="{{ route('congress.outreach.analytics', $draft) }}" wire:navigate class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">View all recipients and analytics →</a>
+            </div>
             <p class="mt-1 text-sm text-gray-500">“Gmail accepted” means Gmail accepted the send request; it is not the same as a confirmed delivery. Bounce and reply signals appear after Gmail sync and evidence review.</p>
         </header>
         @if($analytics['campaigns']->isEmpty())
@@ -342,6 +347,7 @@
                     ['Human replies', $analyticsEvents['human_reply'] ?? 0, 'text-emerald-700'],
                     ['Auto-replies', $analyticsEvents['auto_reply'] ?? 0, 'text-indigo-700'],
                     ['Bounce alerts', $analytics['bounce_signals'], 'text-red-700'],
+                    ['Opened', $analytics['engagement']['opened'], 'text-indigo-700'],
                 ] as [$label, $value, $color])
                     <div class="rounded-lg bg-gray-50 p-3">
                         <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{{ $label }}</p>
@@ -350,7 +356,11 @@
                 @endforeach
                 <div class="rounded-lg bg-gray-50 p-3">
                     <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Link clicks</p>
-                    <p class="mt-1 text-sm font-semibold text-gray-500">Not tracked yet</p>
+                    @if($analytics['clicks_tracked'])
+                        <p class="mt-1 text-2xl font-bold text-indigo-700">{{ number_format($analytics['engagement']['clicked']) }}</p>
+                    @else
+                        <p class="mt-1 text-xs font-semibold text-gray-500">Begins with the next send</p>
+                    @endif
                 </div>
             </div>
 
@@ -407,19 +417,38 @@
                     <button type="button" wire:click="approveAllEligible" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Approve all eligible</button>
                 @endif
             </div>
-            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem]">
+            <div class="flex flex-wrap gap-2 border-b border-gray-200 pb-4" role="tablist" aria-label="Recipient views">
+                @foreach([
+                    'pending' => ['Needs review', $summary['pending']],
+                    'limited' => ['Provisional', $summary['limited']],
+                    'approved' => ['Approved', $summary['approved']],
+                    'excluded' => ['Excluded', $summary['excluded']],
+                    'all' => ['All', $summary['total']],
+                ] as $viewKey => [$viewLabel, $viewCount])
+                    <button type="button" wire:click="$set('statusFilter', '{{ $viewKey }}')" class="rounded-full px-3 py-1.5 text-sm font-semibold {{ $statusFilter === $viewKey ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
+                        {{ $viewLabel }} <span class="ml-1 opacity-75">{{ number_format($viewCount) }}</span>
+                    </button>
+                @endforeach
+            </div>
+            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
                 <input type="search" wire:model.live.debounce.250ms="recipientSearch" placeholder="Search name, address, title, or office" class="rounded-lg border-gray-300 text-sm">
-                <select wire:model.live="statusFilter" class="rounded-lg border-gray-300 text-sm">
-                    <option value="all">All recipients</option>
-                    <option value="pending">Pending review</option>
-                    <option value="approved">Approved</option>
-                    <option value="excluded">Excluded</option>
-                    <option value="eligible">Eligible addresses</option>
-                    <option value="limited">Provisional addresses</option>
-                    <option value="blocked">Unavailable or suppressed</option>
-                </select>
+                <button type="button" wire:click="selectVisibleRecipients({{ Illuminate\Support\Js::from($recipients->pluck('id')->all()) }})" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Select this page</button>
+                <button type="button" wire:click="selectAllMatchingRecipients" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Select all matching</button>
             </div>
         </header>
+
+        @if(count($selectedRecipientIds) > 0)
+            <div class="sticky top-0 z-10 flex flex-col gap-3 border-b border-indigo-200 bg-indigo-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm font-semibold text-indigo-950">{{ number_format(count($selectedRecipientIds)) }} selected</p>
+                <div class="flex flex-wrap gap-2">
+                    @if($canManage && $snapshotReviewable)
+                        <button type="button" wire:click="approveSelectedRecipients" wire:confirm="Approve all selected available recipients, including selected provisional addresses?" class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Approve selected</button>
+                        <button type="button" wire:click="excludeSelectedRecipients" wire:confirm="Exclude all selected recipients from this campaign?" class="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Exclude selected</button>
+                    @endif
+                    <button type="button" wire:click="clearRecipientSelection" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Clear</button>
+                </div>
+            </div>
+        @endif
 
         <div class="divide-y divide-gray-200">
             @forelse($recipients as $recipient)
@@ -444,8 +473,11 @@
                     };
                     $profileEmails = $recipient->profile?->emails ?? collect();
                 @endphp
-                <article wire:key="dry-run-recipient-{{ $recipient->id }}" class="p-5">
-                    <div class="grid gap-4 xl:grid-cols-[minmax(13rem,0.9fr)_minmax(19rem,1.2fr)_minmax(12rem,0.8fr)_auto] xl:items-center">
+                <article wire:key="dry-run-recipient-{{ $recipient->id }}" class="p-5 {{ in_array($recipient->id, array_map('intval', $selectedRecipientIds), true) ? 'bg-indigo-50/40' : '' }}">
+                    <div class="grid gap-4 xl:grid-cols-[2rem_minmax(13rem,0.9fr)_minmax(19rem,1.2fr)_minmax(12rem,0.8fr)_auto] xl:items-center">
+                        <div class="pt-1 xl:pt-0">
+                            <input type="checkbox" wire:model.live="selectedRecipientIds" value="{{ $recipient->id }}" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" aria-label="Select {{ $recipient->name }}">
+                        </div>
                         <div class="min-w-0">
                             <button type="button" wire:click="showPreview({{ $recipient->id }})" class="text-left font-semibold text-gray-900 hover:text-indigo-700">{{ $recipient->name }}</button>
                             <p class="mt-0.5 text-sm text-gray-700">{{ $recipient->title ?: 'No current title' }}</p>

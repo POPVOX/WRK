@@ -166,6 +166,7 @@ class GoogleGmailService
                         ]);
                         $record->save();
                         $this->congressionalStaffChangeDetector->detect($record);
+                        app(ContactActivityService::class)->recordGmailMessage($record->loadMissing('user'));
 
                         if ($isNew) {
                             $imported++;
@@ -516,7 +517,7 @@ class GoogleGmailService
 
         $normalizedBody = str_replace(["\r\n", "\r"], "\n", $body);
         $normalizedBody = preg_replace("/\n{3,}/", "\n\n", $normalizedBody) ?? $normalizedBody;
-        $htmlBody = $this->emailContentFormatter->toHtmlDocument($normalizedBody);
+        $htmlBody = trim((string) ($options['html_body'] ?? '')) ?: $this->emailContentFormatter->toHtmlDocument($normalizedBody);
         $parts = [
             '--'.$boundary,
             'Content-Type: text/plain; charset=UTF-8',

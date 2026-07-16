@@ -16,6 +16,13 @@ use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome');
 
+Route::get('/outreach/t/{token}/open.gif', [\App\Http\Controllers\OutreachTrackingController::class, 'open'])
+    ->where('token', '[A-Za-z0-9]{48}')
+    ->name('outreach.track.open');
+Route::get('/outreach/t/{token}/click', [\App\Http\Controllers\OutreachTrackingController::class, 'click'])
+    ->where('token', '[A-Za-z0-9]{48}')
+    ->name('outreach.track.click');
+
 // Account Activation (public route for existing staff)
 Route::get('/activate/{token}', \App\Livewire\Auth\ActivateAccount::class)->name('activate');
 
@@ -86,6 +93,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/congress', \App\Livewire\CongressionalDirectory\StaffIndex::class)->name('congress.index');
     Route::get('/congress/lists', \App\Livewire\CongressionalDirectory\StaffListsIndex::class)->name('congress.lists');
     Route::get('/congress/outreach/{draft}', \App\Livewire\CongressionalDirectory\OutreachDraftShow::class)->name('congress.outreach.show');
+    Route::get('/congress/outreach/{draft}/analytics', \App\Livewire\CongressionalDirectory\OutreachAnalytics::class)->name('congress.outreach.analytics');
     Route::get('/congress/changes', \App\Livewire\CongressionalDirectory\ChangeSignalIndex::class)->name('congress.changes');
     Route::get('/congress/staff/{profile}', \App\Livewire\CongressionalDirectory\StaffShow::class)->name('congress.staff.show');
 

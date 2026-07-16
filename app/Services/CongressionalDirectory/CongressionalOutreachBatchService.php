@@ -213,7 +213,7 @@ class CongressionalOutreachBatchService
     }
 
     /**
-     * @return array{campaigns:mixed,recipients:mixed,statuses:array<string,int>,events:array<string,int>,bounce_signals:int,clicks_tracked:bool}
+     * @return array{campaigns:mixed,recipients:mixed,statuses:array<string,int>,events:array<string,int>,engagement:array<string,int>,bounce_signals:int,clicks_tracked:bool}
      */
     public function analytics(CongressionalOutreachDraft $draft): array
     {
@@ -259,14 +259,22 @@ class CongressionalOutreachBatchService
                     ->intersect($recipientEmails)
                     ->isNotEmpty())
                 ->count();
+        $engagement = [
+            'opened' => (clone $recipientQuery)->whereNotNull('opened_at')->count(),
+            'clicked' => (clone $recipientQuery)->whereNotNull('clicked_at')->count(),
+            'replied' => (clone $recipientQuery)->whereNotNull('replied_at')->count(),
+            'bounced' => (clone $recipientQuery)->whereNotNull('bounced_at')->count(),
+            'unsubscribed' => (clone $recipientQuery)->whereNotNull('unsubscribed_at')->count(),
+        ];
 
         return [
             'campaigns' => $campaigns,
             'recipients' => $recipients,
             'statuses' => $statuses,
             'events' => $events,
+            'engagement' => $engagement,
             'bounce_signals' => $bounceSignals,
-            'clicks_tracked' => false,
+            'clicks_tracked' => (clone $recipientQuery)->whereNotNull('tracking_token')->exists(),
         ];
     }
 }

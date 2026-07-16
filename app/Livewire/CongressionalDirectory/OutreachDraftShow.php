@@ -38,7 +38,10 @@ class OutreachDraftShow extends Component
 
     public string $recipientSearch = '';
 
-    public string $statusFilter = 'all';
+    public string $statusFilter = 'pending';
+
+    /** @var array<int,int> */
+    public array $selectedRecipientIds = [];
 
     public ?int $previewRecipientId = null;
 
@@ -247,6 +250,72 @@ class OutreachDraftShow extends Component
         $this->dispatch('notify', type: 'success', message: "Approved {$count} eligible recipients. Provisional addresses still require individual review.");
     }
 
+    /** @param array<int,int|string> $recipientIds */
+    public function selectVisibleRecipients(array $recipientIds): void
+    {
+        $allowed = $this->draft->recipients()
+            ->whereIn('id', array_map('intval', $recipientIds))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $this->selectedRecipientIds = array_values(array_unique(array_merge($this->selectedRecipientIds, $allowed)));
+    }
+
+    public function selectAllMatchingRecipients(): void
+    {
+        $this->selectedRecipientIds = $this->recipientQuery()
+            ->limit(5000)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    public function clearRecipientSelection(): void
+    {
+        $this->selectedRecipientIds = [];
+    }
+
+    public function approveSelectedRecipients(CongressionalOutreachWorkbenchService $workbench): void
+    {
+        $this->authorizeManage();
+        if (! $this->snapshotIsReady()) {
+            return;
+        }
+
+        $approved = 0;
+        $skipped = 0;
+        $this->draft->recipients()->whereIn('id', $this->selectedRecipientIds)->get()->each(
+            function (CongressionalOutreachDraftRecipient $recipient) use ($workbench, &$approved, &$skipped): void {
+                try {
+                    $workbench->approve($recipient, Auth::id());
+                    $approved++;
+                } catch (DomainException) {
+                    $skipped++;
+                }
+            }
+        );
+        $this->selectedRecipientIds = [];
+        $this->draft->refresh();
+        $this->dispatch('notify', type: 'success', message: "Approved {$approved} selected recipients; skipped {$skipped} unavailable records.");
+    }
+
+    public function excludeSelectedRecipients(CongressionalOutreachWorkbenchService $workbench): void
+    {
+        $this->authorizeManage();
+        if (! $this->snapshotIsReady()) {
+            return;
+        }
+
+        $recipients = $this->draft->recipients()->whereIn('id', $this->selectedRecipientIds)->get();
+        foreach ($recipients as $recipient) {
+            $workbench->exclude($recipient, Auth::id());
+        }
+        $count = $recipients->count();
+        $this->selectedRecipientIds = [];
+        $this->draft->refresh();
+        $this->dispatch('notify', type: 'success', message: "Excluded {$count} selected recipients.");
+    }
+
     public function excludeRecipient(int $recipientId, CongressionalOutreachWorkbenchService $workbench): void
     {
         $this->authorizeManage();
@@ -440,27 +509,11 @@ class OutreachDraftShow extends Component
             $this->previewRecipientId = $this->draft->recipients()->orderBy('id')->value('id');
         }
 
-        $recipients = $this->draft->recipients()
+        $recipients = $this->recipientQuery()
             ->with(['profile.emails' => fn ($query) => $query->orderByDesc('is_primary')->orderBy('email')])
-            ->when($this->statusFilter !== 'all', function (Builder $query): void {
-                if (in_array($this->statusFilter, ['approved', 'pending', 'excluded'], true)) {
-                    $query->where('review_status', $this->statusFilter);
-                } elseif (in_array($this->statusFilter, ['eligible', 'limited', 'blocked'], true)) {
-                    $query->where('eligibility_tier', $this->statusFilter);
-                }
-            })
-            ->when(trim($this->recipientSearch) !== '', function (Builder $query): void {
-                $term = '%'.trim($this->recipientSearch).'%';
-                $query->where(function (Builder $query) use ($term): void {
-                    $query->whereLike('name', $term)
-                        ->orWhereLike('email', $term)
-                        ->orWhereLike('title', $term)
-                        ->orWhereLike('office', $term);
-                });
-            })
             ->orderByRaw("CASE review_status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END")
             ->orderBy('name')
-            ->paginate(25, ['*'], 'recipientPage');
+            ->paginate(50, ['*'], 'recipientPage');
 
         $previewRecipient = $this->previewRecipientId
             ? $this->draft->recipients()->find($this->previewRecipientId)
@@ -519,5 +572,27 @@ class OutreachDraftShow extends Component
                 'manual_exclusion' => 'Removed during review',
             ],
         ]);
+    }
+
+    protected function recipientQuery(): Builder
+    {
+        return CongressionalOutreachDraftRecipient::query()
+            ->where('draft_id', $this->draft->id)
+            ->when($this->statusFilter !== 'all', function (Builder $query): void {
+                if (in_array($this->statusFilter, ['approved', 'pending', 'excluded'], true)) {
+                    $query->where('review_status', $this->statusFilter);
+                } elseif (in_array($this->statusFilter, ['eligible', 'limited', 'blocked'], true)) {
+                    $query->where('eligibility_tier', $this->statusFilter);
+                }
+            })
+            ->when(trim($this->recipientSearch) !== '', function (Builder $query): void {
+                $term = '%'.trim($this->recipientSearch).'%';
+                $query->where(function (Builder $query) use ($term): void {
+                    $query->whereLike('name', $term)
+                        ->orWhereLike('email', $term)
+                        ->orWhereLike('title', $term)
+                        ->orWhereLike('office', $term);
+                });
+            });
     }
 }

@@ -3,6 +3,7 @@
 use App\Jobs\BuildCongressionalOutreachDraftSnapshot;
 use App\Jobs\GenerateCongressionalEmailGuesses;
 use App\Jobs\SendOutreachCampaignRecipient;
+use App\Livewire\CongressionalDirectory\OutreachAnalytics;
 use App\Livewire\CongressionalDirectory\OutreachDraftShow;
 use App\Livewire\CongressionalDirectory\StaffListsIndex;
 use App\Models\CongressionalOffice;
@@ -14,19 +15,23 @@ use App\Models\CongressionalStaffEmailEvent;
 use App\Models\CongressionalStaffList;
 use App\Models\CongressionalStaffObservation;
 use App\Models\CongressionalStaffProfile;
+use App\Models\ContactActivity;
 use App\Models\GmailMessage;
 use App\Models\OutreachCampaign;
 use App\Models\OutreachCampaignRecipient;
 use App\Models\OutreachEmailSuppression;
+use App\Models\Person;
 use App\Models\User;
 use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
 use App\Services\CongressionalDirectory\CongressionalEmailGuessService;
 use App\Services\CongressionalDirectory\CongressionalOutreachBatchService;
 use App\Services\CongressionalDirectory\CongressionalOutreachWorkbenchService;
 use App\Services\CongressionalDirectory\CongressionalStaffChangeDetector;
+use App\Services\ContactActivityService;
 use App\Services\GoogleGmailService;
 use App\Services\Outreach\OutreachCampaignService;
 use App\Services\Outreach\OutreachSuppressionService;
+use App\Services\Outreach\OutreachTrackingService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -819,7 +824,7 @@ test('congressional delivery uses the personalized preview and records accepted-
         ->and($analytics['events']['send_accepted'])->toBe(1)
         ->and($analytics['events']['human_reply'])->toBe(1)
         ->and($analytics['bounce_signals'])->toBe(1)
-        ->and($analytics['clicks_tracked'])->toBeFalse();
+        ->and($analytics['clicks_tracked'])->toBeTrue();
 });
 
 test('batch delivery refuses unresolved personalization placeholders', function () {
@@ -835,6 +840,118 @@ test('batch delivery refuses unresolved personalization placeholders', function 
     expect(fn () => app(CongressionalOutreachBatchService::class)->sendNextBatch($draft->fresh(), $owner))
         ->toThrow(DomainException::class, '[Unknown Field]')
         ->and(OutreachCampaign::query()->count())->toBe(0);
+});
+
+test('recipient review supports selecting and approving multiple provisional addresses', function () {
+    config()->set('features.congressional_directory_ui', true);
+    $owner = User::factory()->create();
+    $profiles = [workbenchProfile('Bulk One'), workbenchProfile('Bulk Two')];
+    $evidence = app(CongressionalEmailEvidenceService::class);
+    $evidence->addAddress($profiles[0], 'one.bulk@mail.house.gov', 'guessed');
+    $evidence->addAddress($profiles[1], 'two.bulk@mail.house.gov', 'guessed');
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($owner, $profiles), $owner, 'Bulk review');
+    $recipientIds = $draft->recipients()->pluck('id')->all();
+
+    Livewire::actingAs($owner)
+        ->test(OutreachDraftShow::class, ['draft' => $draft])
+        ->set('selectedRecipientIds', $recipientIds)
+        ->call('approveSelectedRecipients')
+        ->assertHasNoErrors()
+        ->assertSet('selectedRecipientIds', []);
+
+    expect($draft->recipients()->where('review_status', 'approved')->count())->toBe(2);
+});
+
+test('tracking records unique recipient engagement and analytics exposes every recipient', function () {
+    config()->set('features.congressional_directory_ui', true);
+    Queue::fake();
+    $owner = User::factory()->create();
+    $profile = workbenchProfile('Tracked Recipient');
+    app(CongressionalEmailEvidenceService::class)->addAddress($profile, 'tracked@mail.house.gov', 'sourced');
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($owner, [$profile]), $owner, 'Tracked analytics');
+    $workbench->approveAllEligible($draft, $owner->id);
+    $workbench->updateMessage($draft, 'A useful resource', 'Visit https://example.org/resource');
+    $batch = app(CongressionalOutreachBatchService::class)->sendNextBatch($draft->fresh(), $owner);
+    $recipient = $batch['campaign']->recipients()->sole();
+    $html = app(OutreachTrackingService::class)->trackedHtml($recipient, 'Visit https://example.org/resource');
+    $recipient->update(['status' => 'sent', 'sent_at' => now()]);
+
+    expect($html)->toContain(route('outreach.track.open', ['token' => $recipient->tracking_token]))
+        ->and($html)->toContain(route('outreach.track.click', ['token' => $recipient->tracking_token]));
+
+    $this->get(route('outreach.track.open', ['token' => $recipient->tracking_token]))->assertOk();
+    $this->get(route('outreach.track.open', ['token' => $recipient->tracking_token]))->assertOk();
+    $this->get(route('outreach.track.click', ['token' => $recipient->tracking_token]).'?url='.rawurlencode('https://example.org/resource'))
+        ->assertRedirect('https://example.org/resource');
+
+    $recipient->refresh();
+    expect($recipient->open_count)->toBe(2)
+        ->and($recipient->click_count)->toBe(1)
+        ->and($recipient->opened_at)->not->toBeNull()
+        ->and($recipient->clicked_at)->not->toBeNull()
+        ->and($recipient->events()->where('event_type', 'open')->count())->toBe(2)
+        ->and($recipient->events()->where('event_type', 'click')->count())->toBe(1);
+
+    Livewire::actingAs($owner)
+        ->test(OutreachAnalytics::class, ['draft' => $draft])
+        ->assertSee('Tracked Recipient')
+        ->assertSee('100% open rate')
+        ->assertSee('100% click rate');
+});
+
+test('campaign and Gmail activity is logged without duplicating the outbound send', function () {
+    $owner = User::factory()->create();
+    $person = Person::query()->create(['name' => 'Timeline Staff', 'email' => 'timeline@mail.house.gov']);
+    $profile = workbenchProfile('Timeline Staff');
+    $profile->update(['person_id' => $person->id]);
+    app(CongressionalEmailEvidenceService::class)->addAddress($profile, 'timeline@mail.house.gov', 'sourced');
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($owner, [$profile]), $owner, 'Timeline campaign');
+    $workbench->approveAllEligible($draft, $owner->id);
+    $workbench->updateMessage($draft, 'Timeline subject', 'Hello');
+    Queue::fake();
+    $batch = app(CongressionalOutreachBatchService::class)->sendNextBatch($draft->fresh(), $owner);
+    $recipient = $batch['campaign']->recipients()->sole();
+    $recipient->update(['status' => 'sent', 'external_message_id' => 'gmail-outbound', 'sent_at' => now()]);
+    $activities = app(ContactActivityService::class);
+    $activities->recordCampaignSend($recipient->fresh());
+
+    $outbound = GmailMessage::query()->create([
+        'user_id' => $owner->id,
+        'gmail_message_id' => 'gmail-outbound',
+        'gmail_thread_id' => 'timeline-thread',
+        'subject' => 'Timeline subject',
+        'snippet' => 'Hello',
+        'from_email' => $owner->email,
+        'to_emails' => ['timeline@mail.house.gov'],
+        'sent_at' => now(),
+        'is_inbound' => false,
+    ]);
+    $outbound->setRelation('user', $owner);
+    $activities->recordGmailMessage($outbound);
+
+    expect(ContactActivity::query()->where('campaign_recipient_id', $recipient->id)->count())->toBe(2)
+        ->and(ContactActivity::query()->where('campaign_recipient_id', $recipient->id)->where('gmail_message_id', $outbound->id)->count())->toBe(2);
+
+    $inbound = GmailMessage::query()->create([
+        'user_id' => $owner->id,
+        'person_id' => $person->id,
+        'gmail_message_id' => 'gmail-inbound',
+        'gmail_thread_id' => 'timeline-thread',
+        'subject' => 'Re: Timeline subject',
+        'snippet' => 'Thanks for reaching out.',
+        'from_email' => 'timeline@mail.house.gov',
+        'to_emails' => [$owner->email],
+        'sent_at' => now()->addMinute(),
+        'is_inbound' => true,
+    ]);
+    $activities->recordGmailMessage($inbound);
+
+    expect($recipient->fresh()->replied_at)->not->toBeNull()
+        ->and($person->contactActivities()->where('direction', 'inbound')->exists())->toBeTrue()
+        ->and($profile->contactActivities()->where('direction', 'inbound')->exists())->toBeTrue();
 });
 
 test('approved recipient preview uses guess evidence for names links and carousel navigation', function () {
