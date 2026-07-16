@@ -1,522 +1,211 @@
-<div class="app-page-frame space-y-8">
+<div class="app-page-frame min-h-[calc(100vh-5rem)]">
+    @php
+        $calendarStatus = $isCalendarConnected
+            ? ($lastSyncAt ? 'Calendar last synced '.$lastSyncAt : 'Calendar connected')
+            : 'Calendar is not connected';
+        $meetingCount = (int) ($workspaceStats['meetings_today'] ?? 0);
+        $overdueCount = (int) ($workspaceStats['tasks_overdue'] ?? 0);
+        $timezone = auth()->user()->timezone ?: config('app.timezone');
+        $location = auth()->user()->location ?: 'Workspace';
+        $latestAssistantMessage = collect($conversationMessages)
+            ->reverse()
+            ->first(fn (array $message): bool => ($message['role'] ?? '') === 'assistant');
+    @endphp
 
-        @if($aiWarning || $calendarWarning || $gmailWarning || $passportWarning)
-            <div class="space-y-2">
-                @if($aiWarning)
-                    <div class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-300">
-                        {{ $aiWarning }}
-                    </div>
-                @endif
-                @if($calendarWarning)
-                    <div class="rounded-lg border border-blue-200 bg-blue-50 text-blue-800 px-4 py-3 text-sm dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300">
-                        {{ $calendarWarning }}
-                    </div>
-                @endif
-                @if($gmailWarning)
-                    <div class="rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-800 px-4 py-3 text-sm dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-300">
-                        {{ $gmailWarning }}
-                    </div>
-                @endif
-                @if($passportWarning)
-                    <a href="{{ route('profile.travel') }}" wire:navigate
-                        class="block rounded-lg border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm dark:bg-red-900/30 dark:border-red-800 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors">
-                        ✈️ {{ $passportWarning }}
-                    </a>
-                @endif
-            </div>
-        @endif
+    @if($aiWarning || $calendarWarning || $gmailWarning || $passportWarning)
+        <section class="desk-alert flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm text-[#5c574d]">
+            <p>
+                {{ $calendarWarning ?: $gmailWarning ?: $passportWarning ?: $aiWarning }}
+            </p>
+            @if($isCalendarConnected && ($calendarWarning || $gmailWarning))
+                <button type="button" wire:click="syncCalendar" wire:loading.attr="disabled" class="desk-link">
+                    Re-sync now →
+                </button>
+            @endif
+        </section>
+    @endif
 
-        <section class="space-y-4">
-            <div class="flex flex-wrap items-center gap-3 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
-                <span>{{ $workspaceDateLabel }}</span>
-                <span class="text-gray-300 dark:text-gray-600">•</span>
-                <livewire:components.timezone-location />
-            </div>
+    <header>
+        <p class="desk-kicker">
+            {{ now($timezone)->format('l, F j') }} · {{ $location }} ({{ now($timezone)->format('T') }})
+        </p>
+        <h1 class="desk-page-title mt-2">{{ $greeting }}, {{ $firstName }}.</h1>
+        <p class="mt-2 text-sm text-[#5c574d]">
+            {{ $meetingCount }} {{ Str::plural('meeting', $meetingCount) }} today.
+            {{ $overdueCount }} overdue {{ Str::plural('task', $overdueCount) }}.
+            {{ $calendarStatus }}@if($isCalendarConnected) —
+                <button type="button" wire:click="syncCalendar" wire:loading.attr="disabled" class="desk-link align-baseline">
+                    <span wire:loading.remove wire:target="syncCalendar">re-sync</span>
+                    <span wire:loading wire:target="syncCalendar">syncing…</span>
+                </button>@endif.
+        </p>
+    </header>
 
-            <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <div class="space-y-2 max-w-3xl">
-                    <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight text-gray-900 dark:text-white">
-                        {{ $greeting }}, {{ $firstName }}.
-                    </h1>
-                    <p class="text-base sm:text-lg text-gray-600 dark:text-gray-300 leading-relaxed">
-                        {{ $focusNarrative }}
+    <div class="grid gap-10 lg:grid-cols-[minmax(0,3fr)_minmax(17rem,2fr)]">
+        <div class="space-y-8">
+            <section>
+                <div class="flex items-center justify-between gap-4 pb-2">
+                    <p class="desk-section-label">
+                        Up next
+                        @if($nextMeeting)
+                            · {{ $nextMeeting['relative_label'] }}
+                        @endif
                     </p>
                 </div>
-
-                <div class="flex items-center gap-2" @if($isSyncing) wire:poll.10s="refreshCalendarStatus" @endif>
-                    @if($isCalendarConnected)
-                        <button wire:click="syncCalendar" wire:loading.attr="disabled" @if($isSyncing) disabled @endif
-                            class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                            <svg class="w-4 h-4 {{ $isSyncing ? 'animate-spin' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            <span class="ml-2" wire:loading.remove wire:target="syncCalendar">
-                                {{ $isSyncing ? 'Calendar syncing…' : ($lastSyncAt ? 'Synced '.$lastSyncAt : 'Sync calendar') }}
-                            </span>
-                            <span class="ml-2" wire:loading wire:target="syncCalendar">Syncing...</span>
-                        </button>
-
-                        <button wire:click="syncGmail" wire:loading.attr="disabled"
-                            class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                            <svg class="w-4 h-4 {{ $isSyncingGmail ? 'animate-spin' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8m-18 8h18a2 2 0 002-2V8a2 2 0 00-2-2H3a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                            </svg>
-                            <span class="ml-2" wire:loading.remove wire:target="syncGmail">
-                                {{ $lastGmailSyncAt ? 'Gmail '.$lastGmailSyncAt : 'Sync Gmail' }}
-                            </span>
-                            <span class="ml-2" wire:loading wire:target="syncGmail">Syncing...</span>
-                        </button>
-
-                        <form action="{{ route('google.disconnect') }}" method="POST" class="inline-flex">
-                            @csrf
-                            <button type="submit"
-                                class="inline-flex items-center px-3 py-2 border border-rose-300 dark:border-rose-700 text-sm font-medium rounded-lg text-rose-700 dark:text-rose-300 bg-white dark:bg-gray-800 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors">
-                                Disconnect Google
-                            </button>
-                        </form>
-                    @else
-                        <a href="{{ route('google.redirect') }}"
-                            class="inline-flex items-center px-3 py-2 border border-indigo-300 dark:border-indigo-700 text-sm font-medium rounded-lg text-indigo-700 dark:text-indigo-300 bg-white dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors">
-                            Connect Google Workspace
-                        </a>
-                    @endif
-                </div>
-            </div>
-        </section>
-
-        <section class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 sm:p-5">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-base font-semibold text-gray-900 dark:text-white">Workspace Conversation</h2>
-                <span class="text-xs text-gray-500 dark:text-gray-400">Your companion proposes, you approve</span>
-            </div>
-            <div class="mb-4 rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/70 dark:bg-emerald-900/20 p-3">
-                <p class="text-sm font-semibold text-emerald-900 dark:text-emerald-200">{{ $winsPrompt['headline'] ?? 'Wins Reflection' }}</p>
-                <p class="mt-1 text-sm text-emerald-800 dark:text-emerald-100">{{ $winsPrompt['message'] ?? '' }}</p>
-                <p class="mt-1 text-xs text-emerald-700/90 dark:text-emerald-200/80">{{ $winsPrompt['support_nudge'] ?? '' }}</p>
-                <div class="mt-2 flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        wire:click="useSmartAction('capture_win')"
-                        class="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white/90 dark:bg-gray-800 border border-emerald-200 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 hover:bg-white dark:hover:bg-gray-700 transition-colors"
-                    >
-                        Add a win
-                    </button>
-                    <button
-                        type="button"
-                        wire:click="useSmartAction('share_reflection')"
-                        class="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white/90 dark:bg-gray-800 border border-emerald-200 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 hover:bg-white dark:hover:bg-gray-700 transition-colors"
-                    >
-                        Share reflection
-                    </button>
-                    <button
-                        type="button"
-                        wire:click="useSmartAction('private_reflection')"
-                        class="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white/90 dark:bg-gray-800 border border-emerald-200 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 hover:bg-white dark:hover:bg-gray-700 transition-colors"
-                    >
-                        Keep private
-                    </button>
-                    <button
-                        type="button"
-                        wire:click="useSmartAction('request_support')"
-                        class="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white/90 dark:bg-gray-800 border border-emerald-200 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 hover:bg-white dark:hover:bg-gray-700 transition-colors"
-                    >
-                        Ask for support
-                    </button>
-                </div>
-            </div>
-            @php
-                $hasConversation = !empty($conversationMessages);
-            @endphp
-
-            <div
-                x-data
-                x-init="$nextTick(() => { if ($refs.thread) { $refs.thread.scrollTop = $refs.thread.scrollHeight; } })"
-                x-on:workspace-thread-updated.window="$nextTick(() => { if ($refs.thread) { $refs.thread.scrollTop = $refs.thread.scrollHeight; } })"
-                class="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden"
-            >
-                <div x-ref="thread" class="{{ $hasConversation ? 'h-[360px]' : 'h-[150px]' }} overflow-y-auto p-4 space-y-3 bg-gray-50 dark:bg-gray-900/40">
-                    @forelse($conversationMessages as $message)
-                        @php
-                            $isUser = ($message['role'] ?? 'assistant') === 'user';
-                        @endphp
-                        <div class="flex {{ $isUser ? 'justify-end' : 'justify-start' }}">
-                            <div class="max-w-[94%] rounded-xl px-3 py-2 {{ $isUser ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-600' }}">
-                                <div class="text-[11px] mb-1 {{ $isUser ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-400' }}">
-                                    {{ $isUser ? 'You' : 'WRK Assistant' }} • {{ $message['timestamp'] ?? '' }}
-                                </div>
-                                <div class="whitespace-pre-wrap text-sm">{{ $message['content'] ?? '' }}</div>
-                            </div>
-                        </div>
-                    @empty
-                        <div class="h-full flex flex-col items-center justify-center text-center">
-                            <p class="text-sm text-gray-600 dark:text-gray-300">
-                                Start with a quick brain dump and I will propose tasks you can approve.
-                            </p>
-                            <div class="mt-3 flex flex-wrap justify-center gap-2">
-                                <button
-                                    type="button"
-                                    wire:click="useSmartAction('brain_dump')"
-                                    class="px-3 py-1.5 text-xs font-medium rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                                >
-                                    Start morning brain dump
-                                </button>
-                                <button
-                                    type="button"
-                                    wire:click="useSmartAction('remind')"
-                                    class="px-3 py-1.5 text-xs font-medium rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                                >
-                                    Add Monday reminder
-                                </button>
-                            </div>
-                        </div>
-                    @endforelse
-                </div>
-
-                <form wire:submit.prevent="submitOmni" class="space-y-3 p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-                    <div class="flex items-start gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center flex-shrink-0">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                            </svg>
-                        </div>
-
-                        <textarea
-                            wire:model="omniInput"
-                            rows="{{ $hasConversation ? 3 : 2 }}"
-                            placeholder="{{ $winsPrompt['input_placeholder'] ?? 'Dump your notes, ask a question, or capture a reminder...' }}"
-                            class="flex-1 text-base sm:text-lg rounded-xl border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-indigo-500 focus:border-indigo-500 resize-y min-h-[76px]"
-                        ></textarea>
-
-                        <button
-                            type="submit"
-                            wire:loading.attr="disabled"
-                            wire:target="submitOmni"
-                            class="inline-flex items-center px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                            <span wire:loading.remove wire:target="submitOmni">Enter</span>
-                            <span wire:loading wire:target="submitOmni">Working...</span>
-                        </button>
-                    </div>
-
-                    <div class="flex flex-wrap gap-2">
-                        @foreach($smartActions as $action)
-                            <button
-                                type="button"
-                                wire:click="useSmartAction('{{ $action['key'] }}')"
-                                class="px-3 py-1.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                            >
-                                {{ $action['label'] }}
-                            </button>
-                        @endforeach
-                    </div>
-
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
-                        Shortcuts: <span class="font-mono">/task</span>, <span class="font-mono">/remind</span>,
-                        <span class="font-mono">/sync gmail</span>, <span class="font-mono">/help</span>. Share wins or reflections in plain language and I will queue suggestions before creating anything.
-                    </p>
-                </form>
-            </div>
-        </section>
-
-        @if(!empty($companionSuggestions))
-            <section class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
-                <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
-                    <div>
-                        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Suggested Actions</h2>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            Your companion infers tasks from notes. Nothing is created until you click an action button.
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        wire:click="clearCompanionSuggestions"
-                        class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
-                    >
-                        Clear all
-                    </button>
-                </div>
-
-                <div class="space-y-3">
-                    @foreach($companionSuggestions as $suggestion)
-                        @php
-                            $type = $suggestion['type'] ?? 'task';
-                            $actionLabel = match ($type) {
-                                'task' => 'Create task',
-                                'reminder' => 'Create reminder',
-                                'draft_email' => 'Draft email',
-                                'create_project' => 'Create project',
-                                'create_subproject' => 'Create subproject',
-                                'capture_win' => 'Add to wins',
-                                'capture_reflection' => 'Save reflection',
-                                'support_check_in' => !empty($suggestion['notify_management']) ? 'Notify management' : 'Save support note',
-                                default => 'Apply',
-                            };
-                            $loadingLabel = match ($type) {
-                                'task' => 'Creating...',
-                                'reminder' => 'Creating...',
-                                'draft_email' => 'Drafting...',
-                                'create_project' => 'Creating...',
-                                'create_subproject' => 'Creating...',
-                                'capture_win' => 'Saving...',
-                                'capture_reflection' => 'Saving...',
-                                'support_check_in' => !empty($suggestion['notify_management']) ? 'Sending...' : 'Saving...',
-                                default => 'Working...',
-                            };
-                            $typeLabel = match ($type) {
-                                'draft_email' => 'Email',
-                                'create_project' => 'Project',
-                                'create_subproject' => 'Subproject',
-                                'capture_win' => 'Win',
-                                'capture_reflection' => 'Reflection',
-                                'support_check_in' => 'Support',
-                                default => ucfirst($type),
-                            };
-                            $confidenceClass = match ($suggestion['confidence'] ?? 'medium') {
-                                'high' => 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-                                'low' => 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
-                                default => 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-                            };
-                        @endphp
-                        <div wire:key="suggestion-{{ $loop->index }}-{{ $suggestion['id'] ?? $loop->index }}" class="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-                            <div class="flex flex-wrap items-start justify-between gap-3">
-                                <div class="min-w-0">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
-                                            {{ $typeLabel }}
-                                        </span>
-                                        <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold {{ $confidenceClass }}">
-                                            {{ ucfirst($suggestion['confidence'] ?? 'medium') }} confidence
-                                        </span>
-                                        @if(!empty($suggestion['due_label']))
-                                            <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200">
-                                                Due {{ $suggestion['due_label'] }}
-                                            </span>
-                                        @endif
-                                        @if(in_array($type, ['capture_win', 'capture_reflection'], true) && !empty($suggestion['visibility']))
-                                            <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                                                {{ ucfirst($suggestion['visibility']) }}
-                                            </span>
-                                        @endif
-                                        @if($type === 'support_check_in')
-                                            <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
-                                                {{ !empty($suggestion['notify_management']) ? 'Confidential escalation' : 'Private draft' }}
-                                            </span>
-                                        @endif
-                                    </div>
-                                    <p class="mt-2 font-medium text-gray-900 dark:text-white break-words">
-                                        {{ $suggestion['title'] ?? 'Untitled suggestion' }}
-                                    </p>
-                                    @if(!empty($suggestion['reason']))
-                                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ $suggestion['reason'] }}</p>
-                                    @endif
-                                    @if(!empty($suggestion['links']) && is_array($suggestion['links']))
-                                        <div class="mt-2 flex flex-wrap gap-1.5">
-                                            @foreach($suggestion['links'] as $link)
-                                                @if(is_array($link) && !empty($link['type']) && !empty($link['name']))
-                                                    <span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200">
-                                                        Linked {{ ucfirst($link['type']) }}: {{ $link['name'] }}
-                                                    </span>
-                                                @endif
-                                            @endforeach
-                                        </div>
-                                    @endif
-                                    @if(!empty($suggestion['unresolved_project_name']))
-                                        <p class="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                                            No existing project match for "{{ $suggestion['unresolved_project_name'] }}". A "Create project" suggestion was added.
-                                        </p>
-                                    @endif
-                                </div>
-
-                                <div class="flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        wire:click="applyCompanionSuggestionAt({{ $loop->index }})"
-                                        wire:loading.attr="disabled"
-                                        wire:target="applyCompanionSuggestionAt({{ $loop->index }})"
-                                        class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                                    >
-                                        <span wire:loading.remove wire:target="applyCompanionSuggestionAt({{ $loop->index }})">
-                                            {{ $actionLabel }}
-                                        </span>
-                                        <span wire:loading wire:target="applyCompanionSuggestionAt({{ $loop->index }})">
-                                            {{ $loadingLabel }}
-                                        </span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        wire:click="dismissCompanionSuggestionAt({{ $loop->index }})"
-                                        wire:loading.attr="disabled"
-                                        wire:target="applyCompanionSuggestionAt({{ $loop->index }}),dismissCompanionSuggestionAt({{ $loop->index }})"
-                                        class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                                    >
-                                        <span wire:loading.remove wire:target="dismissCompanionSuggestionAt({{ $loop->index }})">Dismiss</span>
-                                        <span wire:loading wire:target="dismissCompanionSuggestionAt({{ $loop->index }})">Dismissing...</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
-            </section>
-        @endif
-
-        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div class="lg:col-span-8 space-y-6">
-                <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 uppercase tracking-wide">Up Next</h2>
-
+                <div class="desk-rule">
                     @if($nextMeeting)
-                        <div class="rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/60 dark:bg-indigo-900/20 p-4">
-                            <div class="flex flex-wrap items-start justify-between gap-3">
-                                <div>
-                                    <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-300">
-                                        {{ $nextMeeting['date_label'] }} · {{ $nextMeeting['relative_label'] }}
-                                    </p>
-                                    <h3 class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ $nextMeeting['title'] }}</h3>
-                                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                                        {{ $nextMeeting['time_label'] }} · {{ $nextMeeting['location'] }}
-                                        @if(!empty($nextMeeting['organization']))
-                                            · {{ $nextMeeting['organization'] }}
-                                        @endif
-                                    </p>
-                                </div>
-                                <a href="{{ $nextMeeting['url'] }}" wire:navigate
-                                    class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg bg-white dark:bg-gray-800 border border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40">
-                                    Open meeting
+                        <div class="flex flex-col gap-4 py-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div class="min-w-0">
+                                <a href="{{ $nextMeeting['url'] }}" wire:navigate class="desk-display text-[1.35rem] font-semibold leading-tight text-[#26221c] hover:text-[#8a4b2d]">
+                                    {{ $nextMeeting['title'] }}
                                 </a>
-                            </div>
-
-                            <div class="mt-3 rounded-lg bg-white dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 p-3">
-                                <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Prep cue</p>
-                                <p class="text-sm text-gray-700 dark:text-gray-200">
-                                    {{ $nextMeeting['key_ask'] ?: 'Use “Prep next meeting” in the workspace bar to generate a brief and talk track.' }}
+                                <p class="mt-1 text-xs text-[#5c574d]">
+                                    {{ $nextMeeting['time_label'] }} · {{ $nextMeeting['location'] }}
+                                    @if(!empty($nextMeeting['organization']))
+                                        · {{ $nextMeeting['organization'] }}
+                                    @endif
+                                </p>
+                                <p class="desk-display mt-2 text-sm italic text-[#8a4b2d]">
+                                    {{ $nextMeeting['key_ask'] ?: 'WRK can draft a talk track from the context already in your workspace.' }}
                                 </p>
                             </div>
+                            <button type="button" wire:click="useSmartAction('prep_next_meeting')" wire:loading.attr="disabled" class="desk-button-dark shrink-0">
+                                ✦ Prep brief
+                            </button>
                         </div>
                     @else
-                        <div class="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 p-4 text-sm text-gray-500 dark:text-gray-400">
-                            No upcoming meeting found. You can use this block for deep work.
+                        <div class="py-4 text-sm text-[#8a8578]">
+                            Your calendar is clear. Use this block for focused work.
                         </div>
                     @endif
                 </div>
+            </section>
 
-                <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 uppercase tracking-wide">Now / Next / Later</h2>
-
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div class="rounded-lg border border-red-100 dark:border-red-900/40 bg-red-50/50 dark:bg-red-900/10 p-3">
-                            <div class="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300 mb-2">Now</div>
-                            @forelse($nowTasks as $task)
-                                <div class="text-sm text-gray-800 dark:text-gray-100 mb-2 last:mb-0">• {{ $task->title ?: $task->description }}</div>
-                            @empty
-                                <div class="text-sm text-gray-500 dark:text-gray-400">No immediate tasks.</div>
-                            @endforelse
-                        </div>
-
-                        <div class="rounded-lg border border-amber-100 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-900/10 p-3">
-                            <div class="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300 mb-2">Next</div>
-                            @forelse($nextTasks as $task)
-                                <div class="text-sm text-gray-800 dark:text-gray-100 mb-2 last:mb-0">
-                                    • {{ $task->title ?: $task->description }}
-                                    @if($task->due_date)
-                                        <span class="text-xs text-gray-500 dark:text-gray-400">({{ $task->due_date->format('M j') }})</span>
+            <section>
+                <p class="desk-section-label pb-2">Needs you</p>
+                <div class="desk-hairline">
+                    @forelse($urgentTasks->take(3) as $task)
+                        @php
+                            $isOverdue = $task->due_date && $task->due_date->isPast() && !$task->due_date->isToday();
+                        @endphp
+                        <div class="desk-row flex items-center justify-between gap-4 py-3">
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-semibold text-[#26221c]">
+                                    {{ $task->title ?: $task->description }}
+                                    @if($isOverdue)
+                                        <span class="ml-2 text-[11px] font-semibold text-[#b33a2b]">overdue</span>
                                     @endif
-                                </div>
-                            @empty
-                                <div class="text-sm text-gray-500 dark:text-gray-400">No near-term queue.</div>
-                            @endforelse
+                                </p>
+                                <p class="mt-0.5 text-[11px] text-[#8a8578]">
+                                    {{ $task->project?->name ?: 'Standalone task' }}
+                                    @if($task->due_date)
+                                        · due {{ $task->due_date->format('M j') }}
+                                    @endif
+                                    · {{ $task->priority ?: 'medium' }}
+                                </p>
+                            </div>
+                            <button type="button" wire:click="completeAction({{ $task->id }})" class="desk-link shrink-0">Mark done</button>
                         </div>
+                    @empty
+                        <div class="desk-row py-3 text-sm text-[#8a8578]">No urgent tasks right now.</div>
+                    @endforelse
 
-                        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3">
-                            <div class="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-2">Later</div>
-                            @forelse($laterTasks as $task)
-                                <div class="text-sm text-gray-800 dark:text-gray-100 mb-2 last:mb-0">• {{ $task->title ?: $task->description }}</div>
-                            @empty
-                                <div class="text-sm text-gray-500 dark:text-gray-400">Nothing parked.</div>
-                            @endforelse
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                    <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wide">Priority Queue</h2>
-                        <a href="{{ route('meetings.index') }}" wire:navigate class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
-                            View full workflow
-                        </a>
-                    </div>
-
-                    @if($urgentTasks->isNotEmpty())
-                        <div class="space-y-3">
-                            @foreach($urgentTasks as $task)
-                                <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-3 flex items-start justify-between gap-3">
-                                    <div class="min-w-0">
-                                        <p class="font-medium text-gray-900 dark:text-white truncate">{{ $task->title ?: $task->description }}</p>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                            {{ $task->project?->name ?: 'Standalone task' }}
-                                            @if($task->due_date)
-                                                · due {{ $task->due_date->format('M j') }}
-                                            @endif
-                                            · {{ ucfirst($task->priority ?: 'medium') }}
-                                        </p>
-                                    </div>
-                                    <button wire:click="completeAction({{ $task->id }})"
-                                        class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30">
-                                        Complete
-                                    </button>
-                                </div>
-                            @endforeach
-                        </div>
-                    @else
-                        <div class="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 p-4 text-sm text-gray-500 dark:text-gray-400">
-                            No urgent tasks. Capture a new one with <span class="font-mono">/task</span>.
+                    @if(($notesDebt['count'] ?? 0) > 0)
+                        <div class="desk-row flex items-center justify-between gap-4 py-3">
+                            <div class="min-w-0">
+                                <p class="text-sm font-semibold text-[#26221c]">
+                                    {{ number_format($notesDebt['count']) }} {{ Str::plural('meeting', $notesDebt['count']) }} need notes
+                                </p>
+                                @if(!empty($notesDebt['oldest']))
+                                    <p class="mt-0.5 truncate text-[11px] text-[#8a8578]">
+                                        Oldest: {{ $notesDebt['oldest']['title'] }} · {{ $notesDebt['oldest']['date_label'] }}
+                                    </p>
+                                @endif
+                            </div>
+                            <a href="{{ route('meetings.index', ['filter' => 'needs-notes']) }}" wire:navigate class="desk-link shrink-0">Review →</a>
                         </div>
                     @endif
                 </div>
-            </div>
+            </section>
+        </div>
 
-            <div class="lg:col-span-4 space-y-6">
-                <a href="{{ $dailyPulse['url'] }}" wire:navigate
-                    class="block bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-5 text-white hover:from-gray-800 hover:to-gray-700 transition-colors">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-indigo-300 mb-2">{{ $dailyPulse['title'] }}</p>
-                    <p class="text-base font-medium leading-relaxed mb-3">{{ $dailyPulse['body'] }}</p>
-                    <p class="text-xs text-gray-300">{{ $dailyPulse['meta'] }}</p>
-                </a>
+        <aside class="space-y-7">
+            <section class="rounded-[0.625rem] bg-[#26221c] px-5 py-5 text-[#f7f3ec]">
+                <p class="desk-section-label !text-[#c9bfa9]">Latest coverage</p>
+                @if($latestCoverage)
+                    <a href="{{ $latestCoverage['url'] }}" class="desk-display mt-3 block text-lg font-semibold leading-snug text-[#f7f3ec] hover:text-white" @if(Str::startsWith($latestCoverage['url'], 'http')) target="_blank" rel="noopener" @else wire:navigate @endif>
+                        “{{ $latestCoverage['title'] }}” — {{ $latestCoverage['outlet'] }}
+                    </a>
+                    <p class="mt-3 text-[11px] text-[#c9bfa9]">{{ $latestCoverage['date_label'] }} · Media log →</p>
+                @else
+                    <p class="desk-display mt-3 text-lg font-medium">No coverage logged yet.</p>
+                    <a href="{{ route('media.index') }}" wire:navigate class="mt-3 inline-block text-xs text-[#c9bfa9] hover:text-white">Open media log →</a>
+                @endif
+            </section>
 
-                <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 uppercase tracking-wide">Quick Access</h2>
-                    <div class="space-y-2">
-                        <a href="{{ route('meetings.create') }}" wire:navigate class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200">
-                            <span>Log meeting</span>
-                            <span>→</span>
-                        </a>
-                        <a href="{{ route('projects.index') }}" wire:navigate class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200">
-                            <span>Open projects</span>
-                            <span>→</span>
-                        </a>
-                        <a href="{{ route('travel.index') }}" wire:navigate class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200">
-                            <span>Travel workspace</span>
-                            <span>→</span>
-                        </a>
-                        <a href="{{ route('knowledge.base') }}" wire:navigate class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200">
-                            <span>Knowledge search</span>
-                            <span>→</span>
-                        </a>
-                        @if(auth()->user()->isAdmin())
-                            <a href="{{ route('grants.index') }}" wire:navigate class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200">
-                                <span>Funders & reporting</span>
-                                <span>→</span>
-                            </a>
-                        @endif
+            <section>
+                <p class="desk-section-label pb-2">This week</p>
+                <dl class="desk-hairline">
+                    <div class="desk-row flex items-center justify-between py-3 text-xs">
+                        <dt>Meetings logged</dt>
+                        <dd class="desk-data">{{ number_format($thisWeekStats['meetings']) }}</dd>
                     </div>
-                </div>
+                    <div class="desk-row flex items-center justify-between py-3 text-xs">
+                        <dt>Campaign sends</dt>
+                        <dd class="desk-data">{{ number_format($thisWeekStats['campaign_sends']) }}</dd>
+                    </div>
+                    <div class="desk-row flex items-center justify-between py-3 text-xs">
+                        <dt>New contacts</dt>
+                        <dd class="desk-data">{{ number_format($thisWeekStats['new_contacts']) }}</dd>
+                    </div>
+                </dl>
+            </section>
+        </aside>
+    </div>
+
+    @if(!empty($companionSuggestions))
+        <section>
+            <div class="flex items-center justify-between pb-2">
+                <p class="desk-section-label">WRK suggestions</p>
+                <button type="button" wire:click="clearCompanionSuggestions" class="text-xs text-[#8a8578] hover:text-[#8a4b2d]">Clear</button>
+            </div>
+            <div class="desk-hairline">
+                @foreach(array_slice($companionSuggestions, 0, 4) as $index => $suggestion)
+                    <div wire:key="morning-suggestion-{{ $suggestion['id'] }}" class="desk-row flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p class="text-sm font-semibold text-[#26221c]">{{ $suggestion['title'] }}</p>
+                            @if(!empty($suggestion['reason']))
+                                <p class="desk-display mt-0.5 text-sm italic text-[#8a4b2d]">{{ $suggestion['reason'] }}</p>
+                            @endif
+                        </div>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <button type="button" wire:click="dismissCompanionSuggestion('{{ $suggestion['id'] }}')" class="text-xs text-[#8a8578]">Dismiss</button>
+                            <button type="button" wire:click="applyCompanionSuggestion('{{ $suggestion['id'] }}')" class="desk-link">Approve →</button>
+                        </div>
+                    </div>
+                @endforeach
             </div>
         </section>
+    @endif
 
-        @if($showTimezonePrompt)
-            <livewire:components.timezone-location :isPrompt="true" />
+    <section class="mt-auto pt-4">
+        @if($latestAssistantMessage)
+            <div class="desk-inset mb-2 px-4 py-3">
+                <p class="desk-display text-sm italic text-[#8a4b2d]">{{ Str::limit($latestAssistantMessage['content'] ?? '', 260) }}</p>
+            </div>
         @endif
+        <form wire:submit.prevent="submitOmni" class="desk-command-bar flex items-center gap-3 px-4 py-2.5">
+            <label for="morning-desk-command" class="desk-display shrink-0 text-sm italic text-[#8a4b2d]">Ask WRK</label>
+            <input id="morning-desk-command" type="text" wire:model="omniInput" placeholder="Log a meeting, prep a brief, capture a task…" class="!min-h-0 flex-1 !border-0 !bg-transparent !p-0 text-sm !shadow-none focus:!ring-0">
+            <button type="submit" wire:loading.attr="disabled" class="desk-button-primary !min-h-8 !px-3 !py-1.5">
+                <span wire:loading.remove wire:target="submitOmni">Enter</span>
+                <span wire:loading wire:target="submitOmni">Working…</span>
+            </button>
+            <kbd class="hidden rounded border border-[#d8d0bf] px-1.5 py-0.5 font-mono text-[10px] text-[#8a8578] sm:inline">⌘K</kbd>
+        </form>
+    </section>
+
+    @if($showTimezonePrompt)
+        <livewire:components.timezone-location :isPrompt="true" />
+    @endif
 </div>

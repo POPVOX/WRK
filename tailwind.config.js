@@ -12,7 +12,9 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                sans: ['Figtree', ...defaultTheme.fontFamily.sans],
+                sans: ['Public Sans', ...defaultTheme.fontFamily.sans],
+                serif: ['Newsreader', ...defaultTheme.fontFamily.serif],
+                mono: ['IBM Plex Mono', ...defaultTheme.fontFamily.mono],
             },
         },
     },

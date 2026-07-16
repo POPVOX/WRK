@@ -6,15 +6,15 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <title>{{ $title ?? config('app.name', 'WRK') }} - {{ config('app.name', 'WRK') }}</title>
-    <meta name="description" content="WRK workspace for POPVOX Foundation: clean execution, agent collaboration, and institutional memory.">
-    <meta name="theme-color" content="#1d4f7d">
+    <meta name="description" content="WRKBench workspace for POPVOX Foundation.">
+    <meta name="theme-color" content="#faf7f1">
 
     <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/wrk favicon.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('images/wrk favicon.png') }}">
     <link rel="apple-touch-icon" href="{{ asset('images/wrk favicon.png') }}">
 
     <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=ibm-plex-sans:400,500,600,700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.bunny.net/css?family=newsreader:400,400i,500,500i,600|public-sans:400,500,600,700|ibm-plex-mono:400,500&display=swap" rel="stylesheet" />
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('styles')
@@ -22,56 +22,65 @@
 <body class="antialiased">
     @php
         $user = auth()->user();
-
-        $coreNav = [
-            ['label' => 'WRKspace', 'route' => 'dashboard', 'active' => ['dashboard'], 'badge' => null],
-            ['label' => 'Needs You', 'route' => 'needs-you.index', 'active' => ['needs-you.*'], 'badge' => null],
-            ['label' => 'Files', 'route' => 'files.index', 'active' => ['files.index', 'intelligence.files'], 'badge' => null],
-            ['label' => 'Inbox', 'route' => 'communications.inbox', 'active' => ['communications.inbox'], 'badge' => null],
-            ['label' => 'Projects', 'route' => 'projects.index', 'active' => ['projects.*'], 'badge' => null],
+        $congressEnabled = (bool) config('features.congressional_directory_ui');
+        $dailyNav = [
+            ['label' => 'Today', 'route' => 'dashboard', 'active' => ['dashboard'], 'badge' => null],
+            ['label' => 'Inbox', 'route' => 'communications.inbox', 'active' => ['communications.inbox', 'needs-you.*', 'notifications.*'], 'badge' => null],
             ['label' => 'Meetings', 'route' => 'meetings.index', 'active' => ['meetings.*'], 'badge' => null],
+            ['label' => 'Projects', 'route' => 'projects.index', 'active' => ['projects.*', 'funding.*', 'grants.*'], 'badge' => null],
+            ['label' => 'People', 'route' => 'contacts.index', 'active' => ['contacts.*', 'people.*', 'organizations.*', 'team.*', 'congress.index', 'congress.staff.*', 'congress.changes', 'congress.contact-data'], 'badge' => null],
+            ['label' => 'Outreach', 'route' => $congressEnabled ? 'congress.campaigns' : 'media.index', 'active' => ['congress.campaigns', 'congress.campaigns.*', 'congress.lists', 'congress.lists.*', 'congress.outreach.*', 'media.*', 'communications.outreach'], 'badge' => null],
             ['label' => 'Travel', 'route' => 'travel.index', 'active' => ['travel.*'], 'badge' => null],
-            ['label' => 'Funding', 'route' => 'funding.index', 'active' => ['funding.*'], 'badge' => null],
         ];
 
-        $orgNav = [
-            ['label' => 'Contacts', 'route' => 'contacts.index', 'active' => ['contacts.*', 'people.*'], 'badge' => null],
-            ['label' => 'Organizations', 'route' => 'organizations.index', 'active' => ['organizations.*'], 'badge' => null],
-            ['label' => 'Media', 'route' => 'media.index', 'active' => ['media.*'], 'badge' => null],
-            ['label' => 'Team', 'route' => 'team.hub', 'active' => ['team.*'], 'badge' => null],
+        $peopleSubnav = [
+            ['label' => 'Contacts', 'route' => 'contacts.index', 'active' => ['contacts.*', 'people.*']],
+            ['label' => 'Organizations', 'route' => 'organizations.index', 'active' => ['organizations.*']],
+        ];
+        if ($congressEnabled) {
+            $peopleSubnav[] = ['label' => 'Congress directory', 'route' => 'congress.index', 'active' => ['congress.index', 'congress.staff.*', 'congress.changes', 'congress.contact-data']];
+        }
+
+        $outreachSubnav = $congressEnabled ? [
+            ['label' => 'Campaigns', 'route' => 'congress.campaigns', 'active' => ['congress.campaigns', 'congress.campaigns.*', 'congress.outreach.*']],
+            ['label' => 'Lists', 'route' => 'congress.lists', 'active' => ['congress.lists', 'congress.lists.*']],
+            ['label' => 'Media clippings', 'route' => 'media.index', 'active' => ['media.*']],
+        ] : [
+            ['label' => 'Media clippings', 'route' => 'media.index', 'active' => ['media.*']],
         ];
 
-        if (config('features.congressional_directory_ui')) {
-            array_splice($orgNav, 2, 0, [[
-                'label' => 'Congress',
-                'route' => 'congress.index',
-                'active' => ['congress.*'],
-                'badge' => null,
-            ]]);
+        $shortcuts = [
+            ['label' => 'Media clippings', 'route' => 'media.index'],
+            ['label' => 'Funding', 'route' => 'funding.index'],
+        ];
+        if ($congressEnabled) {
+            array_unshift($shortcuts, ['label' => 'Congress directory', 'route' => 'congress.index']);
         }
 
         $adminNav = [];
         if ($user && $user->isAdmin()) {
             $adminNav = [
-                ['label' => 'Staff', 'route' => 'admin.staff', 'active' => ['admin.staff']],
-                ['label' => 'Box Access', 'route' => 'admin.permissions', 'active' => ['admin.permissions']],
-                ['label' => 'Agent Policies', 'route' => 'admin.agent-policies', 'active' => ['admin.agent-policies', 'admin.agents.prompt-preview']],
-                ['label' => 'Integrations', 'route' => 'admin.integrations', 'active' => ['admin.integrations']],
-                ['label' => 'Metrics', 'route' => 'admin.metrics', 'active' => ['admin.metrics']],
-                ['label' => 'Feedback', 'route' => 'admin.feedback', 'active' => ['admin.feedback']],
+                ['label' => 'Staff', 'route' => 'admin.staff'],
+                ['label' => 'Box Access', 'route' => 'admin.permissions'],
+                ['label' => 'Agent Policies', 'route' => 'admin.agent-policies'],
+                ['label' => 'Integrations', 'route' => 'admin.integrations'],
+                ['label' => 'Metrics', 'route' => 'admin.metrics'],
+                ['label' => 'Feedback', 'route' => 'admin.feedback'],
             ];
         }
         if ($user && $user->isManagement()) {
-            $adminNav[] = ['label' => 'Attention Pilot', 'route' => 'attention.insights', 'active' => ['attention.insights']];
+            $adminNav[] = ['label' => 'Attention Pilot', 'route' => 'attention.insights'];
         }
 
         $routeExists = static fn (array $item): bool => Route::has($item['route']);
-        $coreNav = array_values(array_filter($coreNav, $routeExists));
-        $orgNav = array_values(array_filter($orgNav, $routeExists));
+        $dailyNav = array_values(array_filter($dailyNav, $routeExists));
+        $peopleSubnav = array_values(array_filter($peopleSubnav, $routeExists));
+        $outreachSubnav = array_values(array_filter($outreachSubnav, $routeExists));
+        $shortcuts = array_values(array_filter($shortcuts, $routeExists));
         $adminNav = array_values(array_filter($adminNav, $routeExists));
 
         $isActive = static function (array $item): bool {
-            foreach ($item['active'] as $pattern) {
+            foreach ($item['active'] ?? [] as $pattern) {
                 if (request()->routeIs($pattern)) {
                     return true;
                 }
@@ -79,226 +88,148 @@
 
             return false;
         };
-
-        $linkClasses = static fn (bool $active): string => 'app-nav-link '.($active ? 'app-nav-link-active' : '');
+        $peopleActive = collect($dailyNav)->contains(fn (array $item): bool => $item['label'] === 'People' && $isActive($item));
+        $outreachActive = collect($dailyNav)->contains(fn (array $item): bool => $item['label'] === 'Outreach' && $isActive($item));
+        $initials = collect(explode(' ', trim((string) ($user?->name ?? 'WRK'))))
+            ->filter()
+            ->take(2)
+            ->map(fn (string $part): string => mb_strtoupper(mb_substr($part, 0, 1)))
+            ->implode('');
     @endphp
 
-    <div
-        x-data="{
-            mobileNavOpen: false,
-            mobileUserOpen: false,
-            desktopNavCollapsed: (() => {
-                try {
-                    return JSON.parse(window.localStorage.getItem('wrk.desktop_nav_collapsed') ?? 'false') === true;
-                } catch (error) {
-                    return false;
-                }
-            })(),
-        }"
-        x-init="$watch('desktopNavCollapsed', value => window.localStorage.setItem('wrk.desktop_nav_collapsed', JSON.stringify(!!value)))"
-        class="app-shell"
-        :style="desktopNavCollapsed ? 'grid-template-columns: 0 minmax(0, 1fr);' : ''"
-    >
-        <aside class="app-sidebar hidden lg:flex lg:flex-col overflow-hidden transition-all duration-200"
-               :class="desktopNavCollapsed ? 'lg:opacity-0 lg:pointer-events-none lg:-translate-x-2' : 'lg:opacity-100 lg:translate-x-0'">
-            <div class="px-4 py-4 border-b border-gray-200">
-                <div class="flex items-center justify-between gap-2">
-                    <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center gap-3">
-                        <img src="{{ asset('images/logo.png') }}" alt="WRK" class="h-8 w-auto">
-                        <div>
-                            <p class="text-sm font-semibold text-gray-900">WRK</p>
-                            <p class="text-xs app-muted">Agent Workspace</p>
-                        </div>
-                    </a>
-                    <button
-                        type="button"
-                        @click="desktopNavCollapsed = true"
-                        class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100"
-                        aria-label="Collapse navigation"
-                    >
-                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                        </svg>
-                    </button>
-                </div>
+    <div x-data="{ mobileNavOpen: false, mobileUserOpen: false }" class="app-shell">
+        <aside class="app-sidebar hidden lg:flex lg:flex-col overflow-hidden">
+            <div class="px-6 pt-5 pb-4">
+                <a href="{{ route('dashboard') }}" wire:navigate class="desk-wordmark text-[#26221c]">WRKBench</a>
             </div>
 
-            <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-                <section>
-                    <p class="px-2 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase app-muted">Core Work</p>
-                    <div class="space-y-1.5">
-                        @foreach($coreNav as $item)
-                            @php($active = $isActive($item))
-                            <a href="{{ route($item['route']) }}" wire:navigate class="{{ $linkClasses($active) }}">
-                                <span>{{ $item['label'] }}</span>
-                                @if(!empty($item['badge']))
-                                    <span class="app-nav-pill">{{ $item['badge'] }}</span>
-                                @endif
-                            </a>
-                        @endforeach
-                    </div>
-                </section>
+            <nav class="flex-1 overflow-y-auto px-3 py-2">
+                <div class="space-y-1">
+                    @foreach($dailyNav as $item)
+                        @php($active = $isActive($item))
+                        <a href="{{ route($item['route']) }}" wire:navigate class="app-nav-link {{ $active ? 'app-nav-link-active' : '' }}">
+                            <span>{{ $item['label'] }}</span>
+                            @if(!empty($item['badge']))
+                                <span class="app-nav-pill">{{ $item['badge'] }}</span>
+                            @endif
+                        </a>
 
-                <section>
-                    <p class="px-2 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase app-muted">Organization</p>
-                    <div class="space-y-1.5">
-                        @foreach($orgNav as $item)
-                            @php($active = $isActive($item))
-                            <a href="{{ route($item['route']) }}" wire:navigate class="{{ $linkClasses($active) }}">
-                                <span>{{ $item['label'] }}</span>
-                            </a>
-                        @endforeach
-                    </div>
-                </section>
+                        @if($item['label'] === 'People' && $peopleActive)
+                            <div class="desk-subnav">
+                                <p class="mb-1 text-xs font-semibold text-[#26221c]">People</p>
+                                @foreach($peopleSubnav as $subitem)
+                                    <a href="{{ route($subitem['route']) }}" wire:navigate aria-current="{{ $isActive($subitem) ? 'page' : 'false' }}">
+                                        {{ $subitem['label'] }}
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
 
-                @if($user && $user->isManagement() && !empty($adminNav))
-                    <section>
-                        <p class="px-2 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase app-muted">Admin</p>
-                        <div class="space-y-1.5">
-                            @foreach($adminNav as $item)
-                                @php($active = $isActive($item))
-                                <a href="{{ route($item['route']) }}" wire:navigate class="{{ $linkClasses($active) }}">
-                                    <span>{{ $item['label'] }}</span>
-                                </a>
-                            @endforeach
-                        </div>
-                    </section>
-                @endif
+                        @if($item['label'] === 'Outreach' && $outreachActive)
+                            <div class="desk-subnav">
+                                <p class="mb-1 text-xs font-semibold text-[#26221c]">Outreach</p>
+                                @foreach($outreachSubnav as $subitem)
+                                    <a href="{{ route($subitem['route']) }}" wire:navigate aria-current="{{ $isActive($subitem) ? 'page' : 'false' }}">
+                                        {{ $subitem['label'] }}
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
+                    @endforeach
+                </div>
+
+                <div class="mt-5 border-t border-[#e4ddd0] pt-3 px-3 space-y-1.5">
+                    @foreach($shortcuts as $shortcut)
+                        <a href="{{ route($shortcut['route']) }}" wire:navigate class="block text-xs text-[#8a8578] hover:text-[#8a4b2d]">
+                            {{ $shortcut['label'] }} →
+                        </a>
+                    @endforeach
+                </div>
             </nav>
 
             @auth
-                <div class="border-t border-gray-200 px-3 py-3">
-                    <div class="app-surface px-3 py-3">
-                        <p class="text-sm font-semibold text-gray-900 truncate">{{ auth()->user()->name }}</p>
-                        <p class="text-xs app-muted truncate mt-0.5">{{ auth()->user()->email }}</p>
-                        <div class="mt-3 flex items-center gap-2">
-                            <a href="{{ route('profile') }}" wire:navigate
-                               class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
-                                Profile
-                            </a>
+                <div class="border-t border-[#e4ddd0] px-4 py-3">
+                    <details class="group relative">
+                        <summary class="flex cursor-pointer list-none items-center gap-2 rounded-md px-2 py-2 hover:bg-[#f3eee3]">
+                            <span class="desk-avatar h-7 w-7">{{ $initials }}</span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate text-xs font-semibold text-[#26221c]">{{ $user->name }}</span>
+                                <span class="block text-[10px] text-[#8a8578]">{{ $user->isAdmin() ? 'Admin' : 'Settings' }}</span>
+                            </span>
+                            <span class="text-[10px] text-[#8a8578] group-open:rotate-180">⌃</span>
+                        </summary>
+
+                        <div class="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-[70vh] overflow-y-auto rounded-lg border border-[#d8d0bf] bg-white p-2 shadow-lg">
+                            <a href="{{ route('profile') }}" wire:navigate class="block rounded px-2 py-1.5 text-xs text-[#4a453b] hover:bg-[#f3eee3]">Profile & settings</a>
                             @if(Route::has('accomplishments.index'))
-                                <a href="{{ route('accomplishments.index') }}" wire:navigate
-                                   class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
-                                    Wins
-                                </a>
+                                <a href="{{ route('accomplishments.index') }}" wire:navigate class="block rounded px-2 py-1.5 text-xs text-[#4a453b] hover:bg-[#f3eee3]">Wins</a>
                             @endif
-                            <form method="POST" action="{{ route('logout') }}" class="inline-flex">
+
+                            @if(!empty($adminNav))
+                                <p class="desk-section-label mt-2 border-t border-[#e4ddd0] px-2 pt-2">Admin</p>
+                                @foreach($adminNav as $item)
+                                    <a href="{{ route($item['route']) }}" wire:navigate class="block rounded px-2 py-1.5 text-xs text-[#4a453b] hover:bg-[#f3eee3]">
+                                        {{ $item['label'] }}
+                                    </a>
+                                @endforeach
+                            @endif
+
+                            <form method="POST" action="{{ route('logout') }}" class="mt-2 border-t border-[#e4ddd0] pt-2">
                                 @csrf
-                                <button type="submit"
-                                        class="inline-flex items-center rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
-                                    Log Out
-                                </button>
+                                <button type="submit" class="w-full rounded px-2 py-1.5 text-left text-xs font-medium text-[#b33a2b] hover:bg-[#f8efe6]">Log out</button>
                             </form>
                         </div>
-                    </div>
+                    </details>
                 </div>
             @endauth
         </aside>
 
         <div class="app-main">
-            <button
-                type="button"
-                x-cloak
-                x-show="desktopNavCollapsed"
-                @click="desktopNavCollapsed = false"
-                class="fixed left-3 top-3 z-40 hidden h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-100 lg:inline-flex"
-                aria-label="Expand navigation"
-            >
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                </svg>
-            </button>
             <header class="app-topbar lg:hidden sticky top-0 z-40">
-                <div class="px-3 py-2.5 flex items-center justify-between gap-3">
-                    <button type="button"
-                            @click="mobileNavOpen = !mobileNavOpen"
-                            class="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                        </svg>
+                <div class="flex items-center justify-between gap-3 px-3 py-2.5">
+                    <button type="button" @click="mobileNavOpen = !mobileNavOpen" class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#d8d0bf] text-[#4a453b]" aria-label="Open navigation">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
                     </button>
-
-                    <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center gap-2">
-                        <img src="{{ asset('images/logo.png') }}" alt="WRK" class="h-7 w-auto">
-                        <span class="text-sm font-semibold text-gray-900">WRK</span>
-                    </a>
-
-                    <button type="button"
-                            @click="mobileUserOpen = !mobileUserOpen"
-                            class="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21a8 8 0 0116 0"/>
-                        </svg>
-                    </button>
+                    <a href="{{ route('dashboard') }}" wire:navigate class="desk-wordmark text-lg">WRKBench</a>
+                    <button type="button" @click="mobileUserOpen = !mobileUserOpen" class="desk-avatar h-9 w-9" aria-label="Open account menu">{{ $initials }}</button>
                 </div>
             </header>
 
-            <div x-cloak x-show="mobileNavOpen" @click.self="mobileNavOpen = false"
-                 class="lg:hidden fixed inset-0 z-30 bg-black/25">
-                <div class="h-full w-80 max-w-[90vw] bg-white border-r border-gray-200 shadow-lg overflow-y-auto p-3">
-                    <div class="pb-3 border-b border-gray-200">
-                        <p class="text-sm font-semibold text-gray-900">Navigation</p>
+            <div x-cloak x-show="mobileNavOpen" @click.self="mobileNavOpen = false" class="fixed inset-0 z-30 bg-black/25 lg:hidden">
+                <div class="h-full w-72 max-w-[86vw] overflow-y-auto border-r border-[#e4ddd0] bg-[#faf7f1] p-3 shadow-lg">
+                    <div class="flex items-center justify-between border-b border-[#e4ddd0] px-2 pb-3">
+                        <span class="desk-wordmark">WRKBench</span>
+                        <button type="button" @click="mobileNavOpen = false" class="text-xl text-[#5c574d]" aria-label="Close navigation">×</button>
                     </div>
-                    <div class="pt-3 space-y-6">
-                        <section>
-                            <p class="px-2 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase app-muted">Core Work</p>
-                            <div class="space-y-1.5">
-                                @foreach($coreNav as $item)
-                                    @php($active = $isActive($item))
-                                    <a href="{{ route($item['route']) }}" wire:navigate @click="mobileNavOpen = false"
-                                       class="{{ $linkClasses($active) }}">
-                                        <span>{{ $item['label'] }}</span>
-                                    </a>
-                                @endforeach
-                            </div>
-                        </section>
-                        <section>
-                            <p class="px-2 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase app-muted">Organization</p>
-                            <div class="space-y-1.5">
-                                @foreach($orgNav as $item)
-                                    @php($active = $isActive($item))
-                                    <a href="{{ route($item['route']) }}" wire:navigate @click="mobileNavOpen = false"
-                                       class="{{ $linkClasses($active) }}">
-                                        <span>{{ $item['label'] }}</span>
-                                    </a>
-                                @endforeach
-                            </div>
-                        </section>
-                        @if($user && $user->isManagement() && !empty($adminNav))
-                            <section>
-                                <p class="px-2 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase app-muted">Admin</p>
-                                <div class="space-y-1.5">
-                                    @foreach($adminNav as $item)
-                                        @php($active = $isActive($item))
-                                        <a href="{{ route($item['route']) }}" wire:navigate @click="mobileNavOpen = false"
-                                           class="{{ $linkClasses($active) }}">
-                                            <span>{{ $item['label'] }}</span>
-                                        </a>
-                                    @endforeach
-                                </div>
-                            </section>
-                        @endif
+                    <nav class="space-y-1 pt-3">
+                        @foreach($dailyNav as $item)
+                            @php($active = $isActive($item))
+                            <a href="{{ route($item['route']) }}" wire:navigate @click="mobileNavOpen = false" class="app-nav-link {{ $active ? 'app-nav-link-active' : '' }}">
+                                <span>{{ $item['label'] }}</span>
+                            </a>
+                        @endforeach
+                    </nav>
+                    <div class="mt-5 border-t border-[#e4ddd0] px-3 pt-3 space-y-2">
+                        @foreach($shortcuts as $shortcut)
+                            <a href="{{ route($shortcut['route']) }}" wire:navigate @click="mobileNavOpen = false" class="block text-xs text-[#8a8578]">{{ $shortcut['label'] }} →</a>
+                        @endforeach
                     </div>
                 </div>
             </div>
 
             @auth
-                <div x-cloak x-show="mobileUserOpen" @click.self="mobileUserOpen = false"
-                     class="lg:hidden fixed inset-0 z-40 bg-black/25">
-                    <div class="absolute right-3 top-14 w-72 app-surface p-3">
-                        <p class="text-sm font-semibold text-gray-900 truncate">{{ auth()->user()->name }}</p>
-                        <p class="text-xs app-muted truncate mt-0.5">{{ auth()->user()->email }}</p>
-                        <div class="mt-3 flex flex-wrap gap-2">
-                            <a href="{{ route('profile') }}" wire:navigate @click="mobileUserOpen = false"
-                               class="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
-                                Profile
-                            </a>
-                            <form method="POST" action="{{ route('logout') }}" class="inline-flex">
+                <div x-cloak x-show="mobileUserOpen" @click.self="mobileUserOpen = false" class="fixed inset-0 z-40 bg-black/25 lg:hidden">
+                    <div class="absolute right-3 top-14 w-72 rounded-lg border border-[#d8d0bf] bg-white p-3 shadow-lg">
+                        <p class="text-sm font-semibold text-[#26221c]">{{ $user->name }}</p>
+                        <p class="mt-0.5 truncate text-xs text-[#8a8578]">{{ $user->email }}</p>
+                        <div class="mt-3 space-y-1 border-t border-[#e4ddd0] pt-2">
+                            <a href="{{ route('profile') }}" wire:navigate @click="mobileUserOpen = false" class="block rounded px-2 py-1.5 text-xs text-[#4a453b] hover:bg-[#f3eee3]">Profile & settings</a>
+                            @foreach($adminNav as $item)
+                                <a href="{{ route($item['route']) }}" wire:navigate @click="mobileUserOpen = false" class="block rounded px-2 py-1.5 text-xs text-[#4a453b] hover:bg-[#f3eee3]">{{ $item['label'] }}</a>
+                            @endforeach
+                            <form method="POST" action="{{ route('logout') }}" class="border-t border-[#e4ddd0] pt-2">
                                 @csrf
-                                <button type="submit"
-                                        class="inline-flex items-center rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
-                                    Log Out
-                                </button>
+                                <button type="submit" class="w-full rounded px-2 py-1.5 text-left text-xs font-medium text-[#b33a2b]">Log out</button>
                             </form>
                         </div>
                     </div>
@@ -307,20 +238,13 @@
 
             <main class="app-page">
                 @if (isset($header))
-                    <section class="app-surface p-4 mb-4">
-                        {{ $header }}
-                    </section>
+                    <section class="app-surface mb-4 p-4">{{ $header }}</section>
                 @endif
 
                 {{ $slot }}
             </main>
         </div>
     </div>
-
-    @auth
-        <livewire:notifications.notifications-panel />
-        <livewire:feedback-widget />
-    @endauth
 
     @stack('scripts')
 </body>

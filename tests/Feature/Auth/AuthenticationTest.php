@@ -27,7 +27,8 @@ test('navigation menu can be rendered', function () {
 
     $response
         ->assertOk()
-        ->assertSee('Projects');
+        ->assertSee('WRKBench')
+        ->assertSeeInOrder(['Today', 'Inbox', 'Meetings', 'Projects', 'People', 'Outreach', 'Travel']);
 });
 
 test('navigation hides deferred intelligence notifications and outreach destinations', function () {
