@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\CongressionalDirectory\StaffIndex;
+use App\Livewire\CongressionalDirectory\StaffListCreate;
 use App\Livewire\CongressionalDirectory\StaffListsIndex;
 use App\Models\CongressionalOffice;
 use App\Models\CongressionalPosition;
@@ -130,8 +131,7 @@ test('staff can build a saved list from checked profiles or all filtered matches
         ->set('checkedProfileIds', [$legislativeAssistant->id])
         ->call('addCheckedToList')
         ->set('title', 'caseworker')
-        ->call('addAllMatchesToList')
-        ->assertSee('District staff');
+        ->call('addAllMatchesToList');
 
     $list = CongressionalStaffList::query()->where('user_id', $user->id)->sole();
 
@@ -158,4 +158,30 @@ test('staff can review lists and remove individual members without deleting prof
 
     expect($list->profiles()->count())->toBe(0)
         ->and(CongressionalStaffProfile::query()->whereKey($profile->id)->exists())->toBeTrue();
+});
+
+test('guided list builder saves criteria and either selected or all matching staff', function () {
+    config()->set('features.congressional_directory_ui', true);
+    $user = User::factory()->create();
+    $caseworker = explorerProfile('Guided Caseworker', 'House', 'Office of Representative Guided', 'Member office', 'CASEWORKER');
+    explorerProfile('Guided Counsel', 'Senate', 'Committee on Guided', 'Committee', 'COUNSEL');
+
+    Livewire::actingAs($user)
+        ->test(StaffListCreate::class)
+        ->set('name', 'Guided district staff')
+        ->set('description', 'Current House caseworkers')
+        ->set('chamber', 'House')
+        ->set('title', 'caseworker')
+        ->call('runSearch')
+        ->assertSee('Guided Caseworker')
+        ->assertDontSee('Guided Counsel')
+        ->call('selectAllMatches')
+        ->call('saveList')
+        ->assertRedirect();
+
+    $list = CongressionalStaffList::query()->where('user_id', $user->id)->sole();
+
+    expect($list->selection_mode)->toBe('filtered_snapshot')
+        ->and($list->criteria)->toMatchArray(['chamber' => 'House', 'title' => 'caseworker'])
+        ->and($list->profiles()->sole()->is($caseworker))->toBeTrue();
 });

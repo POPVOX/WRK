@@ -13,7 +13,14 @@ class CongressionalStaffList extends Model
         'user_id',
         'name',
         'description',
+        'criteria',
+        'selection_mode',
     ];
+
+    protected function casts(): array
+    {
+        return ['criteria' => 'array'];
+    }
 
     public function user(): BelongsTo
     {

@@ -17,8 +17,6 @@ use Throwable;
 
 class CongressionalOutreachBatchService
 {
-    public const BATCH_SIZE = 10;
-
     public function __construct(
         protected CongressionalOutreachWorkbenchService $workbench,
         protected OutreachCampaignService $campaigns,
@@ -46,7 +44,7 @@ class CongressionalOutreachBatchService
                 ->whereIn('status', ['draft', 'scheduled', 'sending'])
                 ->exists();
             if ($active) {
-                throw new DomainException('The current batch is still in progress. Wait for it to finish before sending the next 10.');
+                throw new DomainException('The current batch is still in progress. Wait for it to finish before sending the next batch.');
             }
 
             $candidates = $lockedDraft->recipients()
@@ -73,9 +71,10 @@ class CongressionalOutreachBatchService
                     ]);
             }
 
+            $batchSize = max(1, min((int) $lockedDraft->batch_size, 5000));
             $recipients = $candidates
                 ->reject(fn (CongressionalOutreachDraftRecipient $recipient) => isset($suppressed[$recipient->email_normalized]))
-                ->take(self::BATCH_SIZE)
+                ->take($batchSize)
                 ->values();
             if ($recipients->isEmpty()) {
                 throw new DomainException('There are no approved, unsent recipients available for the next batch.');
@@ -96,7 +95,7 @@ class CongressionalOutreachBatchService
                 'metadata' => [
                     'congressional_outreach_draft_id' => $lockedDraft->id,
                     'batch_number' => $batchNumber,
-                    'batch_size_limit' => self::BATCH_SIZE,
+                    'batch_size_limit' => $batchSize,
                 ],
             ]);
 

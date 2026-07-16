@@ -8,12 +8,14 @@ use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalOutreachDraftRecipient;
 use App\Models\CongressionalStaffEmail;
 use App\Models\User;
+use App\Services\CongressionalDirectory\CongressionalCampaignScheduleService;
 use App\Services\CongressionalDirectory\CongressionalEmailGuessService;
 use App\Services\CongressionalDirectory\CongressionalOutreachBatchService;
 use App\Services\CongressionalDirectory\CongressionalOutreachWorkbenchService;
 use App\Services\GoogleGmailService;
 use DomainException;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -21,7 +23,7 @@ use Livewire\Component;
 use Livewire\WithPagination;
 
 #[Layout('layouts.app')]
-#[Title('Congressional Outreach Dry Run')]
+#[Title('Congressional Campaign')]
 class OutreachDraftShow extends Component
 {
     use WithPagination;
@@ -29,6 +31,8 @@ class OutreachDraftShow extends Component
     public CongressionalOutreachDraft $draft;
 
     public string $subject = '';
+
+    public string $campaignName = '';
 
     public string $bodyText = '';
 
@@ -47,6 +51,18 @@ class OutreachDraftShow extends Component
 
     public ?int $selectedViewerId = null;
 
+    public int $batchSize = 10;
+
+    public string $deliveryMode = 'manual';
+
+    public int $cadenceValue = 1;
+
+    public string $cadenceUnit = 'hour';
+
+    public string $timezone = 'America/New_York';
+
+    public string $nextSendAt = '';
+
     public bool $canManage = false;
 
     public string $batchInstructions = 'Generate provisional addresses only for staff with no known address, using the chamber patterns below.';
@@ -62,10 +78,17 @@ class OutreachDraftShow extends Component
 
         $this->draft = $draft;
         $this->canManage = $draft->canBeManagedBy(Auth::user());
+        $this->campaignName = (string) $draft->name;
         $this->subject = (string) $draft->subject;
         $this->bodyText = (string) $draft->body_text;
         $this->previewSubject = $this->subject;
         $this->previewBodyText = $this->bodyText;
+        $this->batchSize = max(1, (int) $draft->batch_size);
+        $this->deliveryMode = (string) $draft->delivery_mode;
+        $this->cadenceValue = max(1, (int) $draft->cadence_value);
+        $this->cadenceUnit = (string) $draft->cadence_unit;
+        $this->timezone = (string) ($draft->timezone ?: Auth::user()->timezone ?: 'America/New_York');
+        $this->nextSendAt = $draft->next_send_at?->copy()->setTimezone($this->timezone)->format('Y-m-d\TH:i') ?? now($this->timezone)->format('Y-m-d\TH:i');
         $this->previewRecipientId = $draft->recipients()
             ->orderByRaw("CASE review_status WHEN 'approved' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END")
             ->value('id');
@@ -102,7 +125,18 @@ class OutreachDraftShow extends Component
         $this->draft->refresh();
         $this->previewSubject = (string) $this->draft->subject;
         $this->previewBodyText = (string) $this->draft->body_text;
-        $this->dispatch('notify', type: 'success', message: 'Dry-run message saved. No email was sent.');
+        $this->dispatch('notify', type: 'success', message: 'Campaign message saved. No email was sent.');
+    }
+
+    public function saveCampaignName(): void
+    {
+        $this->authorizeManage();
+        $validated = $this->validate([
+            'campaignName' => ['required', 'string', 'min:2', 'max:160'],
+        ]);
+        $this->draft->update(['name' => trim($validated['campaignName'])]);
+        $this->draft->refresh();
+        $this->dispatch('notify', type: 'success', message: 'Campaign name saved.');
     }
 
     public function refreshPreview(): void
@@ -367,10 +401,10 @@ class OutreachDraftShow extends Component
             return;
         }
 
-        $this->validate([
+        $validated = $this->validate(array_merge($this->deliveryRules(), [
             'subject' => ['required', 'string', 'max:255'],
             'bodyText' => ['required', 'string', 'max:50000'],
-        ]);
+        ]));
         if (! $gmail->isConnected(Auth::user())) {
             $this->dispatch('notify', type: 'error', message: 'Connect Gmail in Admin → Integrations before sending.');
 
@@ -379,6 +413,13 @@ class OutreachDraftShow extends Component
 
         try {
             $workbench->updateMessage($this->draft, $this->subject, $this->bodyText);
+            $this->draft->update([
+                'batch_size' => $validated['batchSize'],
+                'delivery_mode' => $validated['deliveryMode'],
+                'cadence_value' => $validated['cadenceValue'],
+                'cadence_unit' => $validated['cadenceUnit'],
+                'timezone' => $validated['timezone'],
+            ]);
             $result = $batches->sendNextBatch($this->draft->fresh(), Auth::user());
             $this->draft->refresh();
             $this->dispatch('notify', type: 'success', message: "Queued {$result['queued']} approved recipients for Gmail delivery.");
@@ -387,6 +428,79 @@ class OutreachDraftShow extends Component
         } catch (\Throwable $exception) {
             report($exception);
             $this->dispatch('notify', type: 'error', message: 'The batch could not be queued for Gmail delivery. No email was sent; use Retry failed if it appears.');
+        }
+    }
+
+    public function saveDeliverySettings(): void
+    {
+        $this->authorizeManage();
+        if ($this->draft->schedule_status === 'active') {
+            $this->dispatch('notify', type: 'error', message: 'Pause automation before changing delivery settings.');
+
+            return;
+        }
+        $validated = $this->validate($this->deliveryRules());
+        $this->draft->update([
+            'batch_size' => $validated['batchSize'],
+            'delivery_mode' => $validated['deliveryMode'],
+            'cadence_value' => $validated['cadenceValue'],
+            'cadence_unit' => $validated['cadenceUnit'],
+            'timezone' => $validated['timezone'],
+            'schedule_status' => $validated['deliveryMode'] === 'manual' ? 'inactive' : $this->draft->schedule_status,
+        ]);
+        $this->draft->refresh();
+        $this->dispatch('notify', type: 'success', message: 'Delivery settings saved.');
+    }
+
+    public function activateSchedule(
+        CongressionalOutreachWorkbenchService $workbench,
+        CongressionalCampaignScheduleService $schedules,
+        GoogleGmailService $gmail
+    ): void {
+        $this->authorizeManage();
+        if (! $gmail->isConnected(Auth::user())) {
+            $this->dispatch('notify', type: 'error', message: 'Connect Gmail in Admin → Integrations before activating delivery.');
+
+            return;
+        }
+
+        $validated = $this->validate(array_merge($this->deliveryRules(), [
+            'subject' => ['required', 'string', 'max:255'],
+            'bodyText' => ['required', 'string', 'max:50000'],
+            'nextSendAt' => ['required', 'date'],
+        ]));
+
+        try {
+            $workbench->updateMessage($this->draft, $this->subject, $this->bodyText);
+            $this->draft->update([
+                'batch_size' => $validated['batchSize'],
+                'delivery_mode' => $validated['deliveryMode'],
+                'cadence_value' => $validated['cadenceValue'],
+                'cadence_unit' => $validated['cadenceUnit'],
+                'timezone' => $validated['timezone'],
+            ]);
+            $firstSendAt = Carbon::parse($validated['nextSendAt'], $validated['timezone'])->utc();
+            $schedules->activate($this->draft->fresh(), Auth::user(), $firstSendAt);
+            $this->draft->refresh();
+            $this->dispatch('notify', type: 'success', message: 'Campaign delivery activated. The scheduler will process it at the selected time.');
+        } catch (DomainException $exception) {
+            $this->dispatch('notify', type: 'error', message: $exception->getMessage());
+        }
+    }
+
+    public function pauseSchedule(CongressionalCampaignScheduleService $schedules): void
+    {
+        $this->authorizeManage();
+        if ($this->attempt(fn () => $schedules->pause($this->draft->fresh(), Auth::user()))) {
+            $this->dispatch('notify', type: 'success', message: 'Campaign automation paused. Any batch already in progress will finish.');
+        }
+    }
+
+    public function resumeSchedule(CongressionalCampaignScheduleService $schedules): void
+    {
+        $this->authorizeManage();
+        if ($this->attempt(fn () => $schedules->resume($this->draft->fresh(), Auth::user()))) {
+            $this->dispatch('notify', type: 'success', message: 'Campaign automation resumed. The next batch is due now.');
         }
     }
 
@@ -417,9 +531,9 @@ class OutreachDraftShow extends Component
     {
         $this->authorizeManage();
         $this->draft->delete();
-        $this->dispatch('notify', type: 'success', message: 'Dry run deleted. No staff profiles were changed.');
+        $this->dispatch('notify', type: 'success', message: 'Campaign deleted. No staff profiles were changed.');
 
-        return $this->redirectRoute('congress.lists', navigate: true);
+        return $this->redirectRoute('congress.campaigns', navigate: true);
     }
 
     public function addViewer(): void
@@ -485,13 +599,29 @@ class OutreachDraftShow extends Component
         return false;
     }
 
-    protected function attempt(callable $action): void
+    /** @return array<string,array<int,string>> */
+    protected function deliveryRules(): array
+    {
+        return [
+            'batchSize' => ['required', 'integer', 'min:1', 'max:5000'],
+            'deliveryMode' => ['required', 'in:manual,scheduled,recurring'],
+            'cadenceValue' => ['required', 'integer', 'min:1', 'max:1000'],
+            'cadenceUnit' => ['required', 'in:minute,hour,day,week'],
+            'timezone' => ['required', 'timezone'],
+        ];
+    }
+
+    protected function attempt(callable $action): bool
     {
         try {
             $action();
             $this->draft->refresh();
+
+            return true;
         } catch (DomainException $exception) {
             $this->dispatch('notify', type: 'error', message: $exception->getMessage());
+
+            return false;
         }
     }
 
@@ -568,7 +698,7 @@ class OutreachDraftShow extends Component
                 'inactive_profile' => 'No current position',
                 'no_address' => 'No address available',
                 'blocked_address' => 'Address is suppressed or blocked',
-                'duplicate_address' => 'Duplicate address in this dry run',
+                'duplicate_address' => 'Duplicate address in this campaign',
                 'manual_exclusion' => 'Removed during review',
             ],
         ]);

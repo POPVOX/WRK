@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Jobs\QueueOutreachCampaign;
 use App\Models\OutreachCampaign;
+use App\Services\CongressionalDirectory\CongressionalCampaignScheduleService;
 use App\Services\Outreach\OutreachAutomationService;
 use Illuminate\Console\Command;
 
@@ -15,8 +16,10 @@ class RunScheduledOutreach extends Command
 
     protected $description = 'Queue due outreach campaigns and execute due outreach automations.';
 
-    public function handle(OutreachAutomationService $automationService): int
-    {
+    public function handle(
+        OutreachAutomationService $automationService,
+        CongressionalCampaignScheduleService $congressionalSchedules
+    ): int {
         $limit = max(1, min((int) $this->option('limit'), 200));
         $runInline = (bool) $this->option('sync');
 
@@ -43,8 +46,9 @@ class RunScheduledOutreach extends Command
         }
 
         $automationsProcessed = $automationService->runDueAutomations($limit);
+        $congressional = $congressionalSchedules->runDue($limit);
 
-        $this->info("Outreach scheduler complete. Due campaigns queued: {$campaignsProcessed}. Automations executed: {$automationsProcessed}.");
+        $this->info("Outreach scheduler complete. Due campaigns queued: {$campaignsProcessed}. Automations executed: {$automationsProcessed}. Congressional batches queued: {$congressional['processed']}; completed: {$congressional['completed']}; deferred: {$congressional['deferred']}; paused after errors: {$congressional['failed']}.");
 
         return self::SUCCESS;
     }
