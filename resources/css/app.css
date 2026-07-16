@@ -343,6 +343,269 @@
         background-color: #6e3a21 !important;
     }
 
+    /* Site-wide Morning Desk compatibility layer. Legacy screens inherit the
+       paper palette and restrained geometry while they are migrated to the
+       editorial page primitives below. */
+    .app-page > [wire\:id] {
+        width: 100%;
+        max-width: 112rem !important;
+        margin-inline: auto !important;
+        padding: 0 !important;
+    }
+
+    .app-page .rounded-2xl,
+    .app-page .rounded-xl,
+    .app-page .rounded-lg {
+        border-radius: 0.625rem !important;
+    }
+
+    .app-page .shadow,
+    .app-page .shadow-md,
+    .app-page .shadow-lg,
+    .app-page .shadow-xl,
+    .app-page .shadow-2xl {
+        box-shadow: var(--shadow-soft) !important;
+    }
+
+    .app-page .bg-gray-100,
+    .app-page .bg-gray-200 {
+        background-color: var(--background-inset) !important;
+    }
+
+    .app-page .text-blue-600,
+    .app-page .text-blue-700,
+    .app-page .text-indigo-600,
+    .app-page .text-purple-600,
+    .app-page .text-purple-700 {
+        color: var(--primary) !important;
+    }
+
+    .app-page .bg-blue-600,
+    .app-page .bg-blue-700,
+    .app-page .bg-purple-600,
+    .app-page .bg-purple-700 {
+        background-color: var(--primary) !important;
+    }
+
+    .app-page .ring-blue-500,
+    .app-page .ring-indigo-500,
+    .app-page .ring-purple-500 {
+        --tw-ring-color: var(--ring) !important;
+    }
+
+    .desk-page {
+        width: 100%;
+        max-width: 112rem;
+        margin-inline: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .desk-page-narrow {
+        max-width: 75rem;
+    }
+
+    .desk-page-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .desk-page-actions,
+    .desk-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .desk-page-lead {
+        margin-top: 0.35rem;
+        max-width: 54rem;
+        color: #5c574d;
+        font-size: 0.875rem;
+        line-height: 1.55;
+    }
+
+    .desk-tabs {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        overflow-x: auto;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .desk-tabs a,
+    .desk-tabs button {
+        flex: none;
+        border-bottom: 2px solid transparent;
+        padding: 0.6rem 0 0.55rem;
+        color: #5c574d;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+
+    .desk-tabs a:hover,
+    .desk-tabs button:hover,
+    .desk-tabs [aria-current="page"],
+    .desk-tabs .is-active {
+        border-bottom-color: var(--primary);
+        color: var(--primary);
+    }
+
+    .desk-filter-pills {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.45rem;
+    }
+
+    .desk-filter-pill {
+        display: inline-flex;
+        min-height: 2rem;
+        align-items: center;
+        gap: 0.35rem;
+        border: 1px solid var(--border-strong);
+        border-radius: 999px;
+        background: var(--surface);
+        padding: 0.35rem 0.75rem;
+        color: #4a453b;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .desk-filter-pill:hover {
+        background: var(--background-inset);
+    }
+
+    .desk-filter-pill.is-active {
+        border-color: var(--foreground);
+        background: var(--foreground);
+        color: #f7f3ec;
+    }
+
+    .desk-segmented {
+        display: inline-flex;
+        overflow: hidden;
+        border: 1px solid var(--border-strong);
+        border-radius: 0.4rem;
+        background: var(--surface);
+    }
+
+    .desk-segmented button,
+    .desk-segmented a {
+        min-height: 2rem;
+        padding: 0.35rem 0.75rem;
+        color: #5c574d;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .desk-segmented > * + * {
+        border-left: 1px solid var(--border-strong);
+    }
+
+    .desk-segmented .is-active {
+        background: var(--foreground);
+        color: #f7f3ec;
+    }
+
+    .desk-search {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        border: 1px solid var(--border-strong);
+        border-radius: 0.5rem;
+        background: var(--surface);
+        padding-inline: 0.75rem;
+    }
+
+    .desk-search input {
+        min-height: 2.55rem !important;
+        width: 100%;
+        border: 0 !important;
+        background: transparent !important;
+        padding-inline: 0 !important;
+        box-shadow: none !important;
+    }
+
+    .desk-table-wrap {
+        overflow-x: auto;
+        border-top: 2px solid var(--foreground);
+    }
+
+    .desk-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .desk-table th {
+        padding: 0.7rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        color: #a39c8c;
+        font-family: var(--font-data);
+        font-size: 0.65rem;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        text-align: left;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    .desk-table td {
+        padding: 0.82rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        color: #4a453b;
+        font-size: 0.78rem;
+        vertical-align: middle;
+    }
+
+    .desk-table tbody tr {
+        transition: background-color 140ms ease;
+    }
+
+    .desk-table tbody tr:hover {
+        background: var(--background-rail);
+    }
+
+    .desk-table-title {
+        font-family: var(--font-display);
+        font-size: 1.05rem;
+        font-weight: 600;
+        line-height: 1.25;
+        color: var(--foreground);
+    }
+
+    .desk-meta {
+        color: #8a8578;
+        font-size: 0.7rem;
+        line-height: 1.45;
+    }
+
+    .desk-empty {
+        padding: 2rem 0;
+        border-top: 1px solid var(--border);
+        color: #8a8578;
+        font-size: 0.82rem;
+    }
+
+    .desk-modal-panel {
+        border: 1px solid var(--border);
+        border-radius: 0.625rem;
+        background: var(--surface);
+        box-shadow: 0 24px 70px rgba(38, 34, 28, 0.18);
+    }
+
+    .desk-form-section {
+        padding-top: 1rem;
+        border-top: 1px solid var(--border);
+    }
+
     .desk-wordmark,
     .desk-display {
         font-family: var(--font-display);

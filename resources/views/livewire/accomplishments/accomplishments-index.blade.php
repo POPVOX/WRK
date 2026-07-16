@@ -1,7 +1,7 @@
-<div class="min-h-screen">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="desk-page">
+    <div>
         {{-- Header --}}
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div class="desk-page-header mb-6">
             <div>
                 @if(!$isOwnProfile && auth()->user()->isAdmin())
                     <a href="{{ route('accomplishments.team') }}" wire:navigate
@@ -12,7 +12,8 @@
                         Back to Team Overview
                     </a>
                 @endif
-                <h1 class="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <p class="desk-kicker">Team</p>
+                <h1 class="desk-page-title mt-2 flex items-center gap-2">
                     @if($isOwnProfile)
                         🏆 My Accomplishments
                     @else
@@ -471,4 +472,3 @@
         </div>
     @endif
 </div>
-

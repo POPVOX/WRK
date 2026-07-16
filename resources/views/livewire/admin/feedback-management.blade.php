@@ -1,12 +1,13 @@
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <div class="py-8">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div class="desk-page">
+    <div>
+        <div>
 
             {{-- Header --}}
-            <div class="mb-8">
+            <div class="mb-8 desk-page-header">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Product Feedback</h1>
+                        <p class="desk-kicker">Admin</p>
+                        <h1 class="desk-page-title mt-2">Product feedback</h1>
                         <p class="mt-1 text-gray-500 dark:text-gray-400">Review and manage user feedback from beta testing</p>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
@@ -1105,5 +1106,4 @@
         </div>
     @endif
 </div>
-
 

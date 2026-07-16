@@ -1,6 +1,6 @@
-<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="desk-page desk-page-narrow">
     {{-- Header --}}
-    <div class="mb-8">
+    <div class="hidden">
         <div class="flex items-center gap-3 mb-2">
             <a href="{{ route('profile') }}" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -11,6 +11,10 @@
         </div>
         <p class="text-gray-600 dark:text-gray-400">Manage your travel preferences, documents, and loyalty programs</p>
     </div>
+
+    <x-desk-page-header eyebrow="Account" title="Travel profile" description="Manage travel preferences, documents, loyalty programs, and emergency details.">
+        <x-slot:actions><a href="{{ route('profile') }}" wire:navigate class="desk-button-secondary">← Profile</a></x-slot:actions>
+    </x-desk-page-header>
 
     <form wire:submit="save" class="space-y-8">
         {{-- Home Airport --}}

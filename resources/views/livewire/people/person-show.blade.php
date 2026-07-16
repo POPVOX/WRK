@@ -1,24 +1,44 @@
-<div>
-    <x-slot name="header">
-        <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
-                {{ $person->name }}
-            </h2>
-            <a href="{{ route('contacts.index') }}" wire:navigate
-                class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
-                ← Back to Contacts
-            </a>
-        </div>
-    </x-slot>
+<div class="desk-page">
+    @php
+        $latestTouch = collect([
+            $person->interactions->max('occurred_at'),
+            $person->meetings->max('meeting_date'),
+        ])->filter()->map(fn ($date) => \Carbon\Carbon::parse($date))->sortDesc()->first();
+    @endphp
 
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <header class="flex flex-col gap-5 border-b-2 border-[#26221c] pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <div class="flex min-w-0 items-center gap-4">
+            <x-avatar :name="$person->name" :photo="$person->photo_url" size="2xl" />
+            <div class="min-w-0">
+                <a href="{{ route('contacts.index') }}" wire:navigate class="desk-kicker">People · Contacts</a>
+                <h1 class="desk-page-title mt-1 truncate">{{ $person->name }}</h1>
+                <p class="mt-1 text-sm text-[#5c574d]">{{ $person->title ?: 'Title not set' }}@if($person->organization) · <a href="{{ route('organizations.show', $person->organization) }}" wire:navigate class="text-[#8a4b2d]">{{ $person->organization->name }}</a>@endif</p>
+                <p class="desk-meta mt-2">Last touch: <span class="{{ $latestTouch && $latestTouch->greaterThan(now()->subMonths(3)) ? 'text-[#3b7a45]' : 'text-[#b33a2b]' }}">{{ $latestTouch?->diffForHumans() ?: 'none recorded' }}</span> · {{ number_format($person->meetings->count()) }} meetings · owner: {{ $person->owner?->name ?: 'unassigned' }}</p>
+            </div>
+        </div>
+        <div class="desk-toolbar">
+            @if($person->email)<a href="mailto:{{ $person->email }}" class="desk-button-secondary">✉ Email</a>@endif
+            <a href="{{ route('meetings.create', ['person' => $person->id]) }}" wire:navigate class="desk-button-secondary">＋ Log meeting</a>
+            <button type="button" wire:click="startEditing" class="desk-button-secondary">Edit</button>
+            <button type="button" class="desk-button-dark" title="Relationship briefs will summarize the timeline and open follow-ups">✦ Relationship brief</button>
+        </div>
+    </header>
+
+    @if($person->next_action_at || $person->next_action_note)
+        <section class="desk-alert flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <div><p class="desk-section-label !text-[#b33a2b]">Open follow-up</p><p class="mt-1 font-semibold text-[#26221c]">{{ $person->next_action_note ?: 'Follow up with '.$person->name }}</p></div>
+            @if($person->next_action_at)<time class="desk-data text-xs">{{ $person->next_action_at->format('M j, Y') }}</time>@endif
+        </section>
+    @endif
+
+    <div>
+        <div class="space-y-6">
 
             <!-- Person Profile Card -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+            <div class="app-surface p-6">
                 <form wire:submit="save">
                     <!-- Header with photo and actions -->
-                    <div class="flex justify-between items-start mb-6">
+                    <div class="{{ $editing ? 'flex' : 'hidden' }} justify-between items-start mb-6">
                         <div class="flex gap-4">
                             @if($person->photo_url)
                                 <x-avatar :name="$person->name" :photo="$person->photo_url" size="2xl" />

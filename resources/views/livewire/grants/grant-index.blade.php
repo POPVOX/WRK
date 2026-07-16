@@ -1,6 +1,9 @@
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="desk-page">
+    <x-desk-page-header eyebrow="Funding" title="Funders" description="Relationships, grants, reporting obligations, and upcoming deadlines.">
+        <x-slot:actions><button type="button" wire:click="openCreateGrantModal" class="desk-button-secondary">＋ Add grant</button><button type="button" wire:click="openCreateFunderModal" class="desk-button-primary">＋ Add funder</button></x-slot:actions>
+    </x-desk-page-header>
     {{-- Header --}}
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <div class="hidden">
         <div>
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Funders</h1>
             <p class="text-gray-600 dark:text-gray-400">Manage funders and grants</p>

@@ -1,16 +1,9 @@
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+<div class="desk-page">
     <x-congress-nav />
 
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-            <p class="text-sm font-semibold uppercase tracking-[0.14em] text-indigo-600">Congress · Lists</p>
-            <h1 class="mt-1 text-3xl font-bold text-gray-900">Staff lists</h1>
-            <p class="mt-2 text-gray-600">Build reusable audiences from directory characteristics, then review and refine membership.</p>
-        </div>
-        <a href="{{ route('congress.lists.create') }}" wire:navigate class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
-            + New list
-        </a>
-    </div>
+    <x-desk-page-header eyebrow="Congress · Lists" title="Staff lists" description="Reusable audiences built from directory characteristics and refined person by person.">
+        <x-slot:actions><a href="{{ route('congress.lists.create') }}" wire:navigate class="desk-button-primary">＋ New list</a></x-slot:actions>
+    </x-desk-page-header>
 
     <div class="grid gap-5 xl:grid-cols-[20rem_minmax(0,1fr)]">
         <aside class="app-surface p-4">
@@ -54,7 +47,9 @@
 
                 <div class="divide-y divide-gray-200">
                     @forelse($members as $profile)
-                        @php($position = $profile->currentPosition)
+                        @php
+                            $position = $profile->currentPosition;
+                        @endphp
                         <div class="flex items-center gap-4 px-5 py-4">
                             <a href="{{ route('congress.staff.show', $profile) }}" wire:navigate class="min-w-0 flex-1 hover:text-indigo-700">
                                 <p class="font-semibold text-gray-900">{{ $profile->display_name }}</p>

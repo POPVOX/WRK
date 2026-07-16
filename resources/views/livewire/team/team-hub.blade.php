@@ -1,6 +1,7 @@
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="desk-page">
+    <x-desk-page-header eyebrow="People" title="Team" description="Staff profiles, shared resources, and internal communication." />
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+    <div class="hidden">
         <div>
             <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Team Hub</h1>
             <p class="mt-1 text-gray-500 dark:text-gray-400">Your central space for team info, resources, and

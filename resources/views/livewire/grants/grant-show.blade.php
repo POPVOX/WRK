@@ -1,6 +1,6 @@
-<div x-data x-on:open-grant-edit-modal.window="$wire.openEditModal()">
+<div class="desk-page" x-data x-on:open-grant-edit-modal.window="$wire.openEditModal()">
     <x-slot name="header">
-        <div class="flex items-center justify-between">
+        <div class="hidden">
             <div class="flex items-center gap-4">
                 <a href="{{ route('grants.index') }}" wire:navigate
                     class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
@@ -43,6 +43,10 @@
             </div>
         </div>
     </x-slot>
+
+    <x-desk-page-header eyebrow="Funding" :title="$grant->name" :description="$grant->funder?->name ?: 'Grant details, obligations, and reporting timeline.'">
+        <x-slot:actions><a href="{{ route('grants.index') }}" wire:navigate class="desk-button-secondary">← Funders</a><button type="button" wire:click="openEditModal" class="desk-button-primary">Edit grant</button></x-slot:actions>
+    </x-desk-page-header>
 
     <div class="py-8">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">

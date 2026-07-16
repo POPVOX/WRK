@@ -1,6 +1,6 @@
-<div>
+<div class="desk-page">
     <x-slot name="header">
-        <div class="flex items-center justify-between">
+        <div class="hidden">
             <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
                 {{ $organization->name }}
             </h2>
@@ -11,11 +11,16 @@
         </div>
     </x-slot>
 
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <header class="flex flex-col gap-5 border-b-2 border-[#26221c] pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <div><a href="{{ route('organizations.index') }}" wire:navigate class="desk-kicker">People · Organizations</a><h1 class="desk-page-title mt-2">{{ $organization->name }}</h1><p class="desk-meta mt-2">{{ $organization->type ?: 'Organization' }} · {{ number_format($organization->people->count()) }} contacts · {{ number_format($organization->meetings->count()) }} meetings</p></div>
+        <div class="desk-toolbar">@if($organization->website)<a href="{{ $organization->website }}" target="_blank" rel="noopener" class="desk-button-secondary">Website ↗</a>@endif<button type="button" wire:click="startEditing" class="desk-button-secondary">Edit</button></div>
+    </header>
+
+    <div>
+        <div class="space-y-6">
 
             <!-- Organization Profile Card -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+            <div class="app-surface p-6">
                 @if($editing)
                     <!-- Edit Mode -->
                     <form wire:submit="save" class="space-y-4">

@@ -1,139 +1,83 @@
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+<div class="desk-page">
     <x-congress-nav />
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-            <p class="text-sm font-semibold uppercase tracking-[0.14em] text-indigo-600">Internal directory</p>
-            <h1 class="mt-1 text-3xl font-bold text-gray-900">Congress Explorer</h1>
-            <p class="mt-2 max-w-3xl text-gray-600">
-                Search reported House and Senate staff roles without adding them to general Contacts.
-                Profiles remain provisional until evidence or team review confirms an identity.
+
+    <x-desk-page-header eyebrow="People · Congress" title="Congress Explorer" description="Search current and historical congressional staff without overwhelming the general contacts database.">
+        <x-slot:actions>
+            <a href="{{ route('congress.lists.create') }}" wire:navigate class="desk-button-primary">＋ New list</a>
+        </x-slot:actions>
+    </x-desk-page-header>
+
+    <section class="desk-inset space-y-4 p-5" aria-label="Congressional staff search">
+        <label class="desk-search">
+            <span class="text-[#8a8578]">⌕</span>
+            <input id="congress-search" type="search" wire:model.live.debounce.300ms="search" placeholder="Name, committee, title, office, or code…" aria-label="Search congressional staff">
+        </label>
+
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <select wire:model.live="chamber" aria-label="Chamber">
+                <option value="">House &amp; Senate</option><option value="House">House</option><option value="Senate">Senate</option>
+            </select>
+            <select wire:model.live="status" aria-label="Role status">
+                <option value="current">Current roles</option><option value="former">Former roles</option><option value="">All history</option>
+            </select>
+            <select wire:model.live="officeType" aria-label="Office type">
+                <option value="">All office types</option>@foreach($officeTypes as $type)<option value="{{ $type }}">{{ $type }}</option>@endforeach
+            </select>
+            <input type="text" wire:model.live.debounce.300ms="title" placeholder="Title contains…" aria-label="Title contains">
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[#e4ddd0] pt-4">
+            <p class="text-sm text-[#5c574d]">
+                @if($title)<span class="desk-data">title:</span> “{{ $title }}” · @endif
+                <span class="desk-data">chamber:</span> {{ $chamber ?: 'House + Senate' }} ·
+                <span class="desk-data">status:</span> {{ $status ?: 'all history' }} ·
+                <strong class="text-[#26221c]">{{ number_format($staff->total()) }} matches</strong>
             </p>
-        </div>
-        <div class="space-y-3">
-            <div class="flex justify-end">
-                <a href="{{ route('congress.lists.create') }}" wire:navigate class="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700">+ New list</a>
-            </div>
-            <div class="grid grid-cols-3 gap-3 text-center">
-            <div class="app-surface px-4 py-3">
-                <p class="text-2xl font-semibold text-gray-900">{{ number_format($totalProfiles) }}</p>
-                <p class="text-xs app-muted">Profiles</p>
-            </div>
-            <div class="app-surface px-4 py-3">
-                <p class="text-2xl font-semibold text-emerald-700">{{ number_format($currentProfiles) }}</p>
-                <p class="text-xs app-muted">Current</p>
-            </div>
-            <div class="app-surface px-4 py-3">
-                <p class="text-2xl font-semibold text-indigo-700">{{ number_format($linkedProfiles) }}</p>
-                <p class="text-xs app-muted">Linked</p>
-            </div>
-            </div>
-        </div>
-    </div>
-
-    <section class="app-surface p-5 space-y-4" aria-label="Congressional staff filters">
-        <div>
-            <label for="congress-search" class="text-sm font-medium text-gray-700">Search staff, office, title, or office code</label>
-            <input
-                id="congress-search"
-                type="search"
-                wire:model.live.debounce.300ms="search"
-                placeholder="Try a name, committee, legislative director, or office code…"
-                class="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-            >
-        </div>
-
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <div>
-                <label for="congress-chamber" class="text-sm font-medium text-gray-700">Chamber</label>
-                <select id="congress-chamber" wire:model.live="chamber" class="mt-1 block w-full rounded-lg border-gray-300 text-sm">
-                    <option value="">House &amp; Senate</option>
-                    <option value="House">House</option>
-                    <option value="Senate">Senate</option>
-                </select>
-            </div>
-            <div>
-                <label for="congress-status" class="text-sm font-medium text-gray-700">Role status</label>
-                <select id="congress-status" wire:model.live="status" class="mt-1 block w-full rounded-lg border-gray-300 text-sm">
-                    <option value="current">Current</option>
-                    <option value="former">Former</option>
-                    <option value="">All history</option>
-                </select>
-            </div>
-            <div>
-                <label for="congress-office-type" class="text-sm font-medium text-gray-700">Office type</label>
-                <select id="congress-office-type" wire:model.live="officeType" class="mt-1 block w-full rounded-lg border-gray-300 text-sm">
-                    <option value="">All office types</option>
-                    @foreach($officeTypes as $type)
-                        <option value="{{ $type }}">{{ $type }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="lg:col-span-2">
-                <label for="congress-title" class="text-sm font-medium text-gray-700">Title contains</label>
-                <div class="mt-1 flex gap-2">
-                    <input id="congress-title" type="text" wire:model.live.debounce.300ms="title" placeholder="e.g. Communications" class="block min-w-0 flex-1 rounded-lg border-gray-300 text-sm">
-                    <button type="button" wire:click="clearFilters" class="rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        Clear
-                    </button>
-                </div>
+            <div class="desk-toolbar">
+                @if($search || $chamber || $title || $officeType || $status !== 'current')<button type="button" wire:click="clearFilters" class="text-xs font-semibold text-[#8a8578]">Clear filters</button>@endif
+                <a href="{{ route('congress.lists.create') }}" wire:navigate class="desk-button-primary">Build list from {{ number_format($staff->total()) }} →</a>
             </div>
         </div>
     </section>
 
-    <section class="app-surface overflow-hidden">
-        <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-            <div>
-                <h2 class="font-semibold text-gray-900">Staff profiles</h2>
-                <p class="text-sm app-muted">{{ number_format($staff->total()) }} matching {{ Str::plural('profile', $staff->total()) }}</p>
-            </div>
-            <a href="{{ route('congress.lists.create') }}" wire:navigate class="text-sm font-semibold text-indigo-700 hover:text-indigo-900">Build a list from search →</a>
+    <section>
+        <div class="flex items-end justify-between gap-4 pb-2">
+            <p class="desk-section-label">Staff profiles</p>
+            <p class="desk-data text-[10px] text-[#8a8578]">{{ number_format($currentProfiles) }} current · {{ number_format($linkedProfiles) }} linked</p>
         </div>
-
-        @if($staff->isEmpty())
-            <div class="px-6 py-14 text-center">
-                <h3 class="font-semibold text-gray-900">No staff profiles match these filters</h3>
-                <p class="mt-1 text-sm app-muted">Try broadening the office, title, or status filters.</p>
-            </div>
-        @else
-            <div class="divide-y divide-gray-200">
-                @foreach($staff as $profile)
-                    @php($position = $profile->currentPosition)
-                    <div class="flex items-start gap-3 px-5 py-4 hover:bg-gray-50">
-                        <a href="{{ route('congress.staff.show', $profile) }}" wire:navigate class="min-w-0 flex-1">
-                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div class="min-w-0">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <h3 class="font-semibold text-gray-900">{{ $profile->display_name }}</h3>
-                                    <span class="rounded-full px-2 py-0.5 text-xs font-medium {{ $profile->chamber === 'Senate' ? 'bg-blue-100 text-blue-800' : 'bg-violet-100 text-violet-800' }}">
-                                        {{ $profile->chamber }}
-                                    </span>
-                                    @if($profile->person_id)
-                                        <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Linked contact</span>
-                                    @endif
-                                </div>
-                                <p class="mt-1 text-sm text-gray-700">{{ $position?->title ?? 'No current role reported' }}</p>
-                                <p class="mt-0.5 truncate text-sm app-muted">
-                                    {{ $position?->office?->name ?? 'Historical profile' }}
-                                    @if($position?->office?->office_code)
-                                        · {{ $position->office->office_code }}
-                                    @endif
-                                </p>
-                            </div>
-                            <div class="shrink-0 text-left sm:text-right">
-                                <p class="text-sm font-medium {{ $position ? 'text-emerald-700' : 'text-gray-600' }}">{{ $position ? 'Current' : 'Former / unconfirmed' }}</p>
-                                <p class="mt-0.5 text-xs app-muted">
-                                    {{ number_format($profile->observations_count) }} source {{ Str::plural('observation', $profile->observations_count) }}
-                                </p>
-                            </div>
-                            </div>
-                        </a>
-                    </div>
-                @endforeach
-            </div>
-
-            <div class="border-t border-gray-200 px-5 py-4">
-                {{ $staff->links() }}
-            </div>
-        @endif
+        <div class="desk-table-wrap">
+            <table class="desk-table">
+                <thead><tr><th>Name</th><th>Role</th><th>Office</th><th>Confidence</th></tr></thead>
+                <tbody>
+                    @forelse($staff as $profile)
+                        @php
+                            $position = $profile->currentPosition;
+                        @endphp
+                        <tr wire:key="staff-profile-{{ $profile->id }}">
+                            <td class="min-w-[15rem]">
+                                <a href="{{ route('congress.staff.show', $profile) }}" wire:navigate class="desk-table-title hover:text-[#8a4b2d]">{{ $profile->display_name }}</a>
+                                <p class="desk-data mt-1 text-[10px] text-[#8a8578]">{{ strtoupper($profile->chamber ?: 'Congress') }}@if($profile->person_id) · linked contact @endif</p>
+                            </td>
+                            <td>{{ $position?->title ?? 'No current role reported' }}</td>
+                            <td>{{ $position?->office?->name ?? 'Historical profile' }}</td>
+                            <td>
+                                <span class="font-semibold {{ $profile->observations_count >= 3 ? 'desk-status-positive' : 'desk-status-warning' }}">
+                                    {{ number_format($profile->observations_count) }} {{ Str::plural('source', $profile->observations_count) }}
+                                </span>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="4" class="!py-12 text-center text-[#8a8578]">No staff profiles match these filters. Try a broader title or office.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+        @if($staff->hasPages())<div class="mt-4">{{ $staff->links() }}</div>@endif
     </section>
+
+    <footer class="desk-inset grid gap-3 px-5 py-4 text-center sm:grid-cols-3">
+        <a href="{{ route('congress.index') }}" wire:navigate><span class="desk-section-label">Search</span><strong class="desk-data mt-1 block">{{ number_format($staff->total()) }} matches</strong></a>
+        <a href="{{ route('congress.lists') }}" wire:navigate><span class="desk-section-label">→ Lists</span><strong class="mt-1 block text-sm text-[#8a4b2d]">Build an audience</strong></a>
+        <a href="{{ route('congress.campaigns') }}" wire:navigate><span class="desk-section-label">→ Campaigns</span><strong class="mt-1 block text-sm text-[#8a4b2d]">Reach out carefully</strong></a>
+    </footer>
 </div>

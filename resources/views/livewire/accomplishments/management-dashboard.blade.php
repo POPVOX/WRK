@@ -1,5 +1,6 @@
-<div class="min-h-screen">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="desk-page">
+    <x-desk-page-header eyebrow="Team" title="Accomplishments" description="A shared record of the work, outcomes, and milestones the team has delivered." />
+    <div>
         {{-- Migration Error Alert --}}
         @if($hasMigrationError)
             <div class="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">

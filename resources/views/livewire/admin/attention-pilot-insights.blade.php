@@ -1,12 +1,13 @@
-<div class="space-y-6">
+<div class="desk-page">
     <x-slot name="header">
         <div>
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Attention Pilot Insights</h2>
+            <h2 class="hidden">Attention Pilot Insights</h2>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">How well “Needs You” is identifying work that deserves staff attention.</p>
         </div>
     </x-slot>
 
-    <div class="app-page-frame space-y-6">
+    <x-desk-page-header eyebrow="Admin" title="Attention pilot" description="How well Needs You is identifying work that deserves staff attention." />
+    <div class="space-y-6">
         <div class="flex flex-wrap gap-2" aria-label="Insight period">
             @foreach(['7' => 'Last 7 days', '30' => 'Last 30 days', 'all' => 'All time'] as $value => $label)
                 <button type="button" wire:click="setPeriod('{{ $value }}')"

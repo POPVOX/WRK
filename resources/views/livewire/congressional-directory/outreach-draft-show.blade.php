@@ -1,15 +1,10 @@
-<div @if($draft->status === 'building' || $sendingSummary['active'] > 0) wire:poll.3s @endif class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+<div @if($draft->status === 'building' || $sendingSummary['active'] > 0) wire:poll.3s @endif class="desk-page">
     @php
         $snapshotReviewable = in_array($draft->status, ['draft', 'ready'], true);
     @endphp
     <x-congress-nav />
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-            <a href="{{ route('congress.campaigns') }}" wire:navigate class="text-sm font-semibold text-indigo-600 hover:text-indigo-800">← Campaigns</a>
-            <p class="mt-4 text-sm font-semibold uppercase tracking-[0.14em] text-indigo-600">Campaign builder</p>
-            <h1 class="mt-1 text-3xl font-bold text-gray-900">{{ $draft->name }}</h1>
-            <p class="mt-2 text-gray-600">Audience: <a href="{{ route('congress.lists', ['list' => $draft->congressional_staff_list_id]) }}" wire:navigate class="font-semibold text-indigo-700 hover:underline">{{ $draft->staffList->name }}</a>. Review a fixed recipient snapshot, preview personalization, and deliver approved recipients in batches you control.</p>
-        </div>
+    <x-desk-page-header eyebrow="Campaign builder" :title="$draft->name" description="Review the fixed recipient snapshot, preview personalization, and deliver approved recipients in batches you control.">
+        <x-slot:actions>
         @if($canManage)
             <div class="flex flex-wrap gap-2">
                 <button type="button" wire:click="refreshSnapshot" wire:confirm="Refresh from the staff list? This resets all recipient approvals and exclusions." @disabled($draft->status === 'building') class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60">
@@ -20,7 +15,9 @@
                 </button>
             </div>
         @endif
-    </div>
+        </x-slot:actions>
+    </x-desk-page-header>
+    <p class="-mt-4 text-sm text-[#5c574d]">Audience: <a href="{{ route('congress.lists', ['list' => $draft->congressional_staff_list_id]) }}" wire:navigate class="desk-link">{{ $draft->staffList->name }}</a></p>
 
     <section class="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4 text-sm text-indigo-950">
         <p class="font-semibold">Controlled Gmail delivery is enabled for the campaign owner.</p>

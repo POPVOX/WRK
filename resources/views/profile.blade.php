@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex items-center justify-between">
+        <div class="hidden">
             <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
                 {{ __('Profile') }}
             </h2>
@@ -18,24 +18,32 @@
         </div>
     </x-slot>
 
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <div class="desk-page desk-page-narrow">
+        <x-desk-page-header eyebrow="Account" title="Profile & settings" description="Keep your account, travel preferences, and security details current.">
+            <x-slot:actions>
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit" class="desk-button-secondary text-[#b33a2b]">Log out</button>
+                </form>
+            </x-slot:actions>
+        </x-desk-page-header>
+        <div class="space-y-6">
             {{-- Travel Profile Link --}}
             <a href="{{ route('profile.travel') }}" wire:navigate
-               class="block p-4 sm:p-6 bg-gradient-to-r from-indigo-500 to-purple-600 shadow sm:rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all group">
+               class="app-surface block p-4 sm:p-6 transition-colors hover:bg-[#f5f1e8] group">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-4">
-                        <div class="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
-                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="w-12 h-12 bg-[#f3eee3] rounded-lg flex items-center justify-center">
+                            <svg class="w-6 h-6 text-[#8a4b2d]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-lg font-semibold text-white">Travel Profile</h3>
-                            <p class="text-sm text-white/80">Passport, loyalty programs, preferences & emergency contact</p>
+                            <h3 class="text-lg font-semibold text-[#26221c]">Travel profile</h3>
+                            <p class="text-sm text-[#5c574d]">Passport, loyalty programs, preferences, and emergency contact</p>
                         </div>
                     </div>
-                    <svg class="w-5 h-5 text-white/60 group-hover:text-white group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 text-[#8a8578] group-hover:text-[#8a4b2d] group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                     </svg>
                 </div>

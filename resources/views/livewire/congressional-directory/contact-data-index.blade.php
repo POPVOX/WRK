@@ -1,11 +1,7 @@
-<div @if(in_array($operation['status'] ?? null, ['queued', 'running'], true)) wire:poll.3s="refreshOperation" @endif class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+<div @if(in_array($operation['status'] ?? null, ['queued', 'running'], true)) wire:poll.3s="refreshOperation" @endif class="desk-page">
     <x-congress-nav />
 
-    <div>
-        <p class="text-sm font-semibold uppercase tracking-[0.14em] text-indigo-600">Congressional contacts</p>
-        <h1 class="mt-1 text-3xl font-bold text-gray-900">Contact data</h1>
-        <p class="mt-2 max-w-3xl text-gray-600">Maintain directory-wide email evidence and provisional addresses independently from lists and campaigns.</p>
-    </div>
+    <x-desk-page-header eyebrow="Congress · Data quality" title="Contact data" description="Maintain directory-wide email evidence and provisional addresses independently from lists and campaigns." />
 
     <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Congressional contact data summary">
         @foreach([

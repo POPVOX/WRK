@@ -1,12 +1,5 @@
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="flex items-center justify-between mb-6">
-        <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Reliability & Observability</h1>
-            <p class="text-gray-500 dark:text-gray-400">AI health, queues, calendar sync, and document ingestion.</p>
-        </div>
-        <a href="{{ route('dashboard') }}" wire:navigate
-           class="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800">← Back to Dashboard</a>
-    </div>
+<div class="desk-page">
+    <x-desk-page-header eyebrow="Admin" title="Reliability" description="AI health, queues, calendar sync, document ingestion, and the signals needed to catch stuck work." />
 
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm">

@@ -72,10 +72,38 @@ class OutreachAnalytics extends Component
             ->limit(10)
             ->get();
 
+        $activity = $this->recipientQuery()
+            ->whereNotNull('sent_at')
+            ->get(['id', 'name', 'email', 'sent_at', 'opened_at', 'open_count', 'click_count', 'replied_at']);
+
+        $dailyActivity = collect(range(6, 0))->map(function (int $daysAgo) use ($activity): array {
+            $day = now()->subDays($daysAgo);
+            $items = $activity->filter(fn ($recipient) => $recipient->sent_at?->isSameDay($day));
+
+            return [
+                'label' => $day->format('D'),
+                'sent' => $items->count(),
+                'opened' => $items->whereNotNull('opened_at')->count(),
+            ];
+        });
+
+        $mostEngaged = $activity
+            ->filter(fn ($recipient) => $recipient->replied_at || $recipient->click_count > 0 || $recipient->open_count > 1)
+            ->sortByDesc(fn ($recipient) => ($recipient->replied_at ? 1000 : 0) + ($recipient->click_count * 10) + $recipient->open_count)
+            ->take(5)
+            ->values();
+
+        $followUpCandidates = $activity
+            ->filter(fn ($recipient) => $recipient->open_count >= 3 && ! $recipient->replied_at)
+            ->count();
+
         return view('livewire.congressional-directory.outreach-analytics', [
             'recipients' => $recipients,
             'campaigns' => $this->draft->outreachCampaigns()->latest('id')->get(),
             'topLinks' => $topLinks,
+            'dailyActivity' => $dailyActivity,
+            'mostEngaged' => $mostEngaged,
+            'followUpCandidates' => $followUpCandidates,
             'metrics' => [
                 'total' => (clone $base)->count(),
                 'sent' => $sent,

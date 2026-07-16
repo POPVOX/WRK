@@ -1,9 +1,6 @@
-<div class="app-page-frame space-y-4" wire:poll.60s="$refresh">
-    <div class="app-page-head">
-        <div>
-            <h1 class="app-page-title">Notifications</h1>
-            <p class="app-page-lead">Team updates and reminders, organized to stay informative without noise.</p>
-        </div>
+<div class="desk-page" wire:poll.60s="$refresh">
+    <x-desk-page-header eyebrow="Inbox" title="System notices" description="Team updates and reminders, organized to stay informative without noise.">
+        <x-slot:actions>
         @if($unreadCount > 0)
             <button
                 type="button"
@@ -13,7 +10,8 @@
                 Mark all read
             </button>
         @endif
-    </div>
+        </x-slot:actions>
+    </x-desk-page-header>
 
     <div class="app-card p-3">
         <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 text-sm">

@@ -1,11 +1,9 @@
-<div class="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+<div class="desk-page desk-page-narrow">
     <x-congress-nav />
 
-    <header>
-        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-600">Congress · Campaigns</p>
-        <h1 class="mt-1 text-3xl font-bold text-gray-900">Create a campaign</h1>
-        <p class="mt-2 text-gray-600">Choose a saved audience and establish the message and delivery rules. Nothing sends until you review recipients and activate delivery.</p>
-    </header>
+    <x-desk-page-header eyebrow="Congress · Campaigns" title="Create a campaign" description="Choose a saved audience, draft the message, and set delivery rules. Nothing sends until review and activation.">
+        <x-slot:actions><a href="{{ route('congress.campaigns') }}" wire:navigate class="desk-button-secondary">Cancel</a></x-slot:actions>
+    </x-desk-page-header>
 
     @if($lists->isEmpty())
         <section class="app-surface p-8 text-center"><h2 class="text-lg font-semibold text-gray-900">Create a staff list first</h2><p class="mt-2 text-sm text-gray-500">Campaigns use saved lists so the audience remains understandable and reusable.</p><a href="{{ route('congress.lists.create') }}" wire:navigate class="mt-5 inline-flex rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">Create a list</a></section>

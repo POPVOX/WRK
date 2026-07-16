@@ -1,13 +1,17 @@
-<div @if($isExtracting) wire:poll.2s="checkExtractionStatus" @endif>
+<div class="desk-page desk-page-narrow" @if($isExtracting) wire:poll.2s="checkExtractionStatus" @endif>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
+        <h2 class="hidden">
             {{ __('Log New Meeting') }}
         </h2>
     </x-slot>
 
-    <div class="py-12">
-        <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm rounded-lg">
+    <x-desk-page-header eyebrow="Meetings" :title="$editingMeeting ? 'Edit meeting' : 'Log a meeting'" description="Capture the conversation once, then let WRK structure the context and follow-through.">
+        <x-slot:actions><a href="{{ route('meetings.index') }}" wire:navigate class="desk-button-secondary">← Meetings</a></x-slot:actions>
+    </x-desk-page-header>
+
+    <div>
+        <div>
+            <div class="app-surface overflow-hidden">
                 <form wire:submit="save" class="p-6 space-y-6">
 
                     <!-- Meeting Title -->
