@@ -1,4 +1,5 @@
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <x-congress-nav />
     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
             <a href="{{ route('congress.index') }}" wire:navigate class="text-sm font-medium text-indigo-600 hover:text-indigo-800">← Congress Explorer</a>

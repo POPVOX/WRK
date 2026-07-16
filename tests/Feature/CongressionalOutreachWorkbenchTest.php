@@ -3,9 +3,10 @@
 use App\Jobs\BuildCongressionalOutreachDraftSnapshot;
 use App\Jobs\GenerateCongressionalEmailGuesses;
 use App\Jobs\SendOutreachCampaignRecipient;
+use App\Livewire\CongressionalDirectory\CampaignCreate;
+use App\Livewire\CongressionalDirectory\CampaignIndex;
 use App\Livewire\CongressionalDirectory\OutreachAnalytics;
 use App\Livewire\CongressionalDirectory\OutreachDraftShow;
-use App\Livewire\CongressionalDirectory\StaffListsIndex;
 use App\Models\CongressionalOffice;
 use App\Models\CongressionalOutreachDraft;
 use App\Models\CongressionalOutreachDraftRecipient;
@@ -22,6 +23,7 @@ use App\Models\OutreachCampaignRecipient;
 use App\Models\OutreachEmailSuppression;
 use App\Models\Person;
 use App\Models\User;
+use App\Services\CongressionalDirectory\CongressionalCampaignScheduleService;
 use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
 use App\Services\CongressionalDirectory\CongressionalEmailGuessService;
 use App\Services\CongressionalDirectory\CongressionalOutreachBatchService;
@@ -218,12 +220,13 @@ test('staff can create and inspect a persistent dry run without sending', functi
     $user = User::factory()->create();
     $profile = workbenchProfile('Jordan Review');
     app(CongressionalEmailEvidenceService::class)->addAddress($profile, 'jordan@house.gov', 'observed');
-    workbenchList($user, [$profile]);
+    $list = workbenchList($user, [$profile]);
 
     Livewire::actingAs($user)
-        ->test(StaffListsIndex::class)
-        ->set('draftName', 'Resource pilot')
-        ->call('createDryRun');
+        ->test(CampaignCreate::class)
+        ->set('staffListId', $list->id)
+        ->set('name', 'Resource pilot')
+        ->call('createCampaign');
 
     $draft = CongressionalOutreachDraft::query()->sole();
 
@@ -297,8 +300,7 @@ test('campaign owners can grant and revoke view-only access for active team memb
         ->assertStatus(403);
 
     Livewire::actingAs($viewer)
-        ->test(StaffListsIndex::class)
-        ->assertSee('Shared with me')
+        ->test(CampaignIndex::class)
         ->assertSee('Shared resource campaign');
 
     Livewire::actingAs($owner)
@@ -713,6 +715,93 @@ test('congressional outreach sends only approved recipients in batches of ten wi
         ->and(OutreachCampaignRecipient::query()->count())->toBe(12)
         ->and(OutreachCampaignRecipient::query()->pluck('congressional_outreach_draft_recipient_id')->unique()->count())->toBe(12)
         ->and($batches->summary($draft->fresh())['approved_unsent'])->toBe(0);
+});
+
+test('campaign batch size is configurable per campaign', function () {
+    Queue::fake();
+    $owner = User::factory()->create();
+    $evidence = app(CongressionalEmailEvidenceService::class);
+    $profiles = collect(range(1, 7))->map(function (int $index) use ($evidence) {
+        $profile = workbenchProfile(sprintf('Custom Batch Person %02d', $index));
+        $evidence->addAddress($profile, "custom{$index}@mail.house.gov", 'sourced');
+
+        return $profile;
+    })->all();
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($owner, $profiles), $owner, 'Custom batch');
+    $draft->update(['batch_size' => 3]);
+    $workbench->approveAllEligible($draft, $owner->id);
+    $workbench->updateMessage($draft, 'Hello {{first_name}}', 'A resource for {{office}}.');
+
+    $first = app(CongressionalOutreachBatchService::class)->sendNextBatch($draft->fresh(), $owner);
+
+    expect($first['queued'])->toBe(3)
+        ->and($first['campaign']->recipients()->count())->toBe(3)
+        ->and(data_get($first['campaign']->metadata, 'batch_size_limit'))->toBe(3);
+});
+
+test('recurring congressional schedules queue configured batches and advance the cadence', function () {
+    Queue::fake();
+    $owner = User::factory()->create(['google_access_token' => 'schedule-test-token']);
+    $evidence = app(CongressionalEmailEvidenceService::class);
+    $profiles = collect(range(1, 3))->map(function (int $index) use ($evidence) {
+        $profile = workbenchProfile(sprintf('Scheduled Person %02d', $index));
+        $evidence->addAddress($profile, "scheduled{$index}@mail.house.gov", 'sourced');
+
+        return $profile;
+    })->all();
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($owner, $profiles), $owner, 'Scheduled batches');
+    $workbench->approveAllEligible($draft, $owner->id);
+    $workbench->updateMessage($draft, 'Hello', 'A useful resource.');
+    $draft->update([
+        'batch_size' => 2,
+        'delivery_mode' => 'recurring',
+        'cadence_value' => 1,
+        'cadence_unit' => 'hour',
+        'schedule_status' => 'active',
+        'next_send_at' => now()->subMinute(),
+    ]);
+
+    $result = app(CongressionalCampaignScheduleService::class)->runDue();
+
+    expect($result['processed'])->toBe(1)
+        ->and($draft->fresh()->schedule_status)->toBe('active')
+        ->and($draft->fresh()->next_send_at)->toBeGreaterThan(now()->addMinutes(50))
+        ->and(OutreachCampaign::query()->sole()->recipients()->count())->toBe(2);
+});
+
+test('campaign builder saves audience message and configurable delivery rules', function () {
+    Queue::fake();
+    config()->set('features.congressional_directory_ui', true);
+    $owner = User::factory()->create(['timezone' => 'America/New_York']);
+    $profile = workbenchProfile('Campaign Builder');
+    $list = workbenchList($owner, [$profile]);
+
+    Livewire::actingAs($owner)
+        ->test(CampaignCreate::class)
+        ->set('staffListId', $list->id)
+        ->set('name', 'Technology directors')
+        ->set('subject', 'A resource for {{office}}')
+        ->set('bodyText', 'Hi {{first_name}}, please take a look.')
+        ->set('batchSize', 37)
+        ->set('deliveryMode', 'recurring')
+        ->set('cadenceValue', 2)
+        ->set('cadenceUnit', 'hour')
+        ->call('createCampaign')
+        ->assertHasNoErrors()
+        ->assertRedirect();
+
+    $campaign = CongressionalOutreachDraft::query()->where('user_id', $owner->id)->sole();
+
+    expect($campaign->name)->toBe('Technology directors')
+        ->and($campaign->batch_size)->toBe(37)
+        ->and($campaign->delivery_mode)->toBe('recurring')
+        ->and($campaign->cadence_value)->toBe(2)
+        ->and($campaign->cadence_unit)->toBe('hour')
+        ->and($campaign->schedule_status)->toBe('inactive');
+
+    Queue::assertPushed(BuildCongressionalOutreachDraftSnapshot::class);
 });
 
 test('campaign owners can retry failed recipients without selecting a new batch', function () {

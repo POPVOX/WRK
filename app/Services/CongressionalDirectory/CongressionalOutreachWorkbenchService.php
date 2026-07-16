@@ -24,7 +24,7 @@ class CongressionalOutreachWorkbenchService
     public function createDraft(CongressionalStaffList $list, int $userId, string $name): CongressionalOutreachDraft
     {
         if (! $list->profiles()->exists()) {
-            throw new DomainException('Add at least one staff member to the list before creating a dry run.');
+            throw new DomainException('Add at least one staff member to the list before creating a campaign.');
         }
 
         return DB::transaction(function () use ($list, $userId, $name) {
@@ -37,6 +37,33 @@ class CongressionalOutreachWorkbenchService
 
             return $draft->fresh();
         });
+    }
+
+    public function duplicateDraft(CongressionalOutreachDraft $source, int $userId): CongressionalOutreachDraft
+    {
+        if ($source->user_id !== $userId) {
+            throw new DomainException('Only the campaign owner can duplicate this campaign.');
+        }
+
+        return CongressionalOutreachDraft::query()->create([
+            'congressional_staff_list_id' => $source->congressional_staff_list_id,
+            'user_id' => $userId,
+            'name' => Str::limit($source->name.' (copy)', 160, ''),
+            'subject' => $source->subject,
+            'body_text' => $source->body_text,
+            'batch_size' => $source->batch_size,
+            'delivery_mode' => $source->delivery_mode,
+            'cadence_value' => $source->cadence_value,
+            'cadence_unit' => $source->cadence_unit,
+            'timezone' => $source->timezone,
+            'schedule_status' => 'inactive',
+            'status' => 'building',
+            'metadata' => array_filter([
+                'duplicated_from' => $source->id,
+                'duplicated_at' => now()->toIso8601String(),
+                'email_guess_batch' => data_get($source->metadata, 'email_guess_batch'),
+            ]),
+        ]);
     }
 
     public function refreshSnapshot(CongressionalOutreachDraft $draft): int
@@ -191,11 +218,11 @@ class CongressionalOutreachWorkbenchService
     public function markReady(CongressionalOutreachDraft $draft): void
     {
         if (! trim((string) $draft->subject) || ! trim((string) $draft->body_text)) {
-            throw new DomainException('Add a subject and message before marking the dry run ready.');
+            throw new DomainException('Add a subject and message before marking the campaign ready.');
         }
 
         if (! $draft->recipients()->where('review_status', 'approved')->exists()) {
-            throw new DomainException('Approve at least one recipient before marking the dry run ready.');
+            throw new DomainException('Approve at least one recipient before marking the campaign ready.');
         }
 
         if ($draft->recipients()->where('review_status', 'pending')->exists()) {

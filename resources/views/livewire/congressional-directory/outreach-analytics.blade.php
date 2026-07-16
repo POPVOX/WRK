@@ -1,7 +1,8 @@
 <div class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <x-congress-nav />
     <header class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-            <a href="{{ route('congress.outreach.show', $draft) }}" wire:navigate class="text-sm font-semibold text-indigo-600 hover:text-indigo-800">← Back to workbench</a>
+            <a href="{{ route('congress.outreach.show', $draft) }}" wire:navigate class="text-sm font-semibold text-indigo-600 hover:text-indigo-800">← Back to campaign</a>
             <p class="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-indigo-600">Campaign analytics</p>
             <h1 class="mt-1 text-3xl font-bold text-gray-900">{{ $draft->name }}</h1>
             <p class="mt-2 text-gray-600">Delivery and engagement across {{ number_format($campaigns->count()) }} controlled Gmail {{ Str::plural('batch', $campaigns->count()) }}.</p>

@@ -4,20 +4,21 @@
         $guessBatch = data_get($draft->metadata, 'email_guess_batch', []);
         $guessBatchRunning = ($guessBatch['status'] ?? null) === 'queued' && $draft->status === 'building';
     @endphp
+    <x-congress-nav />
     <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-            <a href="{{ route('congress.lists') }}" wire:navigate class="text-sm font-semibold text-indigo-600 hover:text-indigo-800">← Congressional staff lists</a>
-            <p class="mt-4 text-sm font-semibold uppercase tracking-[0.14em] text-indigo-600">Outreach workbench</p>
+            <a href="{{ route('congress.campaigns') }}" wire:navigate class="text-sm font-semibold text-indigo-600 hover:text-indigo-800">← Campaigns</a>
+            <p class="mt-4 text-sm font-semibold uppercase tracking-[0.14em] text-indigo-600">Campaign builder</p>
             <h1 class="mt-1 text-3xl font-bold text-gray-900">{{ $draft->name }}</h1>
-            <p class="mt-2 text-gray-600">Review a fixed recipient snapshot, preview personalization, and send approved recipients in controlled batches of 10.</p>
+            <p class="mt-2 text-gray-600">Audience: <a href="{{ route('congress.lists', ['list' => $draft->congressional_staff_list_id]) }}" wire:navigate class="font-semibold text-indigo-700 hover:underline">{{ $draft->staffList->name }}</a>. Review a fixed recipient snapshot, preview personalization, and deliver approved recipients in batches you control.</p>
         </div>
         @if($canManage)
             <div class="flex flex-wrap gap-2">
                 <button type="button" wire:click="refreshSnapshot" wire:confirm="Refresh from the staff list? This resets all recipient approvals and exclusions." @disabled($draft->status === 'building') class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60">
                     {{ $draft->status === 'building' ? 'Building snapshot…' : 'Refresh snapshot' }}
                 </button>
-                <button type="button" wire:click="deleteDraft" wire:confirm="Delete this dry run? The staff list and profiles will not be changed." class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">
-                    Delete dry run
+                <button type="button" wire:click="deleteDraft" wire:confirm="Delete this campaign? The staff list and profiles will not be changed." class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">
+                    Delete campaign
                 </button>
             </div>
         @endif
@@ -25,7 +26,7 @@
 
     <section class="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4 text-sm text-indigo-950">
         <p class="font-semibold">Controlled Gmail delivery is enabled for the campaign owner.</p>
-        <p class="mt-1">Only individually approved, unsent recipients are selected. Each click sends at most 10, with suppression rechecked immediately before delivery.</p>
+        <p class="mt-1">Only approved, unsent recipients are selected. The saved batch size applies to both manual and automated delivery, with suppression rechecked immediately before every send.</p>
     </section>
 
     @if($draft->status === 'building')
@@ -47,10 +48,17 @@
 
     @if($canManage)
         <section class="app-surface p-5">
+            <form wire:submit="saveCampaignName" class="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <label class="min-w-0 flex-1 text-sm font-semibold text-gray-700">Campaign name<input type="text" wire:model.defer="campaignName" class="mt-1 block w-full rounded-lg border-gray-300"></label>
+                <button type="submit" class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Save name</button>
+            </form>
+        </section>
+
+        <section class="app-surface p-5">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                     <h2 class="text-lg font-semibold text-gray-900">Campaign viewers</h2>
-                    <p class="mt-1 text-sm text-gray-500">Added team members can inspect this dry run, but cannot edit the message, approve recipients, delete it, or send anything.</p>
+                    <p class="mt-1 text-sm text-gray-500">Added team members can inspect this campaign, but cannot edit the message, approve recipients, delete it, or send anything.</p>
                 </div>
                 @if($availableViewers->isNotEmpty())
                     <form wire:submit="addViewer" class="flex w-full max-w-xl flex-col gap-2 sm:flex-row">
@@ -141,7 +149,7 @@
         </section>
     @endif
 
-    <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-8" aria-label="Dry run summary">
+    <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-8" aria-label="Campaign summary">
         @foreach([
             ['Total', $summary['total'], 'text-gray-900'],
             ['Approved', $summary['approved'], 'text-emerald-700'],
@@ -268,15 +276,52 @@
 
     @if($canManage)
         @php
-            $nextBatchCount = min(10, $sendingSummary['approved_unsent']);
+            $nextBatchCount = min($batchSize, $sendingSummary['approved_unsent']);
             $lastCampaign = $sendingSummary['last_campaign'];
         @endphp
-        <section class="app-surface p-5">
-            <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <section class="app-surface overflow-hidden">
+            <div class="border-b border-gray-200 p-5">
                 <div>
-                    <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Controlled delivery</p>
-                    <h2 class="mt-1 text-lg font-semibold text-gray-900">Send the next batch through Gmail</h2>
-                    <p class="mt-1 max-w-3xl text-sm text-gray-500">The subject and sample message above are personalized per recipient when the batch is created. Pending, excluded, previously selected, and centrally suppressed addresses are not included.</p>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Delivery controls</p>
+                    <h2 class="mt-1 text-lg font-semibold text-gray-900">Choose the batch size and pace</h2>
+                    <p class="mt-1 max-w-3xl text-sm text-gray-500">For example, set 10 messages per batch and repeat every hour. Automation stops when the approved audience is exhausted and can be paused at any time.</p>
+                </div>
+                <form wire:submit="saveDeliverySettings" class="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5 xl:items-end">
+                    <label class="text-sm font-semibold text-gray-700">Messages per batch<input type="number" min="1" max="5000" wire:model.defer="batchSize" @disabled($draft->schedule_status === 'active') class="mt-1 block w-full rounded-lg border-gray-300 disabled:bg-gray-50">@error('batchSize')<span class="mt-1 block text-xs text-red-600">{{ $message }}</span>@enderror</label>
+                    <label class="text-sm font-semibold text-gray-700">Delivery mode<select wire:model.live="deliveryMode" @disabled($draft->schedule_status === 'active') class="mt-1 block w-full rounded-lg border-gray-300 disabled:bg-gray-50"><option value="manual">Manual batches</option><option value="scheduled">One scheduled batch</option><option value="recurring">Recurring batches</option></select></label>
+                    @if($deliveryMode === 'recurring')
+                        <label class="text-sm font-semibold text-gray-700">Repeat every<input type="number" min="1" max="1000" wire:model.defer="cadenceValue" @disabled($draft->schedule_status === 'active') class="mt-1 block w-full rounded-lg border-gray-300 disabled:bg-gray-50"></label>
+                        <label class="text-sm font-semibold text-gray-700">Interval<select wire:model.defer="cadenceUnit" @disabled($draft->schedule_status === 'active') class="mt-1 block w-full rounded-lg border-gray-300 disabled:bg-gray-50"><option value="minute">Minutes</option><option value="hour">Hours</option><option value="day">Days</option><option value="week">Weeks</option></select></label>
+                    @else
+                        <div></div><div></div>
+                    @endif
+                    <button type="submit" @disabled($draft->schedule_status === 'active') class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40">Save delivery settings</button>
+                </form>
+                @if($deliveryMode !== 'manual')
+                    <div class="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+                        <label class="text-sm font-semibold text-gray-700">First batch<input type="datetime-local" wire:model.defer="nextSendAt" @disabled($draft->schedule_status === 'active') class="mt-1 block w-full rounded-lg border-gray-300 disabled:bg-gray-50"></label>
+                        <label class="text-sm font-semibold text-gray-700">Timezone<input type="text" wire:model.defer="timezone" @disabled($draft->schedule_status === 'active') class="mt-1 block w-full rounded-lg border-gray-300 disabled:bg-gray-50" placeholder="America/New_York"></label>
+                        <div class="flex flex-wrap gap-2">
+                            @if($draft->schedule_status === 'active')
+                                <button type="button" wire:click="pauseSchedule" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100">Pause automation</button>
+                            @elseif($draft->schedule_status === 'paused')
+                                <button type="button" wire:click="resumeSchedule" class="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">Resume now</button>
+                            @else
+                                <button type="button" wire:click="activateSchedule" wire:confirm="Activate this campaign's delivery schedule? Approved recipients will begin sending at the selected time." @disabled(!$gmailConnected || !$snapshotReviewable || $sendingSummary['approved_unsent'] === 0) class="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">Activate delivery</button>
+                            @endif
+                        </div>
+                    </div>
+                @endif
+                @if($draft->schedule_status === 'active')
+                    <div class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"><strong>Automation active.</strong> Next scheduler run: {{ $draft->next_send_at?->setTimezone($draft->timezone)->format('M j, Y g:i A T') }}. It will send up to {{ number_format($draft->batch_size) }} {{ $draft->delivery_mode === 'recurring' ? 'and repeat every '.$draft->cadence_value.' '.Str::plural($draft->cadence_unit, $draft->cadence_value) : 'once' }}.</div>
+                @elseif($draft->schedule_status === 'paused')
+                    <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><strong>Automation paused.</strong> No new batches will start until you resume it.</div>
+                @endif
+            </div>
+            <div class="flex flex-col gap-5 p-5 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                    <h3 class="font-semibold text-gray-900">Manual delivery</h3>
+                    <p class="mt-1 max-w-3xl text-sm text-gray-500">Personalization is rendered when a batch is created. Pending, excluded, previously sent, and centrally suppressed addresses are not included.</p>
                     <div class="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-700">
                         <span><strong>{{ number_format($sendingSummary['approved_unsent']) }}</strong> approved and unsent</span>
                         <span><strong>{{ number_format($sendingSummary['sent']) }}</strong> sent</span>
@@ -297,7 +342,7 @@
                         wire:loading.attr="disabled"
                         wire:target="sendNextBatch"
                         wire:confirm="Send a real Gmail message to the next {{ $nextBatchCount }} approved recipients? This cannot be undone."
-                        @disabled(!$gmailConnected || !$snapshotReviewable || $nextBatchCount === 0 || $sendingSummary['active'] > 0)
+                        @disabled(!$gmailConnected || !$snapshotReviewable || $nextBatchCount === 0 || $sendingSummary['active'] > 0 || $draft->schedule_status === 'active')
                         class="rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                         <span wire:loading.remove wire:target="sendNextBatch">{{ $sendingSummary['active'] > 0 ? 'Batch in progress…' : "Send next {$nextBatchCount}" }}</span>
