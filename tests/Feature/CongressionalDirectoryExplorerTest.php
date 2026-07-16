@@ -1,5 +1,7 @@
 <?php
 
+use App\Jobs\EnrichCongressionalContactData;
+use App\Livewire\CongressionalDirectory\ContactDataIndex;
 use App\Livewire\CongressionalDirectory\StaffIndex;
 use App\Livewire\CongressionalDirectory\StaffListCreate;
 use App\Livewire\CongressionalDirectory\StaffListsIndex;
@@ -9,6 +11,8 @@ use App\Models\CongressionalStaffList;
 use App\Models\CongressionalStaffObservation;
 use App\Models\CongressionalStaffProfile;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 function explorerProfile(string $name, string $chamber, string $officeName, string $officeType, string $title, bool $current = true): CongressionalStaffProfile
@@ -101,6 +105,30 @@ test('congress explorer searches and filters staff separately from contacts', fu
         ->assertSee('Bailey Senate')
         ->set('search', 'not present')
         ->assertSee('No staff profiles match these filters');
+});
+
+test('contact data enrichment is directory wide and queues without sending', function () {
+    config()->set('features.congressional_directory_ui', true);
+    Cache::forget(EnrichCongressionalContactData::CACHE_KEY);
+    Queue::fake();
+    $user = User::factory()->create();
+    explorerProfile('Directory Enrichment', 'House', 'Office of Representative Example', 'Member office', 'STAFF ASSISTANT');
+
+    Livewire::actingAs($user)
+        ->test(ContactDataIndex::class)
+        ->assertSee('Contact data')
+        ->assertSeeText('1 ready')
+        ->set('instructions', 'Reviewed House and Senate conventions.')
+        ->call('generateEmailGuesses')
+        ->assertHasNoErrors()
+        ->assertSee('Enrichment queued');
+
+    Queue::assertPushed(
+        EnrichCongressionalContactData::class,
+        fn (EnrichCongressionalContactData $job) => $job->userId === $user->id
+            && $job->instructions === 'Reviewed House and Senate conventions.'
+    );
+    Cache::forget(EnrichCongressionalContactData::CACHE_KEY);
 });
 
 test('congress staff detail shows role history and source evidence', function () {
