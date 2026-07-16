@@ -24,6 +24,8 @@ class CongressionalOutreachDraft extends Model
         'schedule_status',
         'next_send_at',
         'last_batch_at',
+        'auto_approve_provisional',
+        'daily_send_cap',
         'status',
         'snapshot_at',
         'reviewed_at',
@@ -39,6 +41,8 @@ class CongressionalOutreachDraft extends Model
             'last_batch_at' => 'datetime',
             'batch_size' => 'integer',
             'cadence_value' => 'integer',
+            'auto_approve_provisional' => 'boolean',
+            'daily_send_cap' => 'integer',
             'metadata' => 'array',
         ];
     }

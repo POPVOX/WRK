@@ -61,6 +61,10 @@ class OutreachDraftShow extends Component
 
     public string $nextSendAt = '';
 
+    public bool $autoApproveProvisional = false;
+
+    public int $dailySendCap = 50;
+
     public bool $canManage = false;
 
     public function mount(CongressionalOutreachDraft $draft): void
@@ -81,6 +85,8 @@ class OutreachDraftShow extends Component
         $this->cadenceUnit = (string) $draft->cadence_unit;
         $this->timezone = (string) ($draft->timezone ?: Auth::user()->timezone ?: 'America/New_York');
         $this->nextSendAt = $draft->next_send_at?->copy()->setTimezone($this->timezone)->format('Y-m-d\TH:i') ?? now($this->timezone)->format('Y-m-d\TH:i');
+        $this->autoApproveProvisional = (bool) $draft->auto_approve_provisional;
+        $this->dailySendCap = max(1, (int) $draft->daily_send_cap);
         $this->previewRecipientId = $draft->recipients()
             ->orderByRaw("CASE review_status WHEN 'approved' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END")
             ->value('id');
@@ -338,6 +344,8 @@ class OutreachDraftShow extends Component
                 'cadence_value' => $validated['cadenceValue'],
                 'cadence_unit' => $validated['cadenceUnit'],
                 'timezone' => $validated['timezone'],
+                'auto_approve_provisional' => $validated['autoApproveProvisional'],
+                'daily_send_cap' => $validated['dailySendCap'],
             ]);
             $result = $batches->sendNextBatch($this->draft->fresh(), Auth::user());
             $this->draft->refresh();
@@ -365,6 +373,8 @@ class OutreachDraftShow extends Component
             'cadence_value' => $validated['cadenceValue'],
             'cadence_unit' => $validated['cadenceUnit'],
             'timezone' => $validated['timezone'],
+            'auto_approve_provisional' => $validated['autoApproveProvisional'],
+            'daily_send_cap' => $validated['dailySendCap'],
             'schedule_status' => $validated['deliveryMode'] === 'manual' ? 'inactive' : $this->draft->schedule_status,
         ]);
         $this->draft->refresh();
@@ -397,6 +407,8 @@ class OutreachDraftShow extends Component
                 'cadence_value' => $validated['cadenceValue'],
                 'cadence_unit' => $validated['cadenceUnit'],
                 'timezone' => $validated['timezone'],
+                'auto_approve_provisional' => $validated['autoApproveProvisional'],
+                'daily_send_cap' => $validated['dailySendCap'],
             ]);
             $firstSendAt = Carbon::parse($validated['nextSendAt'], $validated['timezone'])->utc();
             $schedules->activate($this->draft->fresh(), Auth::user(), $firstSendAt);
@@ -527,6 +539,8 @@ class OutreachDraftShow extends Component
             'cadenceValue' => ['required', 'integer', 'min:1', 'max:1000'],
             'cadenceUnit' => ['required', 'in:minute,hour,day,week'],
             'timezone' => ['required', 'timezone'],
+            'autoApproveProvisional' => ['boolean'],
+            'dailySendCap' => ['required', 'integer', 'min:1', 'max:50000'],
         ];
     }
 
@@ -610,6 +624,7 @@ class OutreachDraftShow extends Component
             'availableViewers' => $availableViewers,
             'sendingSummary' => $sendingSummary,
             'analytics' => $analytics,
+            'autoApprovableCount' => $workbench->autoApprovableProvisionalCount($this->draft),
             'gmailConnected' => $this->canManage && $gmail->isConnected(Auth::user()),
             'reasonLabels' => [
                 'inactive_profile' => 'No current position',

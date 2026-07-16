@@ -26,9 +26,9 @@ class CongressionalOutreachBatchService
     /**
      * @return array{campaign:OutreachCampaign,queued:int}
      */
-    public function sendNextBatch(CongressionalOutreachDraft $draft, User $user): array
+    public function sendNextBatch(CongressionalOutreachDraft $draft, User $user, ?int $maximumRecipients = null): array
     {
-        $campaign = DB::transaction(function () use ($draft, $user): OutreachCampaign {
+        $campaign = DB::transaction(function () use ($draft, $user, $maximumRecipients): OutreachCampaign {
             $lockedDraft = CongressionalOutreachDraft::query()->lockForUpdate()->findOrFail($draft->id);
             if ($lockedDraft->user_id !== $user->id) {
                 throw new DomainException('Only the campaign owner can send this outreach.');
@@ -72,6 +72,9 @@ class CongressionalOutreachBatchService
             }
 
             $batchSize = max(1, min((int) $lockedDraft->batch_size, 5000));
+            if ($maximumRecipients !== null) {
+                $batchSize = min($batchSize, max(1, $maximumRecipients));
+            }
             $recipients = $candidates
                 ->reject(fn (CongressionalOutreachDraftRecipient $recipient) => isset($suppressed[$recipient->email_normalized]))
                 ->take($batchSize)

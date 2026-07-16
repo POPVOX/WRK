@@ -56,6 +56,8 @@ class CongressionalOutreachWorkbenchService
             'cadence_value' => $source->cadence_value,
             'cadence_unit' => $source->cadence_unit,
             'timezone' => $source->timezone,
+            'auto_approve_provisional' => $source->auto_approve_provisional,
+            'daily_send_cap' => $source->daily_send_cap,
             'schedule_status' => 'inactive',
             'status' => 'building',
             'metadata' => array_filter([
@@ -174,6 +176,53 @@ class CongressionalOutreachWorkbenchService
         $this->reopen($draft);
 
         return $count;
+    }
+
+    public function autoApprovableProvisionalCount(CongressionalOutreachDraft $draft): int
+    {
+        return $this->autoApprovableProvisionalQuery($draft)->count();
+    }
+
+    public function approveNextProvisional(CongressionalOutreachDraft $draft, int $userId, int $limit): int
+    {
+        return DB::transaction(function () use ($draft, $userId, $limit): int {
+            $recipientIds = $this->autoApprovableProvisionalQuery($draft)
+                ->lockForUpdate()
+                ->limit(max(1, min($limit, 5000)))
+                ->pluck('id');
+
+            if ($recipientIds->isEmpty()) {
+                return 0;
+            }
+
+            $count = CongressionalOutreachDraftRecipient::query()
+                ->whereIn('id', $recipientIds)
+                ->update([
+                    'review_status' => 'approved',
+                    'approved_by' => $userId,
+                    'reviewed_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            $this->reopen($draft);
+
+            return $count;
+        });
+    }
+
+    protected function autoApprovableProvisionalQuery(CongressionalOutreachDraft $draft)
+    {
+        return $draft->recipients()
+            ->where('review_status', 'pending')
+            ->whereNull('exclusion_reason')
+            ->where('eligibility_tier', 'limited')
+            ->where('verification_status', 'unverified')
+            ->whereNotNull('staff_email_id')
+            ->whereNotNull('email_normalized')
+            ->whereHas('profile.currentPosition')
+            ->whereDoesntHave('outreachCampaignRecipients')
+            ->whereNotIn('email_normalized', OutreachEmailSuppression::query()->select('email_normalized'))
+            ->orderBy('id');
     }
 
     public function exclude(CongressionalOutreachDraftRecipient $recipient, int $userId): void
