@@ -1,8 +1,6 @@
 <div @if($draft->status === 'building' || $sendingSummary['active'] > 0) wire:poll.3s @endif class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
     @php
         $snapshotReviewable = in_array($draft->status, ['draft', 'ready'], true);
-        $guessBatch = data_get($draft->metadata, 'email_guess_batch', []);
-        $guessBatchRunning = ($guessBatch['status'] ?? null) === 'queued' && $draft->status === 'building';
     @endphp
     <x-congress-nav />
     <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -34,15 +32,15 @@
             <div class="flex items-start gap-3">
                 <svg class="mt-0.5 h-5 w-5 shrink-0 animate-spin text-indigo-600" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
                 <div>
-                    <p class="font-semibold">{{ $guessBatchRunning ? 'Generating provisional email guesses…' : 'Building the recipient snapshot…' }}</p>
-                    <p class="mt-1 text-indigo-800">{{ $guessBatchRunning ? 'The workbench is applying the saved House and Senate patterns, then it will rebuild the recipient snapshot.' : 'The workbench is resolving addresses and removing duplicates in the background.' }} You can safely leave this page; it will update automatically.</p>
+                    <p class="font-semibold">Building the recipient snapshot…</p>
+                    <p class="mt-1 text-indigo-800">The campaign is resolving the latest contact data, removing duplicates, and applying suppression rules. You can safely leave this page; it will update automatically.</p>
                 </div>
             </div>
         </section>
     @elseif($draft->status === 'failed')
         <section class="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-900" role="alert">
-            <p class="font-semibold">{{ ($guessBatch['status'] ?? null) === 'failed' ? 'The provisional email batch could not be completed.' : 'The recipient snapshot could not be built.' }}</p>
-            <p class="mt-1">No email was sent. {{ ($guessBatch['status'] ?? null) === 'failed' ? 'Review the batch settings below and try it again.' : 'Use “Refresh snapshot” to try again.' }}</p>
+            <p class="font-semibold">The recipient snapshot could not be built.</p>
+            <p class="mt-1">No email was sent. Use “Refresh snapshot” to try again.</p>
         </section>
     @endif
 
@@ -91,61 +89,6 @@
         <section class="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4 text-sm text-indigo-900">
             <p class="font-semibold">View-only campaign shared by {{ $draft->user?->name ?? 'a teammate' }}</p>
             <p class="mt-1">You can inspect recipients, evidence, and personalization previews. Ask the campaign owner to make changes.</p>
-        </section>
-    @endif
-
-    @if($canManage)
-        <section class="app-surface p-5">
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                    <p class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Batch enrichment</p>
-                    <h2 class="mt-1 text-lg font-semibold text-gray-900">Generate provisional email guesses</h2>
-                    <p class="mt-1 max-w-3xl text-sm text-gray-500">Applies only to recipients with no known address in a member office. Committee and administrative offices are skipped. Every generated address remains provisional and requires individual approval.</p>
-                </div>
-                <div class="shrink-0 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700">
-                    <span class="font-semibold">{{ number_format($emailGuessEstimate['guessable']) }}</span> guessable
-                    <span class="text-gray-400">·</span>
-                    {{ number_format($emailGuessEstimate['house']) }} House
-                    <span class="text-gray-400">·</span>
-                    {{ number_format($emailGuessEstimate['senate']) }} Senate
-                </div>
-            </div>
-
-            @if(($guessBatch['status'] ?? null) === 'completed')
-                <div class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                    Last batch generated <strong>{{ number_format($guessBatch['generated'] ?? 0) }}</strong> provisional addresses and skipped {{ number_format($guessBatch['skipped'] ?? 0) }} records. No email was sent.
-                </div>
-            @endif
-
-            <form wire:submit="generateEmailGuesses" class="mt-4 space-y-4">
-                <div class="grid gap-4 lg:grid-cols-2">
-                    <div>
-                        <label for="batch-house-pattern" class="text-sm font-semibold text-gray-700">House pattern</label>
-                        <input id="batch-house-pattern" type="text" wire:model.defer="batchHousePattern" @disabled($draft->status === 'building') class="mt-1 block w-full rounded-lg border-gray-300 font-mono text-sm disabled:bg-gray-50" />
-                        <p class="mt-1 text-xs text-gray-500">Available fields: <code>@{{first}}</code> and <code>@{{last}}</code>.</p>
-                        @error('batchHousePattern') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <label for="batch-senate-pattern" class="text-sm font-semibold text-gray-700">Senate pattern</label>
-                        <input id="batch-senate-pattern" type="text" wire:model.defer="batchSenatePattern" @disabled($draft->status === 'building') class="mt-1 block w-full rounded-lg border-gray-300 font-mono text-sm disabled:bg-gray-50" />
-                        <p class="mt-1 text-xs text-gray-500">Available fields: <code>@{{first}}</code>, <code>@{{last}}</code>, and <code>@{{senator_last}}</code>.</p>
-                        @error('batchSenatePattern') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                </div>
-                <div>
-                    <label for="batch-instructions" class="text-sm font-semibold text-gray-700">Batch instructions / evidence note</label>
-                    <textarea id="batch-instructions" wire:model.defer="batchInstructions" rows="3" @disabled($draft->status === 'building') class="mt-1 block w-full rounded-lg border-gray-300 text-sm disabled:bg-gray-50"></textarea>
-                    <p class="mt-1 text-xs text-gray-500">These instructions are saved with each guess for traceability. Address generation follows the explicit patterns above.</p>
-                    @error('batchInstructions') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-                <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4">
-                    <p class="text-xs text-gray-500">Generating guesses resets current recipient approvals when the snapshot refreshes.</p>
-                    <button type="submit" wire:loading.attr="disabled" wire:target="generateEmailGuesses" wire:confirm="Generate provisional guesses for up to {{ number_format($emailGuessEstimate['guessable']) }} recipients? Existing recipient approvals will be reset." @disabled($draft->status === 'building' || $emailGuessEstimate['guessable'] === 0) class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
-                        <span wire:loading.remove wire:target="generateEmailGuesses">Generate provisional guesses</span>
-                        <span wire:loading wire:target="generateEmailGuesses">Starting batch…</span>
-                    </button>
-                </div>
-            </form>
         </section>
     @endif
 

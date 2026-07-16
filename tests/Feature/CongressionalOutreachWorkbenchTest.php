@@ -424,9 +424,8 @@ test('email guesses follow source-aware house and senate conventions', function 
         ->and($guesses->guess($compound)['email'])->toBe('taylor_example@vanhollen.senate.gov');
 });
 
-test('owners can queue a traceable provisional guess batch without sending', function () {
+test('campaigns omit contact enrichment while legacy queued enrichment remains safe', function () {
     config()->set('features.congressional_directory_ui', true);
-    Queue::fake();
     $owner = User::factory()->create();
     $house = workbenchProfile('Abbott Olivia H.');
     $house->currentPosition->office->update([
@@ -458,24 +457,8 @@ test('owners can queue a traceable provisional guess batch without sending', fun
 
     Livewire::actingAs($owner)
         ->test(OutreachDraftShow::class, ['draft' => $draft])
-        ->set('batchSenatePattern', '{first}_{last}@{unknown}.senate.gov')
-        ->call('generateEmailGuesses')
-        ->assertHasErrors('batchSenatePattern');
-    Queue::assertNothingPushed();
-
-    Livewire::actingAs($owner)
-        ->test(OutreachDraftShow::class, ['draft' => $draft])
-        ->assertSeeText('2 guessable')
-        ->set('batchInstructions', 'Use the standard conventions for this pilot.')
-        ->call('generateEmailGuesses')
-        ->assertHasNoErrors()
-        ->assertSee('Generating provisional email guesses');
-
-    Queue::assertPushed(
-        GenerateCongressionalEmailGuesses::class,
-        fn (GenerateCongressionalEmailGuesses $job) => $job->draftId === $draft->id
-            && $job->instructions === 'Use the standard conventions for this pilot.'
-    );
+        ->assertDontSee('Generate provisional email guesses')
+        ->assertDontSee('House pattern');
 
     (new GenerateCongressionalEmailGuesses(
         $draft->id,
