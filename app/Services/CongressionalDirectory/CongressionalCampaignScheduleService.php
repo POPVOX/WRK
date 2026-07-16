@@ -3,6 +3,7 @@
 namespace App\Services\CongressionalDirectory;
 
 use App\Models\CongressionalOutreachDraft;
+use App\Models\OutreachCampaignRecipient;
 use App\Models\User;
 use App\Services\GoogleGmailService;
 use DomainException;
@@ -12,6 +13,7 @@ class CongressionalCampaignScheduleService
 {
     public function __construct(
         protected CongressionalOutreachBatchService $batches,
+        protected CongressionalOutreachWorkbenchService $workbench,
         protected GoogleGmailService $gmail
     ) {}
 
@@ -26,7 +28,14 @@ class CongressionalCampaignScheduleService
         if (! trim((string) $draft->subject) || ! trim((string) $draft->body_text)) {
             throw new DomainException('Add and save a subject and message before activating delivery.');
         }
-        if (! $draft->recipients()->where('review_status', 'approved')->whereNull('exclusion_reason')->exists()) {
+        $hasApprovedRecipient = $draft->recipients()
+            ->where('review_status', 'approved')
+            ->whereNull('exclusion_reason')
+            ->whereDoesntHave('outreachCampaignRecipients')
+            ->exists();
+        $hasAutomaticRecipient = $draft->auto_approve_provisional
+            && $this->workbench->autoApprovableProvisionalCount($draft) > 0;
+        if (! $hasApprovedRecipient && ! $hasAutomaticRecipient) {
             throw new DomainException('Approve at least one recipient before activating delivery.');
         }
         if (! $this->gmail->isConnected($user)) {
@@ -79,6 +88,23 @@ class CongressionalCampaignScheduleService
 
                     continue;
                 }
+
+                $dailyRemaining = $this->dailyCapacityRemaining($draft);
+                if ($dailyRemaining < 1) {
+                    $draft->update(['next_send_at' => $this->nextDailyWindow($draft)]);
+                    $summary['deferred']++;
+
+                    continue;
+                }
+
+                if ($draft->auto_approve_provisional) {
+                    $this->workbench->approveNextProvisional(
+                        $draft,
+                        $draft->user_id,
+                        min((int) $draft->batch_size, $dailyRemaining)
+                    );
+                    $batchSummary = $this->batches->summary($draft->fresh());
+                }
                 if ($batchSummary['approved_unsent'] < 1) {
                     $draft->update(['schedule_status' => 'completed', 'next_send_at' => null]);
                     $summary['completed']++;
@@ -89,7 +115,7 @@ class CongressionalCampaignScheduleService
                     throw new DomainException('The campaign owner’s Gmail connection is unavailable.');
                 }
 
-                $this->batches->sendNextBatch($draft, $draft->user);
+                $this->batches->sendNextBatch($draft, $draft->user, $dailyRemaining);
                 $summary['processed']++;
                 $draft->refresh();
                 $draft->update([
@@ -126,5 +152,27 @@ class CongressionalCampaignScheduleService
             'week' => now()->addWeeks($value),
             default => now()->addHours($value),
         };
+    }
+
+    public function dailyCapacityRemaining(CongressionalOutreachDraft $draft): int
+    {
+        $timezone = $draft->timezone ?: 'America/New_York';
+        $localNow = now($timezone);
+        $start = $localNow->copy()->startOfDay()->utc();
+        $end = $localNow->copy()->endOfDay()->utc();
+        $scheduledToday = OutreachCampaignRecipient::query()
+            ->whereHas('campaign', fn ($query) => $query
+                ->where('congressional_outreach_draft_id', $draft->id))
+            ->whereBetween('created_at', [$start, $end])
+            ->count();
+
+        return max(0, max(1, (int) $draft->daily_send_cap) - $scheduledToday);
+    }
+
+    public function nextDailyWindow(CongressionalOutreachDraft $draft): Carbon
+    {
+        $timezone = $draft->timezone ?: 'America/New_York';
+
+        return now($timezone)->addDay()->startOfDay()->setHour(9)->utc();
     }
 }

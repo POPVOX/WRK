@@ -34,6 +34,7 @@ use App\Services\GoogleGmailService;
 use App\Services\Outreach\OutreachCampaignService;
 use App\Services\Outreach\OutreachSuppressionService;
 use App\Services\Outreach\OutreachTrackingService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -752,6 +753,68 @@ test('recurring congressional schedules queue configured batches and advance the
         ->and($draft->fresh()->schedule_status)->toBe('active')
         ->and($draft->fresh()->next_send_at)->toBeGreaterThan(now()->addMinutes(50))
         ->and(OutreachCampaign::query()->sole()->recipients()->count())->toBe(2);
+});
+
+test('recurring schedules auto approve safe provisional recipients and enforce the daily cap', function () {
+    Queue::fake();
+    Carbon::setTestNow('2026-07-16 13:00:00 UTC');
+    $owner = User::factory()->create(['google_access_token' => 'automatic-rule-token']);
+    $evidence = app(CongressionalEmailEvidenceService::class);
+    $profiles = collect(range(1, 4))->map(function (int $index) use ($evidence, $owner) {
+        $profile = workbenchProfile(sprintf('Automatic Person %02d', $index));
+        $evidence->addAddress($profile, "automatic{$index}@mail.house.gov", 'guessed', $owner->id);
+
+        return $profile;
+    })->all();
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($owner, $profiles), $owner, 'Automatic batches');
+    $workbench->updateMessage($draft, 'Hello', 'A useful resource.');
+    $draft->update([
+        'batch_size' => 2,
+        'delivery_mode' => 'recurring',
+        'cadence_value' => 1,
+        'cadence_unit' => 'hour',
+        'timezone' => 'America/New_York',
+        'auto_approve_provisional' => true,
+        'daily_send_cap' => 3,
+    ]);
+    $schedules = app(CongressionalCampaignScheduleService::class);
+    $schedules->activate($draft->fresh(), $owner, now()->subMinute());
+
+    $firstResult = $schedules->runDue();
+    $firstCampaign = OutreachCampaign::query()->sole();
+
+    expect($firstResult['processed'])->toBe(1)
+        ->and($firstCampaign->recipients()->count())->toBe(2)
+        ->and($draft->recipients()->where('review_status', 'approved')->count())->toBe(2)
+        ->and($schedules->dailyCapacityRemaining($draft->fresh()))->toBe(1);
+
+    $firstCampaign->recipients()->update(['status' => 'sent', 'sent_at' => now()]);
+    app(\App\Services\Outreach\OutreachCampaignService::class)->finalizeCampaignIfComplete($firstCampaign->id);
+    $draft->fresh()->update(['next_send_at' => now()->subMinute()]);
+    $secondResult = $schedules->runDue();
+    $secondCampaign = OutreachCampaign::query()->latest('id')->firstOrFail();
+
+    expect($secondResult['processed'])->toBe(1)
+        ->and($secondCampaign->recipients()->count())->toBe(1)
+        ->and($draft->recipients()->where('review_status', 'approved')->count())->toBe(3)
+        ->and($schedules->dailyCapacityRemaining($draft->fresh()))->toBe(0);
+
+    $secondCampaign->recipients()->update(['status' => 'sent', 'sent_at' => now()]);
+    app(\App\Services\Outreach\OutreachCampaignService::class)->finalizeCampaignIfComplete($secondCampaign->id);
+    expect($secondCampaign->fresh()->status)->toBe('sent')
+        ->and($draft->fresh()->schedule_status)->toBe('active');
+    $draft->fresh()->update(['next_send_at' => now()->subMinute()]);
+    expect($draft->fresh()->schedule_status)->toBe('active')
+        ->and($draft->fresh()->next_send_at)->toBeLessThan(now());
+    $cappedResult = $schedules->runDue();
+
+    expect($cappedResult['deferred'])->toBe(1)
+        ->and(OutreachCampaign::query()->count())->toBe(2)
+        ->and($draft->fresh()->next_send_at->setTimezone('America/New_York')->format('Y-m-d H:i'))->toBe('2026-07-17 09:00')
+        ->and($draft->recipients()->where('review_status', 'pending')->count())->toBe(1);
+
+    Carbon::setTestNow();
 });
 
 test('campaign builder saves audience message and configurable delivery rules', function () {

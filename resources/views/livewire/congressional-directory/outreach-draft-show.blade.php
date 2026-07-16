@@ -239,6 +239,17 @@
                         <div></div><div></div>
                     @endif
                     <button type="submit" @disabled($draft->schedule_status === 'active') class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40">Save delivery settings</button>
+                    @if($deliveryMode === 'recurring')
+                        <div class="rounded-xl border border-indigo-200 bg-indigo-50 p-4 md:col-span-2 xl:col-span-5">
+                            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem] lg:items-end">
+                                <label class="flex items-start gap-3 text-sm text-indigo-950">
+                                    <input type="checkbox" wire:model.live="autoApproveProvisional" @disabled($draft->schedule_status === 'active') class="mt-1 rounded border-indigo-300 text-indigo-600 disabled:opacity-50">
+                                    <span><strong class="block">Automatically approve the next provisional recipients</strong><span class="mt-1 block text-indigo-800">Only current staff with an unsuppressed provisional address are eligible. Previously sent recipients are always skipped. {{ number_format($autoApprovableCount) }} currently match.</span></span>
+                                </label>
+                                <label class="text-sm font-semibold text-indigo-950">Maximum per day<input type="number" min="1" max="50000" wire:model.defer="dailySendCap" @disabled($draft->schedule_status === 'active') class="mt-1 block w-full rounded-lg border-indigo-300 bg-white disabled:bg-indigo-100">@error('dailySendCap')<span class="mt-1 block text-xs text-red-600">{{ $message }}</span>@enderror</label>
+                            </div>
+                        </div>
+                    @endif
                 </form>
                 @if($deliveryMode !== 'manual')
                     <div class="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
@@ -250,13 +261,13 @@
                             @elseif($draft->schedule_status === 'paused')
                                 <button type="button" wire:click="resumeSchedule" class="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">Resume now</button>
                             @else
-                                <button type="button" wire:click="activateSchedule" wire:confirm="Activate this campaign's delivery schedule? Approved recipients will begin sending at the selected time." @disabled(!$gmailConnected || !$snapshotReviewable || $sendingSummary['approved_unsent'] === 0) class="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">Activate delivery</button>
+                                <button type="button" wire:click="activateSchedule" wire:confirm="Activate this campaign's delivery schedule? Eligible recipients will begin sending at the selected time under the saved approval and daily-cap rules." @disabled(!$gmailConnected || !$snapshotReviewable || ($sendingSummary['approved_unsent'] === 0 && (!$autoApproveProvisional || $autoApprovableCount === 0))) class="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">Activate delivery</button>
                             @endif
                         </div>
                     </div>
                 @endif
                 @if($draft->schedule_status === 'active')
-                    <div class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"><strong>Automation active.</strong> Next scheduler run: {{ $draft->next_send_at?->setTimezone($draft->timezone)->format('M j, Y g:i A T') }}. It will send up to {{ number_format($draft->batch_size) }} {{ $draft->delivery_mode === 'recurring' ? 'and repeat every '.$draft->cadence_value.' '.Str::plural($draft->cadence_unit, $draft->cadence_value) : 'once' }}.</div>
+                    <div class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"><strong>Automation active.</strong> Next scheduler run: {{ $draft->next_send_at?->setTimezone($draft->timezone)->format('M j, Y g:i A T') }}. It will send up to {{ number_format($draft->batch_size) }} {{ $draft->delivery_mode === 'recurring' ? 'and repeat every '.$draft->cadence_value.' '.Str::plural($draft->cadence_unit, $draft->cadence_value) : 'once' }}. @if($draft->auto_approve_provisional) It will approve matching provisional recipients just before each batch and will not schedule more than {{ number_format($draft->daily_send_cap) }} messages per day. @endif</div>
                 @elseif($draft->schedule_status === 'paused')
                     <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><strong>Automation paused.</strong> No new batches will start until you resume it.</div>
                 @endif
