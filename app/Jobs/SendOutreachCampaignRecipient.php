@@ -64,12 +64,14 @@ class SendOutreachCampaignRecipient implements ShouldQueue
 
         try {
             $metadata = $recipient->metadata ?? [];
+            $trackedHtml = app(\App\Services\Outreach\OutreachTrackingService::class)
+                ->trackedHtml($recipient, (string) ($metadata['body_text'] ?? $campaign->body_text ?? ''));
             $result = $gmailService->sendMessage(
                 $user,
                 $recipient->email,
                 (string) ($metadata['subject'] ?? $campaign->subject ?? ''),
                 (string) ($metadata['body_text'] ?? $campaign->body_text ?? ''),
-                []
+                ['html_body' => $trackedHtml]
             );
 
             $recipient->update([
@@ -78,6 +80,8 @@ class SendOutreachCampaignRecipient implements ShouldQueue
                 'sent_at' => now(),
                 'error_message' => null,
             ]);
+
+            app(\App\Services\ContactActivityService::class)->recordCampaignSend($recipient->fresh());
 
             try {
                 $staffEmailId = (int) ($metadata['congressional_staff_email_id'] ?? 0);

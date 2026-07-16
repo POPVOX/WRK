@@ -293,6 +293,37 @@
                     </div>
                 </form>
 
+                {{-- Automatic correspondence timeline --}}
+                <div class="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <div class="flex items-end justify-between gap-4">
+                        <div>
+                            <h4 class="font-semibold text-gray-900 dark:text-white">Correspondence activity</h4>
+                            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Campaign sends and matched Gmail messages are logged automatically.</p>
+                        </div>
+                    </div>
+                    <div class="mt-3 overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        @forelse($automaticActivities as $activity)
+                            <article class="p-4">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div class="min-w-0">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">{{ Str::headline($activity->activity_type) }}</span>
+                                            @if($activity->direction)<span class="text-xs text-gray-500 dark:text-gray-400">{{ Str::headline($activity->direction) }}</span>@endif
+                                            <span class="text-xs text-gray-400">via {{ Str::headline($activity->source_type) }}</span>
+                                        </div>
+                                        @if($activity->subject)<p class="mt-2 font-medium text-gray-900 dark:text-white">{{ $activity->subject }}</p>@endif
+                                        @if($activity->summary)<p class="mt-1 text-sm text-gray-600 dark:text-gray-400">{{ $activity->summary }}</p>@endif
+                                        @if($activity->campaignRecipient?->campaign)<p class="mt-1 text-xs text-gray-500">Campaign: {{ $activity->campaignRecipient->campaign->name }}</p>@endif
+                                    </div>
+                                    <time class="shrink-0 text-xs text-gray-500">{{ $activity->occurred_at?->format('M j, Y g:i A') }}</time>
+                                </div>
+                            </article>
+                        @empty
+                            <p class="p-6 text-sm text-gray-500 dark:text-gray-400">No automatic correspondence has been matched to this contact yet.</p>
+                        @endforelse
+                    </div>
+                </div>
+
                 {{-- Interaction Panel --}}
                 <div class="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
                     <div

@@ -125,6 +125,62 @@
         </div>
     </section>
 
+    <section class="app-surface overflow-hidden">
+        <div class="grid lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <div>
+                <div class="border-b border-gray-200 px-5 py-4">
+                    <h2 class="font-semibold text-gray-900">Activity timeline</h2>
+                    <p class="mt-1 text-sm app-muted">Campaign emails and Gmail correspondence are logged automatically. Meetings appear when this profile is linked to a contact.</p>
+                </div>
+                <div class="divide-y divide-gray-200">
+                    @forelse($profile->contactActivities as $activity)
+                        <article class="px-5 py-4">
+                            <div class="flex items-start justify-between gap-4">
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">{{ Str::headline($activity->activity_type) }}</span>
+                                        @if($activity->direction)<span class="text-xs text-gray-500">{{ Str::headline($activity->direction) }}</span>@endif
+                                        @if($activity->source_type !== 'manual')<span class="text-xs text-gray-400">via {{ Str::headline($activity->source_type) }}</span>@endif
+                                    </div>
+                                    @if($activity->subject)<p class="mt-2 font-medium text-gray-900">{{ $activity->subject }}</p>@endif
+                                    @if($activity->summary)<p class="mt-1 text-sm text-gray-600">{{ $activity->summary }}</p>@endif
+                                    @if($activity->campaignRecipient?->campaign)<p class="mt-1 text-xs text-gray-500">Campaign: {{ $activity->campaignRecipient->campaign->name }}</p>@endif
+                                </div>
+                                <time class="shrink-0 text-xs text-gray-500">{{ $activity->occurred_at?->format('M j, Y g:i A') }}</time>
+                            </div>
+                        </article>
+                    @empty
+                        <div class="px-5 py-10 text-center text-sm text-gray-500">No correspondence has been logged yet.</div>
+                    @endforelse
+
+                    @foreach($profile->person?->meetings ?? collect() as $meeting)
+                        <article class="px-5 py-4">
+                            <div class="flex items-start justify-between gap-4">
+                                <div><span class="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">Meeting</span><a href="{{ route('meetings.show', $meeting) }}" wire:navigate class="mt-2 block font-medium text-gray-900 hover:text-indigo-700">{{ $meeting->title }}</a></div>
+                                <time class="shrink-0 text-xs text-gray-500">{{ $meeting->meeting_date?->format('M j, Y') }}</time>
+                            </div>
+                        </article>
+                    @endforeach
+                </div>
+            </div>
+
+            <form wire:submit="addActivity" class="space-y-3 border-t border-gray-200 bg-gray-50 p-5 lg:border-l lg:border-t-0">
+                <div><h3 class="font-semibold text-gray-900">Log activity</h3><p class="mt-1 text-xs text-gray-500">Add a note, call, meeting, email, or LinkedIn interaction.</p></div>
+                <div class="grid grid-cols-2 gap-2">
+                    <select wire:model="activityType" class="rounded-lg border-gray-300 text-sm">
+                        @foreach(['note' => 'Note', 'email' => 'Email', 'meeting' => 'Meeting', 'call' => 'Call', 'linkedin' => 'LinkedIn', 'other' => 'Other'] as $value => $label)<option value="{{ $value }}">{{ $label }}</option>@endforeach
+                    </select>
+                    <select wire:model="activityDirection" class="rounded-lg border-gray-300 text-sm"><option value="">No direction</option><option value="inbound">Inbound</option><option value="outbound">Outbound</option></select>
+                </div>
+                <input type="text" wire:model="activitySubject" class="block w-full rounded-lg border-gray-300 text-sm" placeholder="Subject (optional)">
+                <textarea wire:model="activitySummary" rows="4" class="block w-full rounded-lg border-gray-300 text-sm" placeholder="What happened?"></textarea>
+                @error('activitySummary')<p class="text-xs text-red-600">{{ $message }}</p>@enderror
+                <input type="datetime-local" wire:model="activityOccurredAt" class="block w-full rounded-lg border-gray-300 text-sm">
+                <button type="submit" class="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Log activity</button>
+            </form>
+        </div>
+    </section>
+
     <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section class="app-surface overflow-hidden">
             <div class="border-b border-gray-200 px-5 py-4">

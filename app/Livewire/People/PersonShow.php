@@ -436,6 +436,10 @@ class PersonShow extends Component
             : collect();
 
         $interactions = $this->person->interactions()->with('user')->limit(25)->get();
+        $automaticActivities = $this->person->contactActivities()
+            ->with(['user', 'campaignRecipient.campaign', 'meeting'])
+            ->limit(50)
+            ->get();
         $owners = User::orderBy('name')->get(['id', 'name']);
 
         return view('livewire.people.person-show', [
@@ -446,6 +450,7 @@ class PersonShow extends Component
             'projects' => $projects,
             'projectResults' => $projectResults,
             'interactions' => $interactions,
+            'automaticActivities' => $automaticActivities,
             'owners' => $owners,
         ])->title($this->person->name.' - Contact');
     }

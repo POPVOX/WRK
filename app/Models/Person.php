@@ -106,6 +106,11 @@ class Person extends Model
         return $this->hasMany(PersonInteraction::class)->orderByDesc('occurred_at');
     }
 
+    public function contactActivities(): HasMany
+    {
+        return $this->hasMany(ContactActivity::class)->orderByDesc('occurred_at');
+    }
+
     /**
      * Get the meetings this person attended.
      */

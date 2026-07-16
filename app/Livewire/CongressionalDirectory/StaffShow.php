@@ -4,9 +4,11 @@ namespace App\Livewire\CongressionalDirectory;
 
 use App\Models\CongressionalStaffEmail;
 use App\Models\CongressionalStaffProfile;
+use App\Models\ContactActivity;
 use App\Models\OutreachEmailSuppression;
 use App\Services\CongressionalDirectory\CongressionalEmailEligibilityService;
 use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -25,6 +27,16 @@ class StaffShow extends Component
     public string $emailSourceUrl = '';
 
     public string $emailSourceNotes = '';
+
+    public string $activityType = 'note';
+
+    public string $activityDirection = '';
+
+    public string $activitySubject = '';
+
+    public string $activitySummary = '';
+
+    public string $activityOccurredAt = '';
 
     public function mount(CongressionalStaffProfile $profile): void
     {
@@ -84,6 +96,34 @@ class StaffShow extends Component
         );
     }
 
+    public function addActivity(): void
+    {
+        $validated = $this->validate([
+            'activityType' => ['required', Rule::in(['email', 'meeting', 'call', 'note', 'linkedin', 'other'])],
+            'activityDirection' => ['nullable', Rule::in(['', 'inbound', 'outbound'])],
+            'activitySubject' => ['nullable', 'string', 'max:255'],
+            'activitySummary' => ['required', 'string', 'max:5000'],
+            'activityOccurredAt' => ['nullable', 'date'],
+        ]);
+
+        ContactActivity::query()->create([
+            'person_id' => $this->profile->person_id,
+            'congressional_staff_profile_id' => $this->profile->id,
+            'user_id' => auth()->id(),
+            'activity_type' => $validated['activityType'],
+            'direction' => $validated['activityDirection'] ?: null,
+            'subject' => trim($validated['activitySubject']) ?: null,
+            'summary' => trim($validated['activitySummary']),
+            'source_type' => 'manual',
+            'source_key' => hash('sha256', 'manual-staff-activity|'.$this->profile->id.'|'.Str::uuid()),
+            'occurred_at' => $validated['activityOccurredAt'] ?: now(),
+        ]);
+
+        $this->reset(['activityDirection', 'activitySubject', 'activitySummary', 'activityOccurredAt']);
+        $this->activityType = 'note';
+        $this->dispatch('notify', type: 'success', message: 'Activity logged on this staff profile.');
+    }
+
     protected function staffEmail(int $staffEmailId): CongressionalStaffEmail
     {
         return $this->profile->emails()->findOrFail($staffEmailId);
@@ -105,6 +145,10 @@ class StaffShow extends Component
                 ->with(['events' => fn ($query) => $query->latest('occurred_at')->limit(10)])
                 ->orderByDesc('is_primary')
                 ->orderBy('email_normalized'),
+            'contactActivities' => fn ($query) => $query
+                ->with(['user', 'campaignRecipient.campaign', 'meeting'])
+                ->limit(50),
+            'person.meetings' => fn ($query) => $query->orderByDesc('meeting_date')->limit(10),
         ]);
 
         return view('livewire.congressional-directory.staff-show', [

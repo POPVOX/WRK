@@ -73,6 +73,11 @@ class CongressionalStaffProfile extends Model
         return $this->hasMany(CongressionalStaffEmail::class, 'profile_id');
     }
 
+    public function contactActivities(): HasMany
+    {
+        return $this->hasMany(ContactActivity::class, 'congressional_staff_profile_id')->orderByDesc('occurred_at');
+    }
+
     public function staffLists(): BelongsToMany
     {
         return $this->belongsToMany(

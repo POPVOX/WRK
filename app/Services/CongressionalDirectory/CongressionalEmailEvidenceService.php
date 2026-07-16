@@ -174,6 +174,18 @@ class CongressionalEmailEvidenceService
                 return $event;
             }
 
+            if ($campaignRecipientId) {
+                $recipientUpdates = match ($eventType) {
+                    'human_reply' => ['replied_at' => $occurredAt],
+                    'hard_bounce' => ['bounced_at' => $occurredAt],
+                    'unsubscribed', 'newsletter_unsubscribed' => ['unsubscribed_at' => $occurredAt],
+                    default => [],
+                };
+                if ($recipientUpdates !== []) {
+                    OutreachCampaignRecipient::query()->whereKey($campaignRecipientId)->update($recipientUpdates);
+                }
+            }
+
             $updates = match ($eventType) {
                 'observed' => in_array($staffEmail->verification_status, ['unverified', 'not_bounced', 'sourced'], true)
                     ? ['verification_status' => 'observed', 'last_observed_at' => $occurredAt]
