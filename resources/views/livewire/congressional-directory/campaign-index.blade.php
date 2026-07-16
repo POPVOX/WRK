@@ -16,7 +16,12 @@
                 $isOwner = $campaign->user_id === auth()->id();
                 $total = max(1, (int) $campaign->recipients_count);
                 $progress = min(100, round(($campaign->sent_recipients_count / $total) * 100));
-                $state = $campaign->schedule_status === 'active' ? 'sending' : ($campaign->schedule_status === 'completed' ? 'completed' : 'draft');
+                $state = match ($campaign->schedule_status) {
+                    'active' => 'sending',
+                    'completed' => 'completed',
+                    'paused' => 'paused',
+                    default => 'draft',
+                };
             @endphp
 
             @if($state === 'completed')
@@ -29,7 +34,7 @@
                 <article class="app-surface p-5" wire:key="campaign-{{ $campaign->id }}">
                     <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_15rem]">
                         <div class="min-w-0">
-                            <p class="desk-section-label {{ $state === 'sending' ? '!text-[#3b7a45]' : '!text-[#8a6d1f]' }}">{{ $state === 'sending' ? '● Sending' : '◐ Draft' }}</p>
+                            <p class="desk-section-label {{ $state === 'sending' ? '!text-[#3b7a45]' : '!text-[#8a6d1f]' }}">{{ $state === 'sending' ? '● Sending' : ($state === 'paused' ? 'Ⅱ Paused' : '◐ Draft') }}</p>
                             <a href="{{ route('congress.outreach.show', $campaign) }}" wire:navigate class="desk-display mt-2 block text-2xl font-semibold hover:text-[#8a4b2d]">{{ $campaign->name }}</a>
                             <p class="mt-1 text-sm text-[#5c574d]">{{ $campaign->subject ?: 'Subject and message still need drafting.' }}</p>
                             <p class="desk-meta mt-2">Audience: {{ $campaign->staffList->name }} · {{ number_format($campaign->approved_recipients_count) }} approved of {{ number_format($campaign->recipients_count) }} recipients</p>
@@ -41,6 +46,9 @@
                             </div>
                             <div class="desk-toolbar justify-end">
                                 @if($campaign->sent_recipients_count > 0)<a href="{{ route('congress.outreach.analytics', $campaign) }}" wire:navigate class="desk-button-secondary">Analytics</a>@endif
+                                @if($isOwner && $campaign->schedule_status === 'active')
+                                    <button type="button" wire:click="pauseCampaign({{ $campaign->id }})" wire:confirm="Pause this campaign? No new automated batches will start until you resume it. A batch already in progress may finish." wire:loading.attr="disabled" class="desk-button-secondary !border-[#b33a2b] !text-[#b33a2b]">Pause campaign</button>
+                                @endif
                                 <a href="{{ route('congress.outreach.show', $campaign) }}" wire:navigate class="desk-button-primary">{{ $isOwner ? ($state === 'sending' ? 'Manage' : 'Edit') : 'View' }}</a>
                             </div>
                         </div>
@@ -48,7 +56,7 @@
                     @if($state === 'sending')
                         <div class="mt-5 h-1.5 overflow-hidden rounded-full bg-[#f0eadd]" aria-label="{{ $progress }} percent sent"><div class="h-full bg-[#8a4b2d]" style="width: {{ $progress }}%"></div></div>
                     @else
-                        <p class="mt-4 border-t border-[#e4ddd0] pt-3 text-xs text-[#8a6d1f]">{{ $campaign->approved_recipients_count === 0 ? 'Blocked: approve recipients before scheduling.' : 'Ready for message review and delivery settings.' }}</p>
+                        <p class="mt-4 border-t border-[#e4ddd0] pt-3 text-xs text-[#8a6d1f]">{{ $state === 'paused' ? 'Paused: no new batches will start until an owner resumes delivery.' : ($campaign->approved_recipients_count === 0 ? 'Blocked: approve recipients before scheduling.' : 'Ready for message review and delivery settings.') }}</p>
                     @endif
                 </article>
             @endif

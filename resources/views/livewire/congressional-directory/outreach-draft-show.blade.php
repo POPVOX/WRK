@@ -7,6 +7,11 @@
         <x-slot:actions>
         @if($canManage)
             <div class="flex flex-wrap gap-2">
+                @if($draft->schedule_status === 'active')
+                    <button type="button" wire:click="pauseSchedule" wire:confirm="Pause this campaign? No new automated batches will start until you resume it. A batch already in progress may finish." wire:loading.attr="disabled" class="desk-button-secondary !border-[#b33a2b] !text-[#b33a2b]">Pause campaign</button>
+                @elseif($draft->schedule_status === 'paused')
+                    <span class="inline-flex items-center px-2 text-sm font-semibold text-[#8a6d1f]">Ⅱ Campaign paused</span>
+                @endif
                 <button type="button" wire:click="refreshSnapshot" wire:confirm="Refresh from the staff list? This resets all recipient approvals and exclusions." @disabled($draft->status === 'building') class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60">
                     {{ $draft->status === 'building' ? 'Building snapshot…' : 'Refresh snapshot' }}
                 </button>
@@ -254,7 +259,7 @@
                         <label class="text-sm font-semibold text-gray-700">Timezone<input type="text" wire:model.defer="timezone" @disabled($draft->schedule_status === 'active') class="mt-1 block w-full rounded-lg border-gray-300 disabled:bg-gray-50" placeholder="America/New_York"></label>
                         <div class="flex flex-wrap gap-2">
                             @if($draft->schedule_status === 'active')
-                                <button type="button" wire:click="pauseSchedule" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100">Pause automation</button>
+                                <button type="button" wire:click="pauseSchedule" wire:confirm="Pause this campaign? No new automated batches will start until you resume it. A batch already in progress may finish." class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100">Pause campaign</button>
                             @elseif($draft->schedule_status === 'paused')
                                 <button type="button" wire:click="resumeSchedule" class="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">Resume now</button>
                             @else

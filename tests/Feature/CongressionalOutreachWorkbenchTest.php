@@ -755,6 +755,39 @@ test('recurring congressional schedules queue configured batches and advance the
         ->and(OutreachCampaign::query()->sole()->recipients()->count())->toBe(2);
 });
 
+test('campaign owners can pause active delivery from the campaign list and detail header', function () {
+    config()->set('features.congressional_directory_ui', true);
+    $owner = User::factory()->create();
+    $profile = workbenchProfile('Pause Campaign Person');
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($owner, [$profile]), $owner, 'Pause campaign test');
+    $draft->update([
+        'delivery_mode' => 'recurring',
+        'schedule_status' => 'active',
+        'next_send_at' => now()->addHour(),
+    ]);
+
+    Livewire::actingAs($owner)
+        ->test(CampaignIndex::class)
+        ->assertSee('Pause campaign')
+        ->call('pauseCampaign', $draft->id)
+        ->assertHasNoErrors();
+
+    expect($draft->fresh()->schedule_status)->toBe('paused')
+        ->and($draft->fresh()->next_send_at)->toBeNull();
+
+    $draft->update(['schedule_status' => 'active', 'next_send_at' => now()->addHour()]);
+
+    Livewire::actingAs($owner)
+        ->test(OutreachDraftShow::class, ['draft' => $draft->fresh()])
+        ->assertSee('Pause campaign')
+        ->call('pauseSchedule')
+        ->assertHasNoErrors();
+
+    expect($draft->fresh()->schedule_status)->toBe('paused')
+        ->and($draft->fresh()->next_send_at)->toBeNull();
+});
+
 test('recurring schedules auto approve safe provisional recipients and enforce the daily cap', function () {
     Queue::fake();
     Carbon::setTestNow('2026-07-16 13:00:00 UTC');
