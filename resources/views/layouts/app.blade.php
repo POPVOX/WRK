@@ -26,10 +26,8 @@
         $coreNav = [
             ['label' => 'WRKspace', 'route' => 'dashboard', 'active' => ['dashboard'], 'badge' => null],
             ['label' => 'Needs You', 'route' => 'needs-you.index', 'active' => ['needs-you.*'], 'badge' => null],
-            ['label' => 'Intelligence', 'route' => 'intelligence.index', 'active' => ['intelligence.index', 'intelligence.agents', 'intelligence.create', 'intelligence.audit'], 'badge' => 'AI'],
             ['label' => 'Files', 'route' => 'files.index', 'active' => ['files.index', 'intelligence.files'], 'badge' => null],
             ['label' => 'Inbox', 'route' => 'communications.inbox', 'active' => ['communications.inbox'], 'badge' => null],
-            ['label' => 'Notifications', 'route' => 'notifications.index', 'active' => ['notifications.index'], 'badge' => null],
             ['label' => 'Projects', 'route' => 'projects.index', 'active' => ['projects.*'], 'badge' => null],
             ['label' => 'Meetings', 'route' => 'meetings.index', 'active' => ['meetings.*'], 'badge' => null],
             ['label' => 'Travel', 'route' => 'travel.index', 'active' => ['travel.*'], 'badge' => null],
@@ -39,7 +37,6 @@
         $orgNav = [
             ['label' => 'Contacts', 'route' => 'contacts.index', 'active' => ['contacts.*', 'people.*'], 'badge' => null],
             ['label' => 'Organizations', 'route' => 'organizations.index', 'active' => ['organizations.*'], 'badge' => null],
-            ['label' => 'Outreach', 'route' => 'communications.outreach', 'active' => ['communications.outreach'], 'badge' => null],
             ['label' => 'Media', 'route' => 'media.index', 'active' => ['media.*'], 'badge' => null],
             ['label' => 'Team', 'route' => 'team.hub', 'active' => ['team.*'], 'badge' => null],
         ];
@@ -66,7 +63,6 @@
         }
         if ($user && $user->isManagement()) {
             $adminNav[] = ['label' => 'Attention Pilot', 'route' => 'attention.insights', 'active' => ['attention.insights']];
-            $adminNav[] = ['label' => 'Notifications', 'route' => 'notifications.admin', 'active' => ['notifications.admin']];
         }
 
         $routeExists = static fn (array $item): bool => Route::has($item['route']);

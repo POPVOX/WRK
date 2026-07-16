@@ -30,6 +30,18 @@ test('navigation menu can be rendered', function () {
         ->assertSee('Projects');
 });
 
+test('navigation hides deferred intelligence notifications and outreach destinations', function () {
+    $user = User::factory()->admin()->profileCompleted()->create();
+
+    $this->actingAs($user)
+        ->get('/dashboard')
+        ->assertOk()
+        ->assertDontSee('href="'.route('intelligence.index').'"', false)
+        ->assertDontSee('href="'.route('notifications.index').'"', false)
+        ->assertDontSee('href="'.route('notifications.admin').'"', false)
+        ->assertDontSee('href="'.route('communications.outreach').'"', false);
+});
+
 test('users can logout', function () {
     $user = User::factory()->create();
 
