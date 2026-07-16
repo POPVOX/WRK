@@ -7,6 +7,7 @@ use App\Models\Accomplishment;
 use App\Models\Action;
 use App\Models\Meeting;
 use App\Models\Organization;
+use App\Models\OutreachCampaignRecipient;
 use App\Models\Person;
 use App\Models\PressClip;
 use App\Models\Project;
@@ -159,7 +160,7 @@ class Dashboard extends Component
         $byDay = match ($day) {
             1 => [
                 'headline' => 'Happy Monday',
-                'message' => "It was a busy week last week. What are you proud of, and what should we celebrate? I can add it to your wins and keep it personal or share it with the team.",
+                'message' => 'It was a busy week last week. What are you proud of, and what should we celebrate? I can add it to your wins and keep it personal or share it with the team.',
                 'support_nudge' => 'If anything felt heavy, tell me. I can create a confidential support check-in for management.',
                 'input_placeholder' => 'What are you proud of from last week?',
             ],
@@ -348,15 +349,15 @@ class Dashboard extends Component
 
         if ($stats['tasks_overdue'] > 0) {
             if ($isWeekend || $isLateNight) {
-                $sentences[] = "{$stats['tasks_overdue']} overdue task".($stats['tasks_overdue'] === 1 ? '' : 's').". Want a gentle Monday catch-up plan?";
+                $sentences[] = "{$stats['tasks_overdue']} overdue task".($stats['tasks_overdue'] === 1 ? '' : 's').'. Want a gentle Monday catch-up plan?';
             } else {
-                $sentences[] = "{$stats['tasks_overdue']} overdue task".($stats['tasks_overdue'] === 1 ? ' needs' : 's need')." attention.";
+                $sentences[] = "{$stats['tasks_overdue']} overdue task".($stats['tasks_overdue'] === 1 ? ' needs' : 's need').' attention.';
             }
         } elseif ($stats['tasks_due_today'] > 0) {
             if ($isWeekend || $isLateNight) {
-                $sentences[] = "{$stats['tasks_due_today']} task".($stats['tasks_due_today'] === 1 ? ' is' : 's are')." due today. Want a low-stress plan?";
+                $sentences[] = "{$stats['tasks_due_today']} task".($stats['tasks_due_today'] === 1 ? ' is' : 's are').' due today. Want a low-stress plan?';
             } else {
-                $sentences[] = "{$stats['tasks_due_today']} task".($stats['tasks_due_today'] === 1 ? ' is' : 's are')." due today.";
+                $sentences[] = "{$stats['tasks_due_today']} task".($stats['tasks_due_today'] === 1 ? ' is' : 's are').' due today.';
             }
         } else {
             $sentences[] = $isWeekend
@@ -365,7 +366,7 @@ class Dashboard extends Component
         }
 
         if ($stats['upcoming_trips'] > 0) {
-            $sentences[] = "You have {$stats['upcoming_trips']} upcoming trip".($stats['upcoming_trips'] === 1 ? '' : 's')." in the next 30 days.";
+            $sentences[] = "You have {$stats['upcoming_trips']} upcoming trip".($stats['upcoming_trips'] === 1 ? '' : 's').' in the next 30 days.';
         }
 
         $nudge = $this->wellbeingNudge($isWeekend, $isLateNight);
@@ -495,6 +496,75 @@ class Dashboard extends Component
             'body' => 'No critical alerts right now. Use this block for strategic work.',
             'meta' => 'Stay focused on outcomes, not busywork.',
             'url' => route('dashboard'),
+        ];
+    }
+
+    /**
+     * @return array{count:int,oldest:?array{id:int,title:string,date_label:string,url:string}}
+     */
+    public function getNotesDebtProperty(): array
+    {
+        $query = $this->meetingsForUserQuery()
+            ->whereDate('meeting_date', '<', today())
+            ->where(function (Builder $query) {
+                $query->whereNull('raw_notes')
+                    ->orWhere('raw_notes', '');
+            });
+        $count = (clone $query)->count();
+        $oldest = (clone $query)
+            ->reorder('meeting_date')
+            ->with('organizations')
+            ->first();
+
+        return [
+            'count' => $count,
+            'oldest' => $oldest ? [
+                'id' => $oldest->id,
+                'title' => $oldest->title ?: ($oldest->organizations->pluck('name')->first() ?: 'Untitled meeting'),
+                'date_label' => $oldest->meeting_date?->format('M j') ?? 'Date unknown',
+                'url' => route('meetings.show', $oldest),
+            ] : null,
+        ];
+    }
+
+    /** @return array{meetings:int,campaign_sends:int,new_contacts:int} */
+    public function getThisWeekStatsProperty(): array
+    {
+        $start = now()->startOfWeek();
+        $end = now()->endOfWeek();
+
+        return [
+            'meetings' => $this->meetingsForUserQuery()
+                ->whereBetween('meeting_date', [$start->toDateString(), $end->toDateString()])
+                ->count(),
+            'campaign_sends' => OutreachCampaignRecipient::query()
+                ->whereNotNull('sent_at')
+                ->whereBetween('sent_at', [$start, $end])
+                ->count(),
+            'new_contacts' => Person::query()
+                ->whereBetween('created_at', [$start, $end])
+                ->count(),
+        ];
+    }
+
+    /** @return array{title:string,outlet:string,date_label:string,url:string}|null */
+    public function getLatestCoverageProperty(): ?array
+    {
+        $clip = PressClip::query()
+            ->approved()
+            ->latest('published_at')
+            ->latest('id')
+            ->first();
+
+        if (! $clip) {
+            return null;
+        }
+
+        return [
+            'title' => $clip->title,
+            'outlet' => $clip->outlet_display_name ?: 'Media coverage',
+            'date_label' => $clip->published_at?->format('M j, Y') ?? 'Recently added',
+            'url' => $clip->url ?: route('media.index'),
         ];
     }
 
@@ -648,7 +718,7 @@ class Dashboard extends Component
                         $assistantMessage = $this->composeCompanionAssistantMessage($suggestions);
                     }
                     if ($addedCount < count($suggestions)) {
-            $assistantMessage .= "\n\nI skipped ".(count($suggestions) - $addedCount)." duplicate suggestion(s) already in your queue.";
+                        $assistantMessage .= "\n\nI skipped ".(count($suggestions) - $addedCount).' duplicate suggestion(s) already in your queue.';
                     }
 
                     $this->addConversationMessage('assistant', $assistantMessage);
@@ -1526,7 +1596,7 @@ PROMPT;
         }
 
         $lines = [
-            "I pulled {$count} possible action".($count === 1 ? '' : 's')." from your notes. I have not created anything yet.",
+            "I pulled {$count} possible action".($count === 1 ? '' : 's').' from your notes. I have not created anything yet.',
         ];
 
         foreach (array_slice($suggestions, 0, 5) as $suggestion) {
@@ -1586,7 +1656,7 @@ PROMPT;
 
             if ($type === 'capture_reflection') {
                 $visibility = (string) ($suggestion['visibility'] ?? 'personal');
-                $lines[] = "• Should I save this reflection as ".($visibility === 'team' ? 'a team reflection' : 'a private reflection').": \"{$title}\"?";
+                $lines[] = '• Should I save this reflection as '.($visibility === 'team' ? 'a team reflection' : 'a private reflection').": \"{$title}\"?";
 
                 continue;
             }
@@ -1750,7 +1820,7 @@ PROMPT;
             $linkedSummary[] = 'person '.$suggestion['linked_person_name'];
         }
 
-        return 'Done. I created '.($isReminder ? 'a reminder' : 'a task').": "
+        return 'Done. I created '.($isReminder ? 'a reminder' : 'a task').': '
             .$action->title
             .' (due '.$due.')'
             .(! empty($linkedSummary) ? ' and linked it to '.implode(', ', $linkedSummary).'.' : '.');
@@ -2135,7 +2205,7 @@ PROMPT;
         $priority = ucfirst((string) $action->priority);
         $projectName = $action->project?->name;
 
-        return 'Created '.($isReminder ? 'reminder' : 'task').": "
+        return 'Created '.($isReminder ? 'reminder' : 'task').': '
             .$action->title
             .' ('.$priority.', due '.$due.')'
             .($projectName ? ' under '.$projectName : '.');
@@ -2311,6 +2381,9 @@ PROMPT;
             'nextTasks' => $this->nextTasks,
             'laterTasks' => $this->laterTasks,
             'dailyPulse' => $this->dailyPulse,
+            'notesDebt' => $this->notesDebt,
+            'thisWeekStats' => $this->thisWeekStats,
+            'latestCoverage' => $this->latestCoverage,
             'smartActions' => $this->smartActions,
             'winsPrompt' => $this->winsPrompt,
             'conversationMessages' => $this->omniConversation,
