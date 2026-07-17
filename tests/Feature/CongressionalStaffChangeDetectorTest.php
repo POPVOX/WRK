@@ -235,3 +235,24 @@ test('backfill command scans only messages that may contain staff changes', func
 
     expect(CongressionalStaffChangeSignal::query()->count())->toBe(1);
 });
+
+test('administrators can reconcile imported Gmail evidence from the review page', function () {
+    config()->set('features.congressional_directory_ui', true);
+    $admin = User::factory()->admin()->create();
+    $staff = User::factory()->create();
+    changeSignalMessage();
+
+    Livewire::actingAs($staff)
+        ->test(ChangeSignalIndex::class)
+        ->assertDontSee('Reconcile Gmail evidence')
+        ->call('reconcileImportedEvidence')
+        ->assertStatus(403);
+
+    Livewire::actingAs($admin)
+        ->test(ChangeSignalIndex::class)
+        ->assertSee('Reconcile Gmail evidence')
+        ->call('reconcileImportedEvidence')
+        ->assertHasNoErrors();
+
+    expect(CongressionalStaffChangeSignal::query()->count())->toBe(1);
+});

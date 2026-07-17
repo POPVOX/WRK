@@ -2,15 +2,29 @@
     <x-congress-nav />
     <x-desk-page-header eyebrow="Congress · Data quality" title="Staff changes" description="Review departures and replacement contacts observed in Gmail. Clear hard bounces are suppressed automatically; confirming a redirect adds safe person-like replacements as observed congressional contacts.">
         <x-slot:actions>
-        <div>
-            <label for="change-status" class="text-sm font-medium text-gray-700">Review status</label>
-            <select id="change-status" wire:model.live="status" class="mt-1 block rounded-lg border-gray-300 text-sm">
-                <option value="pending">Pending ({{ number_format($counts['pending'] ?? 0) }})</option>
-                <option value="accepted">Confirmed ({{ number_format($counts['accepted'] ?? 0) }})</option>
-                <option value="rejected">Dismissed ({{ number_format($counts['rejected'] ?? 0) }})</option>
-                <option value="">All signals</option>
-            </select>
-        </div>
+            <div class="flex flex-wrap items-end gap-3">
+                @if(auth()->user()?->isAdmin())
+                    <button
+                        type="button"
+                        wire:click="reconcileImportedEvidence"
+                        wire:loading.attr="disabled"
+                        wire:target="reconcileImportedEvidence"
+                        class="desk-btn desk-btn-secondary"
+                    >
+                        <span wire:loading.remove wire:target="reconcileImportedEvidence">Reconcile Gmail evidence</span>
+                        <span wire:loading wire:target="reconcileImportedEvidence">Reconciling…</span>
+                    </button>
+                @endif
+                <div>
+                    <label for="change-status" class="text-sm font-medium text-gray-700">Review status</label>
+                    <select id="change-status" wire:model.live="status" class="mt-1 block rounded-lg border-gray-300 text-sm">
+                        <option value="pending">Pending ({{ number_format($counts['pending'] ?? 0) }})</option>
+                        <option value="accepted">Confirmed ({{ number_format($counts['accepted'] ?? 0) }})</option>
+                        <option value="rejected">Dismissed ({{ number_format($counts['rejected'] ?? 0) }})</option>
+                        <option value="">All signals</option>
+                    </select>
+                </div>
+            </div>
         </x-slot:actions>
     </x-desk-page-header>
 
