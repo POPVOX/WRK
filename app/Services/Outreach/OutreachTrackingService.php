@@ -46,34 +46,36 @@ class OutreachTrackingService
         return (string) $document->saveHTML();
     }
 
-    public function recordOpen(string $token): void
+    /** @param array<string, mixed> $metadata */
+    public function recordOpen(string $token, array $metadata = []): void
     {
         $recipient = $this->recipient($token);
-        DB::transaction(function () use ($recipient): void {
+        DB::transaction(function () use ($recipient, $metadata): void {
             $locked = OutreachCampaignRecipient::query()->lockForUpdate()->findOrFail($recipient->id);
             $locked->forceFill([
                 'opened_at' => $locked->opened_at ?: now(),
                 'open_count' => $locked->open_count + 1,
             ])->save();
-            $this->event($locked, 'open');
+            $this->event($locked, 'open', metadata: $metadata);
         });
     }
 
-    public function recordClick(string $token, string $url): string
+    /** @param array<string, mixed> $metadata */
+    public function recordClick(string $token, string $url, array $metadata = []): string
     {
         if (! $this->validDestination($url)) {
             throw new RuntimeException('Invalid tracking destination.');
         }
 
         $recipient = $this->recipient($token);
-        DB::transaction(function () use ($recipient, $url): void {
+        DB::transaction(function () use ($recipient, $url, $metadata): void {
             $locked = OutreachCampaignRecipient::query()->lockForUpdate()->findOrFail($recipient->id);
             $locked->forceFill([
                 'opened_at' => $locked->opened_at ?: now(),
                 'clicked_at' => $locked->clicked_at ?: now(),
                 'click_count' => $locked->click_count + 1,
             ])->save();
-            $this->event($locked, 'click', $url);
+            $this->event($locked, 'click', $url, $metadata);
         });
 
         return $url;
@@ -102,13 +104,19 @@ class OutreachTrackingService
             ->firstOrFail();
     }
 
-    protected function event(OutreachCampaignRecipient $recipient, string $type, ?string $url = null): void
-    {
+    /** @param array<string, mixed> $metadata */
+    protected function event(
+        OutreachCampaignRecipient $recipient,
+        string $type,
+        ?string $url = null,
+        array $metadata = []
+    ): void {
         OutreachRecipientEvent::query()->create([
             'campaign_recipient_id' => $recipient->id,
             'event_type' => $type,
             'event_key' => hash('sha256', implode('|', [$recipient->id, $type, $url, Str::uuid()])),
             'url' => $url,
+            'metadata' => $metadata === [] ? null : $metadata,
             'occurred_at' => now(),
         ]);
     }

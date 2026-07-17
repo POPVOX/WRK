@@ -1,6 +1,9 @@
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="desk-page">
+    <x-desk-page-header eyebrow="Operations" title="Travel" description="Team trips, itineraries, travelers, and expenses in one place.">
+        <x-slot:actions><a href="{{ route('travel.create') }}" wire:navigate class="desk-button-primary">＋ Plan a trip</a></x-slot:actions>
+    </x-desk-page-header>
     <!-- Header -->
-    <div class="mb-8">
+    <div class="hidden">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">

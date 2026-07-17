@@ -1,6 +1,9 @@
-<div class="min-h-screen max-w-3xl mx-auto">
+<div class="desk-page desk-page-narrow">
+    <x-desk-page-header eyebrow="Travel" title="Plan a trip" description="Set the basics now; itinerary and logistics can be filled in as plans firm up.">
+        <x-slot:actions><a href="{{ route('travel.index') }}" wire:navigate class="desk-button-secondary">← Travel</a></x-slot:actions>
+    </x-desk-page-header>
     <!-- Back Link -->
-    <div class="mb-4">
+    <div class="hidden">
         <a href="{{ route('travel.index') }}" class="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
@@ -10,7 +13,7 @@
     </div>
 
     <!-- Header -->
-    <div class="mb-6">
+    <div class="hidden">
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🌍 Plan a Trip</h1>
         <p class="text-gray-500 dark:text-gray-400 mt-1">Create a new trip for your team</p>
     </div>

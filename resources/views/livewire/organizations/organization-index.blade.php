@@ -1,6 +1,12 @@
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="desk-page">
+    <x-desk-page-header eyebrow="People" title="Organizations" description="Stakeholder organizations, partners, funders, and congressional offices.">
+        <x-slot:actions>
+            <button type="button" wire:click="normalizeOrgNames" wire:loading.attr="disabled" class="desk-button-dark">✦ Normalize names</button>
+            <button type="button" wire:click="openAddModal" class="desk-button-primary">＋ Add organization</button>
+        </x-slot:actions>
+    </x-desk-page-header>
     {{-- Page Header --}}
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+    <div class="hidden">
         <div>
             <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Organizations</h1>
             <p class="mt-1 text-gray-500 dark:text-gray-400">View and manage stakeholder organizations and partners</p>
@@ -32,7 +38,7 @@
     </div>
 
     <!-- Search and Filters -->
-    <div class="mb-6 flex flex-col sm:flex-row gap-4 items-center">
+    <div class="grid gap-3 lg:grid-cols-[minmax(18rem,1fr)_14rem_auto]">
         <div class="flex-1">
             <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search organizations..."
                 class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
@@ -46,7 +52,7 @@
                 @endforeach
             </select>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="hidden">
             <!-- View Toggle -->
             <div class="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
                 <button wire:click="setViewMode('card')"

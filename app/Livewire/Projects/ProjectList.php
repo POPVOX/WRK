@@ -27,6 +27,10 @@ class ProjectList extends Component
 
     public string $viewMode = 'list'; // 'grid', 'list', 'tree', 'timeline'
 
+    public string $ownershipScope = 'mine'; // 'mine' or 'team'
+
+    public bool $showQuietStatuses = false;
+
     // Hierarchy filter: 'roots' (parent projects only), 'all' (flat list)
     public string $hierarchyFilter = 'roots';
 
@@ -51,6 +55,18 @@ class ProjectList extends Component
     public function setSortBy(string $sort)
     {
         $this->sortBy = $sort;
+    }
+
+    public function setOwnershipScope(string $scope): void
+    {
+        $this->ownershipScope = in_array($scope, ['mine', 'team'], true) ? $scope : 'mine';
+        $this->resetPage();
+    }
+
+    public function toggleQuietStatuses(): void
+    {
+        $this->showQuietStatuses = ! $this->showQuietStatuses;
+        $this->resetPage();
     }
 
     public function toggleExpand(int $projectId): void
@@ -84,7 +100,7 @@ class ProjectList extends Component
     public function render()
     {
         $query = Project::query()
-            ->with(['parent', 'children'])
+            ->with(['parent', 'children', 'staff'])
             ->withCount(['meetings', 'milestones', 'questions', 'children'])
             ->when($this->search, function ($q) {
                 $q->where(function ($q) {
@@ -100,7 +116,16 @@ class ProjectList extends Component
             })
             ->when($this->filterLead, function ($q) {
                 $q->where('lead', $this->filterLead);
-            });
+            })
+            ->when($this->ownershipScope === 'mine', function ($q) {
+                $user = auth()->user();
+                $q->where(function ($mine) use ($user) {
+                    $mine->where('created_by', $user->id)
+                        ->orWhereHas('staff', fn ($staff) => $staff->where('users.id', $user->id))
+                        ->orWhere('lead', $user->name);
+                });
+            })
+            ->when(! $this->showQuietStatuses && ! $this->filterStatus, fn ($q) => $q->whereIn('status', ['active', 'on_hold']));
 
         // Apply hierarchy filter (except for tree view which always shows roots)
         if ($this->viewMode === 'tree' || $this->hierarchyFilter === 'roots') {
@@ -173,12 +198,23 @@ class ProjectList extends Component
         }
 
         return view('livewire.projects.project-list', [
-            'projects' => in_array($this->viewMode, ['grid', 'list']) ? $query->paginate(12) : collect(),
+            'projects' => $query->paginate(24),
             'treeProjects' => $treeProjects,
             'timelineData' => $timelineData,
             'statuses' => Project::STATUSES,
             'scopes' => ['US' => 'US', 'Global' => 'Global', 'Comms' => 'Comms'],
             'leads' => $leads,
+            'quietStatusCount' => Project::query()
+                ->whereIn('status', ['planning', 'completed', 'archived'])
+                ->when($this->ownershipScope === 'mine', function ($q) {
+                    $user = auth()->user();
+                    $q->where(function ($mine) use ($user) {
+                        $mine->where('created_by', $user->id)
+                            ->orWhereHas('staff', fn ($staff) => $staff->where('users.id', $user->id))
+                            ->orWhere('lead', $user->name);
+                    });
+                })
+                ->count(),
         ]);
     }
 }

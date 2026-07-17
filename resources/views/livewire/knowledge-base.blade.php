@@ -1,14 +1,15 @@
-<div>
+<div class="desk-page">
     <x-slot name="header">
         <div class="flex items-center gap-3">
-            <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
+            <h2 class="hidden">
                 Knowledge Base
             </h2>
         </div>
     </x-slot>
 
-    <div class="py-6">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+    <x-desk-page-header eyebrow="Knowledge" title="Knowledge base" description="Search the organization’s meetings, projects, contacts, files, and accumulated context." />
+    <div>
+        <div class="space-y-6">
             {{-- Search Card --}}
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                 <form wire:submit.prevent="search" class="grid grid-cols-1 lg:grid-cols-12 gap-3">

@@ -1,4 +1,4 @@
-<div class="app-page-frame">
+<div class="desk-page">
     <!-- Back Link -->
     <div class="mb-6">
         <a href="{{ route('travel.index') }}" class="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition">

@@ -76,7 +76,7 @@ class InboxIndex extends Component
 
     public bool $readOnlyMode = false;
 
-    public bool $showInboxMenu = true;
+    public bool $showInboxMenu = false;
 
     public bool $showContextPanel = false;
 

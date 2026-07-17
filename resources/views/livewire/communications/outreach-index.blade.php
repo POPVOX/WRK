@@ -1,5 +1,5 @@
-<div class="space-y-6">
-    <div class="app-page-frame">
+<div class="desk-page">
+    <div>
         <div class="app-page-head">
             <div>
                 <h1 class="app-page-title">Outreach</h1>

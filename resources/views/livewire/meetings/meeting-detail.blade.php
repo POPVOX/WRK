@@ -1,15 +1,27 @@
-<div>
-    <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
-            Meeting: {{ $meeting->meeting_date->format('F j, Y') }}
-        </h2>
-    </x-slot>
+<div class="desk-page">
+    <header class="grid gap-5 border-b-2 border-[#26221c] pb-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div class="min-w-0">
+            <a href="{{ route('meetings.index') }}" wire:navigate class="desk-kicker">Meetings · {{ $meeting->meeting_date->format('M j, Y') }}</a>
+            <h1 class="desk-page-title mt-2">{{ $meeting->title }}</h1>
+            <p class="desk-meta mt-2">{{ $meeting->meeting_date->format('l, F j, Y') }}@if($meeting->start_time) · {{ \Carbon\Carbon::parse($meeting->start_time)->format('g:i A') }}@endif @if($meeting->location) · {{ $meeting->location }}@endif · logged by {{ $meeting->user?->name ?: 'WRK' }}</p>
+        </div>
+        <div class="desk-toolbar">
+            <select wire:change="updateStatus($event.target.value)" class="!min-h-9 text-sm" aria-label="Meeting status">@foreach(\App\Models\Meeting::STATUSES as $status)<option value="{{ $status }}" {{ $meeting->status === $status ? 'selected' : '' }}>{{ Str::headline($status) }}</option>@endforeach</select>
+            <button type="button" wire:click="openPrepModal" class="desk-button-dark">✦ Prep brief</button>
+            @if($editing)
+                <button type="button" wire:click="save" class="desk-button-primary">Save changes</button><button type="button" wire:click="cancelEditing" class="desk-button-secondary">Cancel</button>
+            @else
+                <button type="button" wire:click="startEditing" class="desk-button-secondary">Edit</button>
+                <button type="button" wire:click="deleteMeeting" wire:confirm="Are you sure you want to delete this meeting?" class="text-xs font-semibold text-[#b33a2b]">Delete</button>
+            @endif
+        </div>
+    </header>
 
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+    <div>
+        <div>
 
             <!-- Action Bar -->
-            <div class="mb-6 flex items-center justify-between">
+            <div class="hidden">
                 <div class="flex items-center gap-4">
                     <!-- Back Button -->
                     <a href="{{ route('meetings.index') }}"

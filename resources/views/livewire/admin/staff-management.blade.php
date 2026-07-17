@@ -1,12 +1,14 @@
-<div>
+<div class="desk-page">
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
+        <h2 class="hidden">
             {{ __('Staff Management') }}
         </h2>
     </x-slot>
 
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+    <x-desk-page-header eyebrow="Admin" title="Staff" description="Invite teammates, manage roles, and archive former staff without losing organizational history." />
+
+    <div>
+        <div>
             
             <!-- Action Bar -->
             <div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">

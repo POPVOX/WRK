@@ -1,17 +1,17 @@
-<div @if($draft->status === 'building' || $sendingSummary['active'] > 0) wire:poll.3s @endif class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+<div @if($draft->status === 'building' || $sendingSummary['active'] > 0) wire:poll.3s @endif class="desk-page">
     @php
         $snapshotReviewable = in_array($draft->status, ['draft', 'ready'], true);
     @endphp
     <x-congress-nav />
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-            <a href="{{ route('congress.campaigns') }}" wire:navigate class="text-sm font-semibold text-indigo-600 hover:text-indigo-800">← Campaigns</a>
-            <p class="mt-4 text-sm font-semibold uppercase tracking-[0.14em] text-indigo-600">Campaign builder</p>
-            <h1 class="mt-1 text-3xl font-bold text-gray-900">{{ $draft->name }}</h1>
-            <p class="mt-2 text-gray-600">Audience: <a href="{{ route('congress.lists', ['list' => $draft->congressional_staff_list_id]) }}" wire:navigate class="font-semibold text-indigo-700 hover:underline">{{ $draft->staffList->name }}</a>. Review a fixed recipient snapshot, preview personalization, and deliver approved recipients in batches you control.</p>
-        </div>
+    <x-desk-page-header eyebrow="Campaign builder" :title="$draft->name" description="Review the fixed recipient snapshot, preview personalization, and deliver approved recipients in batches you control.">
+        <x-slot:actions>
         @if($canManage)
             <div class="flex flex-wrap gap-2">
+                @if($draft->schedule_status === 'active')
+                    <button type="button" wire:click="pauseSchedule" wire:confirm="Pause this campaign? No new automated batches will start until you resume it. A batch already in progress may finish." wire:loading.attr="disabled" class="desk-button-secondary !border-[#b33a2b] !text-[#b33a2b]">Pause campaign</button>
+                @elseif($draft->schedule_status === 'paused')
+                    <span class="inline-flex items-center px-2 text-sm font-semibold text-[#8a6d1f]">Ⅱ Campaign paused</span>
+                @endif
                 <button type="button" wire:click="refreshSnapshot" wire:confirm="Refresh from the staff list? This resets all recipient approvals and exclusions." @disabled($draft->status === 'building') class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60">
                     {{ $draft->status === 'building' ? 'Building snapshot…' : 'Refresh snapshot' }}
                 </button>
@@ -20,7 +20,9 @@
                 </button>
             </div>
         @endif
-    </div>
+        </x-slot:actions>
+    </x-desk-page-header>
+    <p class="-mt-4 text-sm text-[#5c574d]">Audience: <a href="{{ route('congress.lists', ['list' => $draft->congressional_staff_list_id]) }}" wire:navigate class="desk-link">{{ $draft->staffList->name }}</a></p>
 
     <section class="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4 text-sm text-indigo-950">
         <p class="font-semibold">Controlled Gmail delivery is enabled for the campaign owner.</p>
@@ -257,7 +259,7 @@
                         <label class="text-sm font-semibold text-gray-700">Timezone<input type="text" wire:model.defer="timezone" @disabled($draft->schedule_status === 'active') class="mt-1 block w-full rounded-lg border-gray-300 disabled:bg-gray-50" placeholder="America/New_York"></label>
                         <div class="flex flex-wrap gap-2">
                             @if($draft->schedule_status === 'active')
-                                <button type="button" wire:click="pauseSchedule" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100">Pause automation</button>
+                                <button type="button" wire:click="pauseSchedule" wire:confirm="Pause this campaign? No new automated batches will start until you resume it. A batch already in progress may finish." class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100">Pause campaign</button>
                             @elseif($draft->schedule_status === 'paused')
                                 <button type="button" wire:click="resumeSchedule" class="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">Resume now</button>
                             @else
@@ -344,9 +346,9 @@
                     ['Failed', $analyticsStatuses['failed'] ?? 0, 'text-red-700'],
                     ['Suppressed', $analyticsStatuses['suppressed'] ?? 0, 'text-amber-700'],
                     ['Human replies', $analyticsEvents['human_reply'] ?? 0, 'text-emerald-700'],
-                    ['Auto-replies', $analyticsEvents['auto_reply'] ?? 0, 'text-indigo-700'],
+                    ['Auto-replies', $analytics['engagement']['auto_replied'], 'text-indigo-700'],
                     ['Bounce alerts', $analytics['bounce_signals'], 'text-red-700'],
-                    ['Opened', $analytics['engagement']['opened'], 'text-indigo-700'],
+                    ['Pixel opened', $analytics['engagement']['opened'], 'text-indigo-700'],
                 ] as [$label, $value, $color])
                     <div class="rounded-lg bg-gray-50 p-3">
                         <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{{ $label }}</p>
@@ -354,7 +356,7 @@
                     </div>
                 @endforeach
                 <div class="rounded-lg bg-gray-50 p-3">
-                    <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Link clicks</p>
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Link activity</p>
                     @if($analytics['clicks_tracked'])
                         <p class="mt-1 text-2xl font-bold text-indigo-700">{{ number_format($analytics['engagement']['clicked']) }}</p>
                     @else

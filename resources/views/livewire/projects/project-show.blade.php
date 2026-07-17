@@ -1,10 +1,10 @@
 <div
-    class="space-y-6"
+    class="desk-page"
     x-on:open-project-edit-modal.window="$wire.startEditing()"
     x-on:request-project-delete.window="$wire.deleteProject()"
 >
     <x-slot name="header">
-        <div class="flex items-center justify-between gap-4">
+        <div class="hidden">
             <div class="flex items-center gap-4 min-w-0">
                 @if($project->parent)
                     <a href="{{ route('projects.show', $project->parent) }}" wire:navigate
@@ -95,7 +95,20 @@
         </div>
     </x-slot>
 
-    <div class="app-page-frame">
+    <header class="flex flex-col gap-5 border-b-2 border-[#26221c] pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <div class="min-w-0">
+            <a href="{{ $project->parent ? route('projects.show', $project->parent) : route('projects.index') }}" wire:navigate class="desk-kicker">Projects · {{ $project->parent?->name ?: 'Portfolio' }}</a>
+            <h1 class="desk-page-title mt-2">{{ $project->name }}</h1>
+            <p class="desk-meta mt-2"><span class="font-semibold {{ $project->status === 'active' ? 'text-[#3b7a45]' : ($project->status === 'on_hold' ? 'text-[#8a6d1f]' : 'text-[#5c574d]') }}">{{ $statuses[$project->status] ?? Str::headline($project->status) }}</span>@if($project->scope) · {{ $project->scope }}@endif @if($project->lead) · lead: {{ $project->lead }}@endif @if($project->target_end_date) · target {{ $project->target_end_date->format('M Y') }}@endif</p>
+        </div>
+        <div class="desk-toolbar">
+            <button type="button" @click="$dispatch('open-project-edit-modal')" class="desk-button-secondary">Edit</button>
+            <a href="{{ route('projects.duplicate', $project) }}" wire:navigate class="desk-button-secondary">Duplicate</a>
+            <button type="button" @click="if (window.confirm('Delete this project?')) { $dispatch('request-project-delete') }" class="text-xs font-semibold text-[#b33a2b]">Delete</button>
+        </div>
+    </header>
+
+    <div class="app-page-frame !max-w-none !gap-6">
             @if($editing)
                 <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
                     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">

@@ -1,15 +1,16 @@
-<div class="space-y-6">
+<div class="desk-page">
     <x-slot name="header">
         <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Needs You</h2>
+                <h2 class="hidden">Needs You</h2>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">The decisions, follow-up, and preparation where your attention matters most.</p>
             </div>
             <p class="text-xs font-medium uppercase tracking-[0.14em] text-gray-400">Read-only pilot</p>
         </div>
     </x-slot>
 
-    <div class="app-page-frame space-y-6">
+    <x-desk-page-header eyebrow="Today" title="Needs you" description="The decisions, follow-up, and preparation where your attention matters most." />
+    <div class="space-y-6">
         <section class="grid gap-3 sm:grid-cols-3">
             <div class="app-surface p-4">
                 <p class="text-xs font-semibold uppercase tracking-[0.12em] text-red-600">Now</p>

@@ -6,10 +6,15 @@ use App\Models\CongressionalStaffEmail;
 use App\Models\ContactActivity;
 use App\Models\GmailMessage;
 use App\Models\OutreachCampaignRecipient;
+use App\Services\Outreach\OutreachResponseClassifier;
 use Illuminate\Support\Str;
 
 class ContactActivityService
 {
+    public function __construct(
+        protected OutreachResponseClassifier $responseClassifier
+    ) {}
+
     public function recordCampaignSend(OutreachCampaignRecipient $recipient): void
     {
         $recipient->loadMissing(['campaign', 'person', 'congressionalOutreachDraftRecipient.profile']);
@@ -56,7 +61,10 @@ class ContactActivityService
             ->map(fn ($id) => (int) $id)
             ->all();
         $campaignRecipient = $this->campaignRecipient($message, $counterpart);
-        if ($message->is_inbound && $campaignRecipient && ! $campaignRecipient->replied_at) {
+        if ($message->is_inbound
+            && $campaignRecipient
+            && ! $campaignRecipient->replied_at
+            && $this->responseClassifier->classify($message) === 'human_reply') {
             $campaignRecipient->update(['replied_at' => $message->sent_at ?: now()]);
         }
 

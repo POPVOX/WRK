@@ -1,13 +1,13 @@
-<nav class="flex flex-wrap gap-1 rounded-xl border border-gray-200 bg-white p-1.5 shadow-sm" aria-label="Congress workspace">
+<x-desk-tabs>
     @foreach([
-        ['route' => 'congress.index', 'active' => 'congress.index', 'label' => 'Staff Directory'],
-        ['route' => 'congress.contact-data', 'active' => 'congress.contact-data', 'label' => 'Contact Data'],
-        ['route' => 'congress.changes', 'active' => 'congress.changes', 'label' => 'Staff Changes'],
+        ['route' => 'congress.index', 'active' => 'congress.index', 'label' => 'Directory'],
+        ['route' => 'congress.contact-data', 'active' => 'congress.contact-data', 'label' => 'Contact data'],
+        ['route' => 'congress.changes', 'active' => 'congress.changes', 'label' => 'Staff changes'],
         ['route' => 'congress.lists', 'active' => 'congress.lists*', 'label' => 'Lists'],
         ['route' => 'congress.campaigns', 'active' => ['congress.campaigns*', 'congress.outreach*'], 'label' => 'Campaigns'],
     ] as $item)
-        <a href="{{ route($item['route']) }}" wire:navigate class="rounded-lg px-4 py-2 text-sm font-semibold {{ request()->routeIs(...(array) $item['active']) ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' }}">
+        <a href="{{ route($item['route']) }}" wire:navigate aria-current="{{ request()->routeIs(...(array) $item['active']) ? 'page' : 'false' }}">
             {{ $item['label'] }}
         </a>
     @endforeach
-</nav>
+</x-desk-tabs>

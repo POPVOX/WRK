@@ -1,15 +1,8 @@
-<div class="space-y-6">
-    <div class="app-page-frame-wide">
-        <div class="app-page-head">
-            <div>
-                <h1 class="app-page-title">Contact Lists</h1>
-                <p class="app-page-lead">Saved groups of contacts for outreach, follow-up, and bulk messaging.</p>
-            </div>
-            <a href="{{ route('contacts.index') }}" wire:navigate
-                class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700">
-                Back to Contacts
-            </a>
-        </div>
+<div class="desk-page">
+    <div>
+        <x-desk-page-header eyebrow="People" title="Contact lists" description="Saved groups of relationship contacts for follow-up and focused outreach.">
+            <x-slot:actions><a href="{{ route('contacts.index') }}" wire:navigate class="desk-button-secondary">← Contacts</a></x-slot:actions>
+        </x-desk-page-header>
 
         <div class="app-card p-4">
             <form wire:submit="createList" class="grid gap-3 lg:grid-cols-[16rem_minmax(0,1fr)_auto]">

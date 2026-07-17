@@ -1,9 +1,6 @@
-<div class="app-page-frame space-y-6">
-    <div class="app-page-head">
-        <div>
-            <h1 class="app-page-title">Agent Policy Layers</h1>
-            <p class="app-page-lead">Manage organization and role prompt constitution, and audit personal layers per agent.</p>
-        </div>
+<div class="desk-page">
+    <x-desk-page-header eyebrow="Admin" title="Agent policies" description="Manage organization and role instructions, then audit the personal layers applied to each agent.">
+        <x-slot:actions>
         <div class="inline-flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-600 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
             <span>Last refreshed {{ $generatedAt }}</span>
             <button wire:click="refreshData"
@@ -11,7 +8,8 @@
                 Refresh
             </button>
         </div>
-    </div>
+        </x-slot:actions>
+    </x-desk-page-header>
 
     @if(!$migrationReady)
         <section class="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100">

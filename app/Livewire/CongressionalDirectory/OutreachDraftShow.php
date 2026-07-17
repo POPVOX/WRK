@@ -423,7 +423,7 @@ class OutreachDraftShow extends Component
     {
         $this->authorizeManage();
         if ($this->attempt(fn () => $schedules->pause($this->draft->fresh(), Auth::user()))) {
-            $this->dispatch('notify', type: 'success', message: 'Campaign automation paused. Any batch already in progress will finish.');
+            $this->dispatch('notify', type: 'success', message: 'Campaign paused. No new automated batches will start; any batch already in progress will finish.');
         }
     }
 

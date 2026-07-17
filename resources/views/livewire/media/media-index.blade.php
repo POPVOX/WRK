@@ -1,6 +1,9 @@
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="desk-page">
+    <x-desk-page-header eyebrow="Outreach" title="Media & press" description="Coverage, journalist relationships, inquiries, and coordinated pitching.">
+        <x-slot:actions><button type="button" wire:click="openClipModal" class="desk-button-secondary">Log clip</button><button type="button" wire:click="{{ $activeTab === 'contacts' ? 'openContactModal' : 'openPitchModal' }}" class="desk-button-primary">{{ $activeTab === 'contacts' ? '＋ New contact' : '＋ New pitch' }}</button></x-slot:actions>
+    </x-desk-page-header>
     {{-- Header --}}
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <div class="hidden">
         <div>
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Media & Press</h1>
             <p class="text-gray-600 dark:text-gray-400">Track coverage, manage journalist relationships, and coordinate

@@ -262,9 +262,16 @@ class CongressionalOutreachBatchService
                     ->isNotEmpty())
                 ->count();
         $engagement = [
-            'opened' => (clone $recipientQuery)->whereNotNull('opened_at')->count(),
+            'opened' => (clone $recipientQuery)->where('open_count', '>', 0)->count(),
             'clicked' => (clone $recipientQuery)->whereNotNull('clicked_at')->count(),
-            'replied' => (clone $recipientQuery)->whereNotNull('replied_at')->count(),
+            'replied' => (clone $recipientQuery)->whereHas(
+                'emailEvidenceEvents',
+                fn ($query) => $query->where('event_type', 'human_reply')
+            )->count(),
+            'auto_replied' => (clone $recipientQuery)->whereHas(
+                'emailEvidenceEvents',
+                fn ($query) => $query->whereIn('event_type', ['auto_reply', 'departure_auto_reply'])
+            )->count(),
             'bounced' => (clone $recipientQuery)->whereNotNull('bounced_at')->count(),
             'unsubscribed' => (clone $recipientQuery)->whereNotNull('unsubscribed_at')->count(),
         ];

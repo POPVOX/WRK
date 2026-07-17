@@ -1,13 +1,7 @@
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+<div class="desk-page">
     <x-congress-nav />
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-            <a href="{{ route('congress.index') }}" wire:navigate class="text-sm font-medium text-indigo-600 hover:text-indigo-800">← Congress Explorer</a>
-            <h1 class="mt-2 text-3xl font-bold text-gray-900">Gmail staff-change review</h1>
-            <p class="mt-2 max-w-3xl text-gray-600">
-                Confirm departures, failed addresses, and replacement contacts observed in Gmail. Confirmation records evidence only; it does not automatically make an address campaign-eligible.
-            </p>
-        </div>
+    <x-desk-page-header eyebrow="Congress · Data quality" title="Staff changes" description="Confirm departures, failed addresses, and replacement contacts observed in Gmail. Confirmation records evidence; it does not automatically make an address campaign-eligible.">
+        <x-slot:actions>
         <div>
             <label for="change-status" class="text-sm font-medium text-gray-700">Review status</label>
             <select id="change-status" wire:model.live="status" class="mt-1 block rounded-lg border-gray-300 text-sm">
@@ -17,7 +11,8 @@
                 <option value="">All signals</option>
             </select>
         </div>
-    </div>
+        </x-slot:actions>
+    </x-desk-page-header>
 
     @forelse($signals as $signal)
         <article class="app-surface overflow-hidden">

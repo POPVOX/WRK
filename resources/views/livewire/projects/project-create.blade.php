@@ -1,6 +1,6 @@
-<div>
+<div class="desk-page desk-page-narrow">
     <x-slot name="header">
-        <div class="flex items-center gap-4">
+        <div class="hidden">
             <a href="{{ route('projects.index') }}" wire:navigate
                 class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -11,8 +11,12 @@
         </div>
     </x-slot>
 
-    <div class="py-10">
-        <div class="max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <x-desk-page-header eyebrow="Projects" :title="$isDuplicate ? 'Duplicate project' : 'New project'" description="Create a focused workspace with a clear scope, lead, timeline, and outcome.">
+        <x-slot:actions><a href="{{ route('projects.index') }}" wire:navigate class="desk-button-secondary">← Projects</a></x-slot:actions>
+    </x-desk-page-header>
+
+    <div>
+        <div class="space-y-6">
             @if($isDuplicate)
                 <div
                     class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3 flex items-center gap-3">

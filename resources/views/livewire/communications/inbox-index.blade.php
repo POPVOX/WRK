@@ -1,45 +1,23 @@
-<div class="space-y-6">
-    <div class="app-page-frame-wide">
-        <div class="app-page-head">
-            <div>
-                <h1 class="app-page-title">Inbox</h1>
-                <p class="app-page-lead">
-                    Communications workspace with agent suggestions, context linking, and tracked follow-through.
-                </p>
-            </div>
+<div class="desk-page">
+    <div class="app-page-frame-wide !max-w-none !gap-5">
+        <x-desk-page-header eyebrow="Triage" title="Inbox" description="Email that needs action, with CRM context and a clear next step.">
+            <x-slot:actions>
+                @if($readOnlyMode)<span class="text-xs font-semibold text-[#8a6d1f]">Gmail is read-only</span>@endif
+                <button type="button" wire:click="openComposer" class="desk-button-primary" @disabled($readOnlyMode)>＋ Compose</button>
+                <button type="button" wire:click="syncGmail" wire:loading.attr="disabled" class="desk-button-secondary">
+                    <span wire:loading.remove wire:target="syncGmail">{{ $lastGmailSyncAt ? 'Gmail '.$lastGmailSyncAt : 'Sync Gmail' }}</span><span wire:loading wire:target="syncGmail">Syncing…</span>
+                </button>
+                <button type="button" wire:click="toggleContextPanel" class="desk-button-secondary">{{ $showContextPanel ? 'Close context' : 'Open context' }}</button>
+            </x-slot:actions>
+        </x-desk-page-header>
 
-            <div class="app-toolbar">
-                @if($readOnlyMode)
-                    <span class="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-                        Gmail connected in read-only scope. Reconnect Google to enable send/compose.
-                    </span>
-                @endif
-                <button
-                    type="button"
-                    wire:click="syncGmail"
-                    wire:loading.attr="disabled"
-                    class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                >
-                    <svg class="w-4 h-4 {{ $isSyncingGmail ? 'animate-spin' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span class="ml-2" wire:loading.remove wire:target="syncGmail">
-                        {{ $lastGmailSyncAt ? 'Gmail '.$lastGmailSyncAt : 'Sync Gmail' }}
-                    </span>
-                    <span class="ml-2" wire:loading wire:target="syncGmail">Syncing...</span>
-                </button>
-                <button
-                    type="button"
-                    wire:click="toggleContextPanel"
-                    class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                >
-                    {{ $showContextPanel ? 'Close Context' : 'Open Context' }}
-                </button>
-            </div>
+        <div class="desk-filter-pills">
+            @foreach($this->folders as $key => $label)
+                <button type="button" wire:click="$set('folder', '{{ $key }}')" class="desk-filter-pill {{ $folder === $key ? 'is-active' : '' }}">{{ $label }} · {{ number_format($folderCounts[$key] ?? 0) }}</button>
+            @endforeach
         </div>
 
-        <div class="app-card overflow-hidden">
+        <div class="app-card overflow-hidden !rounded-md !border-[#d8d0bf]">
             <div class="grid h-[calc(100vh-12rem)] grid-cols-1 {{ $showInboxMenu ? 'lg:grid-cols-[15rem_20rem_minmax(0,1fr)]' : 'lg:grid-cols-[20rem_minmax(0,1fr)]' }}">
                 <aside class="{{ $showInboxMenu ? 'border-r border-gray-200 bg-gray-50/70 dark:border-gray-700 dark:bg-gray-900/30 p-3 overflow-y-auto' : 'hidden' }}">
                     <button

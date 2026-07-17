@@ -1,4 +1,49 @@
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="desk-page">
+    <x-desk-page-header eyebrow="People" title="Contacts" description="Relationship context, ownership, and the last time POPVOX Foundation was in touch.">
+        <x-slot:actions>
+            <a href="{{ route('contacts.lists') }}" wire:navigate class="desk-button-secondary">Lists</a>
+            <button type="button" wire:click="openImportModal" class="desk-button-secondary">Import CSV</button>
+            <button type="button" wire:click="toggleAddPersonForm" class="desk-button-primary">{{ $showAddPersonForm ? 'Cancel' : '＋ Add contact' }}</button>
+        </x-slot:actions>
+    </x-desk-page-header>
+
+    <section class="grid gap-3 lg:grid-cols-[minmax(18rem,1fr)_13rem_13rem]">
+        <label class="desk-search">
+            <span class="text-[#8a8578]" aria-hidden="true">⌕</span>
+            <input type="search" wire:model.live.debounce.300ms="search" placeholder="Search by name, title, or email…" aria-label="Search contacts">
+        </label>
+        <select wire:model.live="filterOrg" aria-label="Filter by organization">
+            <option value="">All organizations</option>
+            @foreach($organizations as $org)
+                <option value="{{ $org->id }}">{{ $org->name }}</option>
+            @endforeach
+        </select>
+        <select wire:model.live="filterOwner" aria-label="Filter by owner">
+            <option value="">Any owner</option>
+            @foreach($owners as $owner)
+                <option value="{{ $owner->id }}">{{ $owner->name }}</option>
+            @endforeach
+        </select>
+    </section>
+
+    <section class="flex flex-wrap items-center justify-between gap-3">
+        <div class="desk-filter-pills" aria-label="Contact views">
+            @foreach(['all' => 'All', 'mine' => 'My contacts', 'going_cold' => 'Going cold', 'hill' => 'Hill staff', 'funders' => 'Funders'] as $value => $label)
+                <button type="button" wire:click="setRelationshipView('{{ $value }}')" class="desk-filter-pill {{ $relationshipView === $value ? 'is-active' : '' }}">{{ $label }}</button>
+            @endforeach
+            @foreach($views as $view)
+                <button type="button" wire:click="loadView({{ $view['id'] }})" class="desk-filter-pill">{{ $view['name'] }}</button>
+            @endforeach
+        </div>
+        <div class="desk-toolbar">
+            <button type="button" wire:click="selectFiltered" class="text-xs font-semibold text-[#8a4b2d]">Select filtered</button>
+            <button type="button" wire:click="toggleTrashed" class="text-xs font-semibold {{ $showTrashed ? 'text-[#b33a2b]' : 'text-[#8a8578]' }}">
+                {{ $showTrashed ? 'Return to contacts' : 'Former contacts'.($trashedCount ? ' · '.$trashedCount : '') }}
+            </button>
+        </div>
+    </section>
+
+    <div class="hidden" aria-hidden="true">
     {{-- Page Header --}}
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
         <div>
@@ -160,7 +205,7 @@
             @endforelse
         </div>
     </div>
-
+    </div>
 
     <!-- Add Contact Modal with Tabs -->
     @if($showAddPersonForm)
@@ -412,7 +457,76 @@
         </div>
     @endif
 
-    @if($viewMode === 'card')
+    @if(! $showTrashed)
+        @if(count($selected) > 0)
+            <section class="desk-inset flex flex-wrap items-center gap-3 px-4 py-3">
+                <span class="desk-data text-xs">{{ count($selected) }} selected</span>
+                <button type="button" wire:click="emailSelected" class="desk-link">Email</button>
+                <input type="text" wire:model.defer="bulkListName" placeholder="List name" class="!min-h-8 text-xs">
+                <button type="button" wire:click="createListFromSelection" class="desk-link">Create / add to list</button>
+                <button type="button" wire:click="clearSelection" class="ml-auto text-xs text-[#8a8578]">Clear</button>
+            </section>
+        @endif
+
+        <div class="desk-table-wrap">
+            <table class="desk-table">
+                <thead>
+                    <tr>
+                        <th class="w-10"><span class="sr-only">Select</span></th>
+                        <th>Name</th>
+                        <th>Organization</th>
+                        <th>Owner</th>
+                        <th>Last touch</th>
+                        <th class="text-right">Meetings</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($people as $person)
+                        @php
+                            $touchCandidates = collect([
+                                $person->contact_activities_max_occurred_at,
+                                $person->interactions_max_occurred_at,
+                                $person->meetings_max_meeting_date,
+                            ])->filter()->map(fn ($date) => \Carbon\Carbon::parse($date));
+                            $lastTouch = $touchCandidates->sortDesc()->first();
+                            $touchClass = match (true) {
+                                ! $lastTouch => 'text-[#8a8578]',
+                                $lastTouch->greaterThanOrEqualTo(now()->subWeek()) => 'desk-status-positive',
+                                $lastTouch->lessThan(now()->subMonths(3)) => 'desk-status-danger',
+                                default => 'text-[#5c574d]',
+                            };
+                        @endphp
+                        <tr wire:key="contact-row-{{ $person->id }}">
+                            <td><input type="checkbox" wire:model="selected" value="{{ $person->id }}" class="rounded border-[#d8d0bf] text-[#8a4b2d] focus:ring-[#8a4b2d]"></td>
+                            <td class="min-w-[17rem]">
+                                <a href="{{ route('people.show', $person) }}" wire:navigate class="flex items-center gap-3">
+                                    <x-avatar :name="$person->name" :photo="$person->photo_url" size="sm" :showRing="false" />
+                                    <span class="min-w-0">
+                                        <span class="desk-table-title block truncate hover:text-[#8a4b2d]">{{ $person->name }}</span>
+                                        <span class="desk-meta block truncate">{{ $person->email ?: ($person->title ?: 'No email on file') }}</span>
+                                    </span>
+                                </a>
+                            </td>
+                            <td>
+                                @if($person->organization)
+                                    <a href="{{ route('organizations.show', $person->organization) }}" wire:navigate class="hover:text-[#8a4b2d]">{{ $person->organization->name }}</a>
+                                @else
+                                    <span class="text-[#8a8578]">—</span>
+                                @endif
+                            </td>
+                            <td>{{ $person->owner?->name ?: 'Unassigned' }}</td>
+                            <td><span class="font-semibold {{ $touchClass }}">{{ $lastTouch ? $lastTouch->diffForHumans() : 'No recorded touch' }}</span></td>
+                            <td class="desk-data text-right">{{ number_format($person->meetings_count) }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="6" class="!py-10 text-center text-[#8a8578]">No contacts match this view. <button type="button" wire:click="toggleAddPersonForm" class="desk-link">＋ Add a contact</button></td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    @endif
+
+    @if($showTrashed && $viewMode === 'card')
         {{-- Bulk Actions Toolbar --}}
         @if(count($selected) > 0)
             <div class="mb-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-3 text-sm">
@@ -633,7 +747,7 @@
                 </div>
             @endforelse
         </div>
-    @else
+    @elseif($showTrashed)
         @if(count($selected) > 0)
             <div class="mb-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 flex flex-wrap items-center gap-3 text-sm">
                 <div class="text-gray-700 dark:text-gray-300 font-medium">{{ count($selected) }} selected</div>

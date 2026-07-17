@@ -1,11 +1,6 @@
-<div class="space-y-6">
-    <div class="app-page-frame">
-        <div class="app-page-head">
-            <div>
-                <h1 class="app-page-title">Notifications Admin</h1>
-                <p class="app-page-lead">Create calm, informative notifications and reusable templates for the team.</p>
-            </div>
-        </div>
+<div class="desk-page">
+    <div>
+        <x-desk-page-header eyebrow="Admin" title="Team notices" description="Create calm, informative notices and reusable templates for the team." />
 
         <div class="app-card p-4 space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-2">
@@ -217,4 +212,3 @@
         </div>
     </div>
 </div>
-

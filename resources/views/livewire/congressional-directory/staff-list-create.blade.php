@@ -1,14 +1,9 @@
-<div class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+<div class="desk-page">
     <x-congress-nav />
 
-    <header class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-600">Congress · Lists</p>
-            <h1 class="mt-1 text-3xl font-bold text-gray-900">Create a staff list</h1>
-            <p class="mt-2 max-w-3xl text-gray-600">Describe the audience, search the directory, select individual staff or every match, and save a reusable list.</p>
-        </div>
-        <a href="{{ route('congress.lists') }}" wire:navigate class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</a>
-    </header>
+    <x-desk-page-header eyebrow="Congress · Lists" title="Create a staff list" description="Describe the audience, run the search, choose the right people, and save a reusable list.">
+        <x-slot:actions><a href="{{ route('congress.lists') }}" wire:navigate class="desk-button-secondary">Cancel</a></x-slot:actions>
+    </x-desk-page-header>
 
     <section class="app-surface p-5">
         <h2 class="text-lg font-semibold text-gray-900">1. Name the list</h2>
@@ -63,7 +58,9 @@
             </header>
             <div class="divide-y divide-gray-200">
                 @forelse($results as $profile)
-                    @php($position = $profile->currentPosition)
+                    @php
+                        $position = $profile->currentPosition;
+                    @endphp
                     <label class="flex cursor-pointer items-start gap-3 px-5 py-4 hover:bg-gray-50">
                         <input type="checkbox" wire:model.live="selectedProfileIds" value="{{ $profile->id }}" class="mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
                         <span class="min-w-0 flex-1"><span class="font-semibold text-gray-900">{{ $profile->display_name }}</span><span class="mt-0.5 block text-sm text-gray-700">{{ $position?->title ?? 'No current title' }}</span><span class="mt-0.5 block truncate text-xs text-gray-500">{{ $position?->office?->name ?? 'No current office' }}</span></span>

@@ -1,8 +1,6 @@
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+<div class="desk-page">
     <x-congress-nav />
-    <a href="{{ route('congress.index') }}" wire:navigate class="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800">
-        ← Back to Congress Explorer
-    </a>
+    <a href="{{ route('congress.index') }}" wire:navigate class="desk-link">← Congress directory</a>
 
     <section class="app-surface p-6">
         <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
@@ -43,12 +41,14 @@
         <div class="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
             <div class="space-y-3">
                 @forelse($profile->emails as $staffEmail)
-                    @php($eligibility = $emailEligibility[$staffEmail->id])
-                    @php($tierClass = match($eligibility['tier']) {
-                        'eligible' => 'bg-emerald-100 text-emerald-800',
-                        'limited' => 'bg-amber-100 text-amber-800',
-                        default => 'bg-red-100 text-red-800',
-                    })
+                    @php
+                        $eligibility = $emailEligibility[$staffEmail->id];
+                        $tierClass = match($eligibility['tier']) {
+                            'eligible' => 'bg-emerald-100 text-emerald-800',
+                            'limited' => 'bg-amber-100 text-amber-800',
+                            default => 'bg-red-100 text-red-800',
+                        };
+                    @endphp
                     <article class="rounded-xl border border-gray-200 p-4">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div class="min-w-0">
@@ -257,7 +257,9 @@
                 </thead>
                 <tbody class="divide-y divide-gray-200 bg-white">
                     @foreach($profile->observations as $observation)
-                        @php($sourceUrl = data_get($observation->source_data, 'url'))
+                        @php
+                            $sourceUrl = data_get($observation->source_data, 'url');
+                        @endphp
                         <tr>
                             <td class="whitespace-nowrap px-5 py-3 text-gray-700">{{ $observation->period_label ?: $observation->period_end?->format('M Y') }}</td>
                             <td class="px-5 py-3 text-gray-700">{{ $observation->office_raw }}</td>

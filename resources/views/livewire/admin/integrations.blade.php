@@ -1,9 +1,6 @@
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-    <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Integrations</h1>
-            <p class="text-gray-500 dark:text-gray-400">Connection health for Box and sync pipelines.</p>
-        </div>
+<div class="desk-page">
+    <x-desk-page-header eyebrow="Admin" title="Integrations" description="Connection health for Box, Google, and the pipelines that keep WRK current.">
+        <x-slot:actions>
         <div class="inline-flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-600 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
             <span>Last refreshed {{ $generatedAt }}</span>
             <button wire:click="refreshHealth"
@@ -11,7 +8,8 @@
                 Refresh
             </button>
         </div>
-    </div>
+        </x-slot:actions>
+    </x-desk-page-header>
 
     <section class="rounded-2xl border p-5 shadow-sm {{ ($box['auth_healthy'] ?? false) ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20' : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20' }}">
         <div class="flex flex-wrap items-center gap-3">

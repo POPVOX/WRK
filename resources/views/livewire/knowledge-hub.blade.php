@@ -1,15 +1,16 @@
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+<div class="desk-page desk-page-narrow">
+    <div>
 
         {{-- Header --}}
-        <div class="text-center mb-8">
-            <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl mb-4 shadow-lg">
+        <div class="mb-8">
+            <div class="hidden">
                 <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                 </svg>
             </div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Ask about your work</h1>
+            <p class="desk-kicker">Knowledge</p>
+            <h1 class="desk-page-title mt-2">Ask about your work</h1>
             <p class="text-gray-500 dark:text-gray-400 mt-1">Search meetings, projects, contacts, and more</p>
         </div>
 

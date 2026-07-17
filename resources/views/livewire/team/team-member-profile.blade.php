@@ -1,20 +1,23 @@
-<div>
+<div class="desk-page">
     <x-slot name="header">
-        <div class="flex items-center gap-4">
+        <div class="hidden">
             <a href="{{ route('team.hub') }}" wire:navigate
                 class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
             </a>
-            <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
+            <h2 class="hidden">
                 Team Member Profile
             </h2>
         </div>
     </x-slot>
 
-    <div class="py-8">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+    <x-desk-page-header eyebrow="Team" :title="$member->name" description="Profile, responsibilities, and shared organizational context.">
+        <x-slot:actions><a href="{{ route('team.hub') }}" wire:navigate class="desk-button-secondary">← Team</a></x-slot:actions>
+    </x-desk-page-header>
+    <div>
+        <div>
             @if (session()->has('message'))
                 <div class="mb-4 p-4 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-lg">
                     {{ session('message') }}

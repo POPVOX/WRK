@@ -755,6 +755,39 @@ test('recurring congressional schedules queue configured batches and advance the
         ->and(OutreachCampaign::query()->sole()->recipients()->count())->toBe(2);
 });
 
+test('campaign owners can pause active delivery from the campaign list and detail header', function () {
+    config()->set('features.congressional_directory_ui', true);
+    $owner = User::factory()->create();
+    $profile = workbenchProfile('Pause Campaign Person');
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft($workbench, workbenchList($owner, [$profile]), $owner, 'Pause campaign test');
+    $draft->update([
+        'delivery_mode' => 'recurring',
+        'schedule_status' => 'active',
+        'next_send_at' => now()->addHour(),
+    ]);
+
+    Livewire::actingAs($owner)
+        ->test(CampaignIndex::class)
+        ->assertSee('Pause campaign')
+        ->call('pauseCampaign', $draft->id)
+        ->assertHasNoErrors();
+
+    expect($draft->fresh()->schedule_status)->toBe('paused')
+        ->and($draft->fresh()->next_send_at)->toBeNull();
+
+    $draft->update(['schedule_status' => 'active', 'next_send_at' => now()->addHour()]);
+
+    Livewire::actingAs($owner)
+        ->test(OutreachDraftShow::class, ['draft' => $draft->fresh()])
+        ->assertSee('Pause campaign')
+        ->call('pauseSchedule')
+        ->assertHasNoErrors();
+
+    expect($draft->fresh()->schedule_status)->toBe('paused')
+        ->and($draft->fresh()->next_send_at)->toBeNull();
+});
+
 test('recurring schedules auto approve safe provisional recipients and enforce the daily cap', function () {
     Queue::fake();
     Carbon::setTestNow('2026-07-16 13:00:00 UTC');
@@ -1018,7 +1051,8 @@ test('tracking records unique recipient engagement and analytics exposes every r
 
     $this->get(route('outreach.track.open', ['token' => $recipient->tracking_token]))->assertOk();
     $this->get(route('outreach.track.open', ['token' => $recipient->tracking_token]))->assertOk();
-    $this->get(route('outreach.track.click', ['token' => $recipient->tracking_token]).'?url='.rawurlencode('https://example.org/resource'))
+    $this->withHeader('User-Agent', 'Mozilla/5.0 Analytics Test')
+        ->get(route('outreach.track.click', ['token' => $recipient->tracking_token]).'?url='.rawurlencode('https://example.org/resource'))
         ->assertRedirect('https://example.org/resource');
 
     $recipient->refresh();
@@ -1027,16 +1061,31 @@ test('tracking records unique recipient engagement and analytics exposes every r
         ->and($recipient->opened_at)->not->toBeNull()
         ->and($recipient->clicked_at)->not->toBeNull()
         ->and($recipient->events()->where('event_type', 'open')->count())->toBe(2)
-        ->and($recipient->events()->where('event_type', 'click')->count())->toBe(1);
+        ->and($recipient->events()->where('event_type', 'click')->count())->toBe(1)
+        ->and(data_get($recipient->events()->where('event_type', 'click')->sole()->metadata, 'user_agent'))
+        ->toBe('Mozilla/5.0 Analytics Test')
+        ->and(data_get($recipient->events()->where('event_type', 'click')->sole()->metadata, 'ip_hash'))
+        ->toBeString();
 
     Livewire::actingAs($owner)
         ->test(OutreachAnalytics::class, ['draft' => $draft])
         ->assertSee('Tracked Recipient')
-        ->assertSee('100% open rate')
-        ->assertSee('100% click rate');
+        ->assertSee('100% estimated open rate')
+        ->assertSee('100% of recipients')
+        ->assertSee('https://example.org/resource')
+        ->assertSee('Unverified');
+
+    $recipient->events()->where('event_type', 'click')->sole()->update([
+        'metadata' => ['user_agent' => 'Proofpoint URL Defense Scanner'],
+    ]);
+
+    Livewire::actingAs($owner)
+        ->test(OutreachAnalytics::class, ['draft' => $draft->fresh()])
+        ->assertSee('Likely security scan');
 });
 
 test('campaign and Gmail activity is logged without duplicating the outbound send', function () {
+    config()->set('features.congressional_directory_ui', true);
     $owner = User::factory()->create();
     $person = Person::query()->create(['name' => 'Timeline Staff', 'email' => 'timeline@mail.house.gov']);
     $profile = workbenchProfile('Timeline Staff');
@@ -1070,6 +1119,56 @@ test('campaign and Gmail activity is logged without duplicating the outbound sen
     expect(ContactActivity::query()->where('campaign_recipient_id', $recipient->id)->count())->toBe(2)
         ->and(ContactActivity::query()->where('campaign_recipient_id', $recipient->id)->where('gmail_message_id', $outbound->id)->count())->toBe(2);
 
+    $automatic = GmailMessage::query()->create([
+        'user_id' => $owner->id,
+        'person_id' => $person->id,
+        'gmail_message_id' => 'gmail-automatic',
+        'gmail_thread_id' => 'automatic-thread',
+        'subject' => 'Automatic reply: Timeline subject',
+        'snippet' => 'I am out of the office until Monday.',
+        'from_email' => 'timeline@mail.house.gov',
+        'to_emails' => [$owner->email],
+        'sent_at' => now()->addSeconds(30),
+        'is_inbound' => true,
+    ]);
+    app(CongressionalStaffChangeDetector::class)->detect($automatic);
+    $activities->recordGmailMessage($automatic);
+
+    expect($recipient->fresh()->replied_at)->toBeNull()
+        ->and(CongressionalStaffEmailEvent::query()
+            ->where('campaign_recipient_id', $recipient->id)
+            ->where('event_type', 'auto_reply')
+            ->exists())->toBeTrue();
+
+    Livewire::actingAs($owner)
+        ->test(OutreachAnalytics::class, ['draft' => $draft->fresh()])
+        ->assertSee('Auto-reply')
+        ->assertSee('Open in Gmail')
+        ->assertSee('I am out of the office until Monday.')
+        ->assertSee('0% reply rate');
+
+    $departure = GmailMessage::query()->create([
+        'user_id' => $owner->id,
+        'person_id' => $person->id,
+        'gmail_message_id' => 'gmail-departure',
+        'gmail_thread_id' => 'departure-thread',
+        'subject' => 'Automatic reply: Timeline subject',
+        'snippet' => 'I am no longer with this office. Please contact the main office.',
+        'from_email' => 'timeline@mail.house.gov',
+        'to_emails' => [$owner->email],
+        'sent_at' => now()->addSeconds(45),
+        'is_inbound' => true,
+    ]);
+    $departureSignal = app(CongressionalStaffChangeDetector::class)->detect($departure);
+    $activities->recordGmailMessage($departure);
+
+    expect($departureSignal?->signal_type)->toBe('departure')
+        ->and($recipient->fresh()->replied_at)->toBeNull()
+        ->and(CongressionalStaffEmailEvent::query()
+            ->where('campaign_recipient_id', $recipient->id)
+            ->where('event_type', 'departure_auto_reply')
+            ->exists())->toBeTrue();
+
     $inbound = GmailMessage::query()->create([
         'user_id' => $owner->id,
         'person_id' => $person->id,
@@ -1082,9 +1181,14 @@ test('campaign and Gmail activity is logged without duplicating the outbound sen
         'sent_at' => now()->addMinute(),
         'is_inbound' => true,
     ]);
+    app(CongressionalStaffChangeDetector::class)->detect($inbound);
     $activities->recordGmailMessage($inbound);
 
     expect($recipient->fresh()->replied_at)->not->toBeNull()
+        ->and(CongressionalStaffEmailEvent::query()
+            ->where('campaign_recipient_id', $recipient->id)
+            ->where('event_type', 'human_reply')
+            ->exists())->toBeTrue()
         ->and($person->contactActivities()->where('direction', 'inbound')->exists())->toBeTrue()
         ->and($profile->contactActivities()->where('direction', 'inbound')->exists())->toBeTrue();
 });

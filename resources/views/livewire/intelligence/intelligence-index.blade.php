@@ -1,4 +1,4 @@
-<div class="app-page-frame space-y-8">
+<div class="desk-page">
     <div class="flex flex-col gap-4">
         <div class="app-page-head">
             <div>

@@ -4,6 +4,7 @@ namespace App\Livewire\CongressionalDirectory;
 
 use App\Jobs\BuildCongressionalOutreachDraftSnapshot;
 use App\Models\CongressionalOutreachDraft;
+use App\Services\CongressionalDirectory\CongressionalCampaignScheduleService;
 use App\Services\CongressionalDirectory\CongressionalOutreachWorkbenchService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
@@ -47,6 +48,18 @@ class CampaignIndex extends Component
         $this->dispatch('notify', type: 'success', message: 'Campaign duplicated. Review the audience, message, and delivery settings before sending.');
 
         return $this->redirectRoute('congress.outreach.show', ['draft' => $copy], navigate: true);
+    }
+
+    public function pauseCampaign(
+        int $draftId,
+        CongressionalCampaignScheduleService $schedules
+    ): void {
+        $draft = CongressionalOutreachDraft::query()
+            ->where('user_id', Auth::id())
+            ->findOrFail($draftId);
+
+        $schedules->pause($draft, Auth::user());
+        $this->dispatch('notify', type: 'success', message: 'Campaign paused. No new automated batches will start until it is resumed.');
     }
 
     public function render()

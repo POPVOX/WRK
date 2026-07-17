@@ -207,6 +207,22 @@
                             <a href="{{ route($item['route']) }}" wire:navigate @click="mobileNavOpen = false" class="app-nav-link {{ $active ? 'app-nav-link-active' : '' }}">
                                 <span>{{ $item['label'] }}</span>
                             </a>
+
+                            @if($item['label'] === 'People' && $peopleActive)
+                                <div class="desk-subnav">
+                                    @foreach($peopleSubnav as $subitem)
+                                        <a href="{{ route($subitem['route']) }}" wire:navigate @click="mobileNavOpen = false" aria-current="{{ $isActive($subitem) ? 'page' : 'false' }}">{{ $subitem['label'] }}</a>
+                                    @endforeach
+                                </div>
+                            @endif
+
+                            @if($item['label'] === 'Outreach' && $outreachActive)
+                                <div class="desk-subnav">
+                                    @foreach($outreachSubnav as $subitem)
+                                        <a href="{{ route($subitem['route']) }}" wire:navigate @click="mobileNavOpen = false" aria-current="{{ $isActive($subitem) ? 'page' : 'false' }}">{{ $subitem['label'] }}</a>
+                                    @endforeach
+                                </div>
+                            @endif
                         @endforeach
                     </nav>
                     <div class="mt-5 border-t border-[#e4ddd0] px-3 pt-3 space-y-2">

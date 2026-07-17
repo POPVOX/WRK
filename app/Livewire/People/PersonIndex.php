@@ -36,6 +36,8 @@ class PersonIndex extends Component
 
     public string $viewMode = 'table'; // 'card' or 'table'
 
+    public string $relationshipView = 'all';
+
     public string $sortBy = 'name';
 
     public string $sortDirection = 'asc';
@@ -143,6 +145,12 @@ class PersonIndex extends Component
 
     public function updatingSortDirection()
     {
+        $this->resetPage();
+    }
+
+    public function setRelationshipView(string $view): void
+    {
+        $this->relationshipView = in_array($view, ['all', 'mine', 'going_cold', 'hill', 'funders'], true) ? $view : 'all';
         $this->resetPage();
     }
 
@@ -920,7 +928,10 @@ PROMPT;
             ->select('people.*')
             ->selectRaw("{$emailDomainExpr} as email_domain")
             ->with(['organization', 'owner'])
-            ->withCount('meetings');
+            ->withCount('meetings')
+            ->withMax('contactActivities', 'occurred_at')
+            ->withMax('interactions', 'occurred_at')
+            ->withMax('meetings', 'meeting_date');
 
         // Show trashed or active records
         if ($this->showTrashed) {
@@ -945,6 +956,24 @@ PROMPT;
                 if ($tag !== '') {
                     $q->whereJsonContains('tags', $tag);
                 }
+            })
+            ->when($this->relationshipView === 'mine', fn ($q) => $q->where('owner_id', auth()->id()))
+            ->when($this->relationshipView === 'going_cold', function ($q) {
+                $cutoff = now()->subDays(90);
+                $q->where('owner_id', auth()->id())
+                    ->whereDoesntHave('contactActivities', fn ($activity) => $activity->where('occurred_at', '>=', $cutoff))
+                    ->whereDoesntHave('interactions', fn ($activity) => $activity->where('occurred_at', '>=', $cutoff))
+                    ->whereDoesntHave('meetings', fn ($meeting) => $meeting->where('meeting_date', '>=', $cutoff));
+            })
+            ->when($this->relationshipView === 'hill', function ($q) {
+                $q->where(function ($hill) {
+                    $hill->where('title', 'ilike', '%legislative%')
+                        ->orWhere('title', 'ilike', '%chief of staff%')
+                        ->orWhereHas('organization', fn ($org) => $org->where('name', 'ilike', '%senate%')->orWhere('name', 'ilike', '%house%')->orWhere('name', 'ilike', '%congress%'));
+                });
+            })
+            ->when($this->relationshipView === 'funders', function ($q) {
+                $q->whereHas('organization', fn ($org) => $org->where('name', 'ilike', '%foundation%')->orWhere('name', 'ilike', '%fund%'));
             });
 
         $domain = $this->normalizeDomainFilter($this->filterEmailDomain);
