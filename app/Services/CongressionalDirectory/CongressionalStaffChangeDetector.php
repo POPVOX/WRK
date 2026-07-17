@@ -59,7 +59,10 @@ class CongressionalStaffChangeDetector
 
         $replacementEmails = $deliveryFailure
             ? collect()
-            : collect($emails)->reject(fn (string $email) => in_array($email, $excluded, true))->values();
+            : collect($emails)
+                ->reject(fn (string $email) => in_array($email, $excluded, true))
+                ->filter(fn (string $email) => $this->isLikelyPersonReplacement($email))
+                ->values();
         $sourceEmail = Str::lower((string) $message->from_email) ?: null;
         $targetEmails = $deliveryFailure
             ? $this->deliveryFailureTargets($message, $emails)
@@ -77,8 +80,24 @@ class CongressionalStaffChangeDetector
             $replacementEmails->implode(','),
         ]));
 
-        $signal = CongressionalStaffChangeSignal::query()->firstOrNew(['signal_key' => $signalKey]);
+        $matchingTypes = $deliveryFailure
+            ? ['delivery_failure']
+            : ['departure', 'departure_redirect'];
+        $matchingSignals = CongressionalStaffChangeSignal::query()
+            ->where('gmail_message_id', $message->id)
+            ->whereIn('signal_type', $matchingTypes)
+            ->get();
+        $signal = $matchingSignals
+            ->sortByDesc(fn (CongressionalStaffChangeSignal $candidate): int => ($candidate->reviewed_at ? 2 : 0) + ($candidate->signal_key === $signalKey ? 1 : 0))
+            ->first()
+            ?? CongressionalStaffChangeSignal::query()->firstOrNew(['signal_key' => $signalKey]);
         $isNew = ! $signal->exists;
+        if ($signal->exists) {
+            CongressionalStaffChangeSignal::query()
+                ->whereIn('id', $matchingSignals->where('id', '!=', $signal->id)->pluck('id'))
+                ->delete();
+            $signal->signal_key = $signalKey;
+        }
         $signal->fill([
             'gmail_message_id' => $message->id,
             'user_id' => $message->user_id,
@@ -215,6 +234,16 @@ class CongressionalStaffChangeDetector
         $local = Str::before($email, '@');
 
         return Str::title(preg_replace('/[._\-]+/', ' ', $local) ?: $local);
+    }
+
+    protected function isLikelyPersonReplacement(string $email): bool
+    {
+        $local = Str::before($email, '@');
+        if (preg_match('/(?:^|[._-])(schedule|scheduling|office|tours?|press|media|info|contact|general|casework|help|communications?)(?:$|[._-])/i', $local) === 1) {
+            return false;
+        }
+
+        return count(preg_split('/[._-]+/', $local) ?: []) >= 2;
     }
 
     /** @param array<int, string> $replacements */
