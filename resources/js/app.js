@@ -1,5 +1,103 @@
 import './bootstrap';
 
+document.addEventListener('alpine:init', () => {
+    window.Alpine.data('voiceDictation', () => ({
+        isRecording: false,
+        interimTranscript: '',
+        recognition: null,
+
+        init() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                return;
+            }
+
+            this.recognition = new SpeechRecognition();
+            this.recognition.continuous = true;
+            this.recognition.interimResults = true;
+            this.recognition.lang = 'en-US';
+
+            this.recognition.onresult = (event) => {
+                let interim = '';
+                let final = '';
+
+                for (let index = event.resultIndex; index < event.results.length; index += 1) {
+                    const transcript = event.results[index][0].transcript;
+
+                    if (event.results[index].isFinal) {
+                        final += `${transcript} `;
+                    } else {
+                        interim += transcript;
+                    }
+                }
+
+                this.interimTranscript = interim;
+
+                if (final.trim()) {
+                    this.$wire.appendDictation(final.trim());
+                    this.interimTranscript = '';
+                }
+            };
+
+            this.recognition.onerror = (event) => {
+                this.isRecording = false;
+                this.interimTranscript = '';
+
+                if (event.error === 'not-allowed') {
+                    window.alert('Microphone access denied. Please allow microphone access in your browser settings.');
+                }
+            };
+
+            this.recognition.onend = () => {
+                if (!this.isRecording) {
+                    return;
+                }
+
+                try {
+                    this.recognition.start();
+                } catch {
+                    this.isRecording = false;
+                }
+            };
+        },
+
+        toggleRecording() {
+            if (!this.recognition) {
+                window.alert('Voice dictation is not supported in this browser. Please use Chrome, Edge, or Safari.');
+                return;
+            }
+
+            if (this.isRecording) {
+                this.stopRecording();
+            } else {
+                this.startRecording();
+            }
+        },
+
+        startRecording() {
+            try {
+                this.recognition.start();
+                this.isRecording = true;
+                this.interimTranscript = '';
+            } catch {
+                window.alert('Failed to start voice dictation. Please try again.');
+            }
+        },
+
+        stopRecording() {
+            this.recognition.stop();
+            this.isRecording = false;
+
+            if (this.interimTranscript.trim()) {
+                this.$wire.appendDictation(this.interimTranscript.trim());
+            }
+
+            this.interimTranscript = '';
+        },
+    }));
+});
+
 const TOAST_CONTAINER_ID = 'wrk-global-toast-container';
 
 function ensureToastContainer() {
