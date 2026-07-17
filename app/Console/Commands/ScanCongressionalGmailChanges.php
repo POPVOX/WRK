@@ -24,9 +24,29 @@ class ScanCongressionalGmailChanges extends Command
         $limit = max(1, min((int) $this->option('limit'), 50000));
         $scanned = 0;
         $signals = 0;
+        $patterns = [
+            '%no longer with%',
+            '%no longer at%',
+            '%left the office%',
+            '%has left%',
+            '%departed%',
+            '%my last day%',
+            '%delivery status notification%',
+            '%address not found%',
+            '%not delivered%',
+            '%undeliverable%',
+            '%recipient address rejected%',
+            '%550 5.%',
+        ];
 
         GmailMessage::query()
             ->where('is_inbound', true)
+            ->where(function ($query) use ($patterns): void {
+                $searchableText = "LOWER(COALESCE(subject, '') || ' ' || COALESCE(snippet, '') || ' ' || COALESCE(body_text, ''))";
+                foreach ($patterns as $pattern) {
+                    $query->orWhereRaw("{$searchableText} LIKE ?", [$pattern]);
+                }
+            })
             ->latest('sent_at')
             ->limit($limit)
             ->each(function (GmailMessage $message) use ($detector, &$scanned, &$signals): void {
@@ -36,7 +56,7 @@ class ScanCongressionalGmailChanges extends Command
                 }
             });
 
-        $this->info("Scanned {$scanned} inbound Gmail messages; {$signals} matched a staff-change pattern.");
+        $this->info("Scanned {$scanned} candidate Gmail messages; {$signals} matched a staff-change pattern.");
 
         return self::SUCCESS;
     }

@@ -28,6 +28,7 @@ class DeployHook extends Command
             $this->callSilently('view:clear');
             $this->callSilently('config:clear');
             $this->callSilently('route:clear');
+
             return true;
         });
 
@@ -36,6 +37,7 @@ class DeployHook extends Command
             $this->callSilently('config:cache');
             $this->callSilently('route:cache');
             $this->callSilently('view:cache');
+
             return true;
         });
 
@@ -54,9 +56,18 @@ class DeployHook extends Command
             });
         }
 
-        // 5. Restart queue workers
+        // 5. Reconcile imported Gmail evidence so older bounces and departures
+        // receive the same idempotent cleanup as newly imported messages.
+        $this->task('Reconciling congressional email evidence', function () {
+            return $this->callSilently('congressional:scan-gmail-changes', [
+                '--limit' => 10000,
+            ]) === 0;
+        });
+
+        // 6. Restart queue workers
         $this->task('Restarting queue workers', function () {
             $this->callSilently('queue:restart');
+
             return true;
         });
 
