@@ -2,6 +2,7 @@
 
 namespace App\Services\CongressionalDirectory;
 
+use App\Models\CongressionalPosition;
 use App\Models\CongressionalStaffChangeSignal;
 use App\Models\CongressionalStaffEmail;
 use App\Models\CongressionalStaffEmailEvent;
@@ -170,10 +171,6 @@ class CongressionalEmailEvidenceService
                 ]
             );
 
-            if (! $event->wasRecentlyCreated) {
-                return $event;
-            }
-
             if ($campaignRecipientId) {
                 $recipientUpdates = match ($eventType) {
                     'human_reply' => ['replied_at' => $occurredAt],
@@ -197,7 +194,22 @@ class CongressionalEmailEvidenceService
                 'not_bounced' => $staffEmail->verification_status === 'unverified'
                     ? ['verification_status' => 'not_bounced']
                     : [],
-                'human_reply' => ['verification_status' => 'replied', 'last_replied_at' => $occurredAt],
+                'auto_reply' => in_array($staffEmail->verification_status, ['unverified', 'not_bounced', 'sourced'], true)
+                    ? [
+                        'verification_status' => 'observed',
+                        'first_observed_at' => $staffEmail->first_observed_at ?? $occurredAt,
+                        'last_observed_at' => $occurredAt,
+                    ]
+                    : ['last_observed_at' => $occurredAt],
+                'departure_auto_reply' => in_array($staffEmail->verification_status, ['hard_bounced', 'unsubscribed', 'suppressed'], true)
+                    ? ['last_observed_at' => $occurredAt]
+                    : ['verification_status' => 'departed', 'last_observed_at' => $occurredAt],
+                'human_reply' => [
+                    'verification_status' => 'replied',
+                    'first_observed_at' => $staffEmail->first_observed_at ?? $occurredAt,
+                    'last_observed_at' => $occurredAt,
+                    'last_replied_at' => $occurredAt,
+                ],
                 'confirmed' => ['verification_status' => 'confirmed'],
                 'hard_bounce' => ['verification_status' => 'hard_bounced', 'hard_bounced_at' => $occurredAt],
                 'unsubscribed' => ['verification_status' => 'unsubscribed', 'unsubscribed_at' => $occurredAt],
@@ -209,23 +221,27 @@ class CongressionalEmailEvidenceService
                 $staffEmail->update($updates);
             }
 
-            if (in_array($eventType, ['hard_bounce', 'unsubscribed', 'manual_suppressed'], true)) {
-                OutreachEmailSuppression::query()->updateOrCreate(
-                    ['email_normalized' => $staffEmail->email_normalized],
-                    [
-                        'reason' => match ($eventType) {
-                            'hard_bounce' => 'hard_bounce',
-                            'unsubscribed' => 'unsubscribe',
-                            default => 'manual',
-                        },
+            if (in_array($eventType, ['hard_bounce', 'departure_auto_reply', 'unsubscribed', 'manual_suppressed'], true)) {
+                $reason = match ($eventType) {
+                    'hard_bounce' => 'hard_bounce',
+                    'departure_auto_reply' => 'departed',
+                    'unsubscribed' => 'unsubscribe',
+                    default => 'manual',
+                };
+                $suppression = OutreachEmailSuppression::query()->firstOrNew([
+                    'email_normalized' => $staffEmail->email_normalized,
+                ]);
+                if (! $suppression->exists || $this->suppressionRank($reason) >= $this->suppressionRank($suppression->reason)) {
+                    $suppression->fill([
+                        'reason' => $reason,
                         'source_type' => $eventType,
                         'gmail_message_id' => $gmailMessageId,
                         'created_by' => $userId,
                         'notes' => $evidenceExcerpt,
                         'metadata' => $metadata === [] ? null : $metadata,
                         'suppressed_at' => $occurredAt,
-                    ]
-                );
+                    ])->save();
+                }
             }
 
             return $event;
@@ -311,7 +327,96 @@ class CongressionalEmailEvidenceService
             );
         }
 
+        if ($signal->signal_type === 'departure_redirect' && $matched->isNotEmpty()) {
+            $this->recordReplacementContacts($signal, $matched->first());
+        }
+
         return $matched->count();
+    }
+
+    protected function recordReplacementContacts(
+        CongressionalStaffChangeSignal $signal,
+        CongressionalStaffEmail $sourceEmail
+    ): void {
+        $sourceProfile = $sourceEmail->profile()->with('currentPosition')->first();
+        if (! $sourceProfile) {
+            return;
+        }
+
+        foreach ($signal->replacement_contacts ?? [] as $contact) {
+            $email = Str::lower(trim((string) ($contact['email'] ?? '')));
+            $displayName = trim((string) ($contact['display_name'] ?? ''));
+            if (! $this->isPersonReplacement($email, $displayName)) {
+                continue;
+            }
+
+            $existingEmail = CongressionalStaffEmail::query()
+                ->where('email_normalized', $email)
+                ->with('profile')
+                ->first();
+            $normalizedName = Str::upper(Str::squish($displayName));
+            $profile = $existingEmail?->profile
+                ?: CongressionalStaffProfile::query()
+                    ->where('chamber', $sourceProfile->chamber)
+                    ->where('normalized_name', $normalizedName)
+                    ->first();
+
+            if (! $profile) {
+                $profile = CongressionalStaffProfile::query()->firstOrCreate(
+                    ['profile_key' => hash('sha256', 'gmail-redirect|'.$email)],
+                    [
+                        'chamber' => $sourceProfile->chamber,
+                        'display_name' => $displayName,
+                        'normalized_name' => $normalizedName,
+                        'identity_hint' => preg_replace('/[^A-Z0-9]/', '', $normalizedName),
+                        'status' => 'reported_active',
+                        'review_status' => 'provisional',
+                        'first_seen_at' => $signal->detected_at?->toDateString(),
+                        'last_seen_at' => $signal->detected_at?->toDateString(),
+                        'metadata' => [
+                            'source' => 'gmail_redirect',
+                            'change_signal_id' => $signal->id,
+                        ],
+                    ]
+                );
+            }
+
+            $officeId = $sourceProfile->currentPosition?->office_id;
+            if ($officeId && ! $profile->positions()->where('office_id', $officeId)->where('is_current', true)->exists()) {
+                CongressionalPosition::query()->firstOrCreate(
+                    ['position_key' => hash('sha256', "gmail-redirect|{$profile->id}|{$officeId}")],
+                    [
+                        'profile_id' => $profile->id,
+                        'office_id' => $officeId,
+                        'title' => 'Referred congressional contact',
+                        'normalized_title' => 'REFERRED CONGRESSIONAL CONTACT',
+                        'first_reported_start' => $signal->detected_at?->toDateString(),
+                        'last_reported_end' => $signal->detected_at?->toDateString(),
+                        'is_current' => true,
+                        'confidence' => 'observed',
+                    ]
+                );
+            }
+
+            $this->addAddress(
+                $profile,
+                $email,
+                'redirected',
+                $signal->reviewed_by,
+                sourceNotes: 'Observed in a congressional staff departure response. Signal #'.$signal->id
+            );
+        }
+    }
+
+    protected function isPersonReplacement(string $email, string $displayName): bool
+    {
+        if (! filter_var($email, FILTER_VALIDATE_EMAIL) || count(preg_split('/\s+/', $displayName) ?: []) < 2) {
+            return false;
+        }
+
+        $local = Str::before($email, '@');
+
+        return preg_match('/(?:^|[._-])(schedule|scheduling|office|tours?|press|media|info|contact|general|casework|help|communications?)(?:$|[._-])/i', $local) !== 1;
     }
 
     protected function evidenceStrength(string $eventType): string
@@ -340,6 +445,16 @@ class CongressionalEmailEvidenceService
             'manual' => 2,
             'guessed' => 1,
             default => 0,
+        };
+    }
+
+    protected function suppressionRank(?string $reason): int
+    {
+        return match ($reason) {
+            'manual', 'unsubscribe' => 4,
+            'hard_bounce' => 3,
+            'departed' => 2,
+            default => 1,
         };
     }
 }

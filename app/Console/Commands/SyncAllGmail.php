@@ -55,7 +55,7 @@ class SyncAllGmail extends Command
             return 0;
         }
 
-        $users = User::whereNotNull('google_access_token')->get();
+        $users = User::active()->whereNotNull('google_access_token')->get();
         $this->info("Found {$users->count()} users with Google connected");
 
         foreach ($users as $user) {

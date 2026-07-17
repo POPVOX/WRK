@@ -4,15 +4,15 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>WRK - Work Smarter</title>
-    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
+    <title>WRKBench - Work Smarter</title>
+    <link rel="icon" type="image/png" href="{{ asset('images/wrk favicon.png') }}">
     <meta name="description"
-        content="WRK - The intelligent workspace for modern teams. Streamline your projects, meetings, and collaboration.">
+        content="WRKBench - The shared workspace for POPVOX Foundation projects, meetings, relationships, and outreach.">
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,600;1,400&family=Public+Sans:wght@400;500;600;700&display=swap"
         rel="stylesheet">
 
     <style>
@@ -25,21 +25,21 @@
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-            background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%) !important;
+            font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+            background: #26221c !important;
             min-height: 100vh;
             overflow-x: hidden;
             color: #ffffff;
         }
 
         .wrk-page {
-            background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+            background: linear-gradient(145deg, #26221c 0%, #332d25 58%, #26221c 100%);
             min-height: 100vh;
             position: relative;
         }
 
         .gradient-text {
-            background: linear-gradient(135deg, #a78bfa 0%, #ec4899 50%, #f472b6 100%);
+            background: linear-gradient(135deg, #f7f3ec 0%, #c97b4a 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -49,7 +49,7 @@
             position: absolute;
             width: 600px;
             height: 600px;
-            background: radial-gradient(circle, rgba(102, 126, 234, 0.2) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(201, 123, 74, 0.18) 0%, transparent 70%);
             top: -200px;
             left: 50%;
             transform: translateX(-50%);
@@ -71,7 +71,7 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #8a4b2d;
             color: #fff;
             padding: 12px 28px;
             border-radius: 12px;
@@ -222,12 +222,8 @@
         <nav style="padding: 24px 48px; position: relative; z-index: 10;">
             <div
                 style="max-width: 1280px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between;">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <div
-                        style="width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center;">
-                        <span style="color: #fff; font-weight: 700; font-size: 18px;">W</span>
-                    </div>
-                    <span style="color: #fff; font-weight: 600; font-size: 20px; letter-spacing: -0.5px;">WRK</span>
+                <div style="display: flex; align-items: center;">
+                    <x-wrkbench-logo variant="dark" style="height: 48px; width: auto;" />
                 </div>
 
                 @if (Route::has('login'))
@@ -261,14 +257,14 @@
                 <h1 class="fade-in fade-in-delay-1"
                     style="font-size: clamp(48px, 8vw, 72px); font-weight: 700; line-height: 1.1; margin-bottom: 24px; color: #ffffff;">
                     Work smarter with
-                    <span class="gradient-text" style="display: block; margin-top: 8px;">WRK</span>
+                    <x-wrkbench-logo variant="dark" style="height: 112px; width: auto; margin: 8px auto 0;" />
                 </h1>
 
                 <!-- Subheading -->
                 <p class="fade-in fade-in-delay-2 text-white-60"
                     style="font-size: 18px; max-width: 600px; margin: 0 auto 40px; line-height: 1.7;">
-                    The intelligent workspace for modern teams. Manage projects, track grants,
-                    organize meetings, and collaborate seamlessly—all in one place.
+                    The shared operating workspace for POPVOX Foundation. Manage projects, meetings,
+                    relationships, congressional outreach, and institutional knowledge in one place.
                 </p>
 
                 <!-- CTA Buttons -->
@@ -352,7 +348,7 @@
         <!-- Footer -->
         <footer style="padding: 32px 24px; text-align: center; position: relative; z-index: 10;">
             <p class="text-white-30" style="font-size: 14px;">
-                © {{ date('Y') }} WRK. Built with care.
+                © {{ date('Y') }} WRKBench · POPVOX Foundation
             </p>
         </footer>
     </div>

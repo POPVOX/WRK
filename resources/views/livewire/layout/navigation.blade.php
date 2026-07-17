@@ -23,7 +23,7 @@ new class extends Component {
                 <!-- Logo -->
                 <div class="shrink-0 flex items-center">
                     <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center">
-                        <img src="{{ asset('images/logo.png') }}" alt="PVOXWRK" class="h-8 w-auto">
+                        <x-wrkbench-logo class="h-9 w-auto" />
                     </a>
                 </div>
 
@@ -116,7 +116,7 @@ new class extends Component {
     <!-- Responsive Navigation Menu -->
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="pt-2 pb-3 space-y-1">
-            <div class="px-4 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">WRK</div>
+            <div class="px-4 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">WRKBench</div>
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
                 {{ __('WRKSPACE') }}
             </x-responsive-nav-link>

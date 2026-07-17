@@ -1,6 +1,6 @@
 <div class="desk-page">
     <x-congress-nav />
-    <x-desk-page-header eyebrow="Congress · Data quality" title="Staff changes" description="Confirm departures, failed addresses, and replacement contacts observed in Gmail. Confirmation records evidence; it does not automatically make an address campaign-eligible.">
+    <x-desk-page-header eyebrow="Congress · Data quality" title="Staff changes" description="Review departures and replacement contacts observed in Gmail. Clear hard bounces are suppressed automatically; confirming a redirect adds safe person-like replacements as observed congressional contacts.">
         <x-slot:actions>
         <div>
             <label for="change-status" class="text-sm font-medium text-gray-700">Review status</label>

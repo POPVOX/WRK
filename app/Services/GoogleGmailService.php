@@ -61,6 +61,10 @@ class GoogleGmailService
             $credential = $this->resolveGoogleCredential($user, $agent);
         }
 
+        if (trim((string) ($credential['access_token'] ?? '')) === '') {
+            return null;
+        }
+
         $this->client->setAccessToken((string) ($credential['access_token'] ?? ''));
 
         return new GoogleGmail($this->client);
@@ -89,8 +93,6 @@ class GoogleGmailService
         $daysBack = max(1, min($daysBack, 365));
         $maxMessages = max(1, min($maxMessages, 1000));
 
-        $query = sprintf('newer_than:%dd -in:chats -in:spam -in:trash', $daysBack);
-        $pageToken = null;
         $processed = 0;
         $imported = 0;
         $updated = 0;
@@ -98,95 +100,74 @@ class GoogleGmailService
         $latestHistoryId = null;
 
         try {
-            do {
-                $remaining = $maxMessages - $processed;
-                if ($remaining <= 0) {
-                    break;
-                }
+            $syncBatch = $this->messageIdsForSync($user, $daysBack, $maxMessages, $agent);
+            $latestHistoryId = $syncBatch['history_id'];
+            foreach ($syncBatch['message_ids'] as $messageId) {
+                try {
+                    $message = $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($messageId) {
+                        return $gmail->users_messages->get('me', $messageId, [
+                            'format' => 'metadata',
+                            'metadataHeaders' => ['From', 'To', 'Cc', 'Bcc', 'Subject', 'Date'],
+                        ]);
+                    });
 
-                $response = $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($remaining, $query, $pageToken) {
-                    return $gmail->users_messages->listUsersMessages('me', array_filter([
-                        'maxResults' => min(100, $remaining),
-                        'q' => $query,
-                        'includeSpamTrash' => false,
-                        'pageToken' => $pageToken,
-                    ]));
-                });
-
-                $messageRefs = $response->getMessages() ?? [];
-                foreach ($messageRefs as $messageRef) {
-                    if ($processed >= $maxMessages) {
-                        break;
+                    $historyId = (string) ($message->getHistoryId() ?? '');
+                    if ($historyId !== '' && ($latestHistoryId === null || (int) $historyId > (int) $latestHistoryId)) {
+                        $latestHistoryId = $historyId;
                     }
 
-                    try {
-                        $message = $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($messageRef) {
-                            return $gmail->users_messages->get('me', $messageRef->getId(), [
-                                'format' => 'metadata',
-                                'metadataHeaders' => ['From', 'To', 'Cc', 'Bcc', 'Subject', 'Date'],
-                            ]);
+                    $payload = $this->mapMessageToRecord($user, $message);
+                    if ($this->congressionalStaffChangeDetector->mightContainSignal(
+                        trim(($payload['subject'] ?? '').' '.($payload['snippet'] ?? ''))
+                    )) {
+                        $fullMessage = $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($messageId) {
+                            return $gmail->users_messages->get('me', $messageId, ['format' => 'full']);
                         });
-
-                        $historyId = (string) ($message->getHistoryId() ?? '');
-                        if ($historyId !== '' && ($latestHistoryId === null || (int) $historyId > (int) $latestHistoryId)) {
-                            $latestHistoryId = $historyId;
-                        }
-
-                        $payload = $this->mapMessageToRecord($user, $message);
-                        if ($this->congressionalStaffChangeDetector->mightContainSignal(
-                            trim(($payload['subject'] ?? '').' '.($payload['snippet'] ?? ''))
-                        )) {
-                            $fullMessage = $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($messageRef) {
-                                return $gmail->users_messages->get('me', $messageRef->getId(), ['format' => 'full']);
-                            });
-                            $payload['body_text'] = $this->extractMessageBody($fullMessage);
-                        }
-
-                        $record = GmailMessage::firstOrNew([
-                            'user_id' => $user->id,
-                            'gmail_message_id' => $payload['gmail_message_id'],
-                        ]);
-                        $isNew = ! $record->exists;
-
-                        $record->fill([
-                            'person_id' => $payload['person_id'],
-                            'gmail_thread_id' => $payload['gmail_thread_id'],
-                            'history_id' => $payload['history_id'],
-                            'subject' => $payload['subject'],
-                            'snippet' => $payload['snippet'],
-                            'body_text' => $payload['body_text'] ?? null,
-                            'from_email' => $payload['from_email'],
-                            'from_name' => $payload['from_name'],
-                            'to_emails' => $payload['to_emails'],
-                            'cc_emails' => $payload['cc_emails'],
-                            'bcc_emails' => $payload['bcc_emails'],
-                            'sent_at' => $payload['sent_at'],
-                            'is_inbound' => $payload['is_inbound'],
-                            'labels' => $payload['labels'],
-                        ]);
-                        $record->save();
-                        $this->congressionalStaffChangeDetector->detect($record);
-                        app(ContactActivityService::class)->recordGmailMessage($record->loadMissing('user'));
-
-                        if ($isNew) {
-                            $imported++;
-                        } else {
-                            $updated++;
-                        }
-                    } catch (Throwable $exception) {
-                        $errors++;
-                        \Log::warning('Gmail message sync item failed', [
-                            'user_id' => $user->id,
-                            'message_id' => $messageRef->getId(),
-                            'error' => $exception->getMessage(),
-                        ]);
-                    } finally {
-                        $processed++;
+                        $payload['body_text'] = $this->extractMessageBody($fullMessage);
                     }
-                }
 
-                $pageToken = $response->getNextPageToken();
-            } while ($pageToken && $processed < $maxMessages);
+                    $record = GmailMessage::firstOrNew([
+                        'user_id' => $user->id,
+                        'gmail_message_id' => $payload['gmail_message_id'],
+                    ]);
+                    $isNew = ! $record->exists;
+
+                    $record->fill([
+                        'person_id' => $payload['person_id'],
+                        'gmail_thread_id' => $payload['gmail_thread_id'],
+                        'history_id' => $payload['history_id'],
+                        'subject' => $payload['subject'],
+                        'snippet' => $payload['snippet'],
+                        'body_text' => $payload['body_text'] ?? null,
+                        'from_email' => $payload['from_email'],
+                        'from_name' => $payload['from_name'],
+                        'to_emails' => $payload['to_emails'],
+                        'cc_emails' => $payload['cc_emails'],
+                        'bcc_emails' => $payload['bcc_emails'],
+                        'sent_at' => $payload['sent_at'],
+                        'is_inbound' => $payload['is_inbound'],
+                        'labels' => $payload['labels'],
+                    ]);
+                    $record->save();
+                    $this->congressionalStaffChangeDetector->detect($record);
+                    app(ContactActivityService::class)->recordGmailMessage($record->loadMissing('user'));
+
+                    if ($isNew) {
+                        $imported++;
+                    } else {
+                        $updated++;
+                    }
+                } catch (Throwable $exception) {
+                    $errors++;
+                    \Log::warning('Gmail message sync item failed', [
+                        'user_id' => $user->id,
+                        'message_id' => $messageId,
+                        'error' => $exception->getMessage(),
+                    ]);
+                } finally {
+                    $processed++;
+                }
+            }
         } catch (Throwable $exception) {
             $this->throwIfInsufficientGmailScope($exception);
 
@@ -197,9 +178,12 @@ class GoogleGmailService
             throw $exception;
         }
 
+        $effectiveHistoryId = $errors === 0
+            ? ($latestHistoryId ?: $user->gmail_history_id)
+            : $user->gmail_history_id;
         $user->update([
             'gmail_import_date' => now(),
-            'gmail_history_id' => $latestHistoryId ?: $user->gmail_history_id,
+            'gmail_history_id' => $effectiveHistoryId,
         ]);
 
         return [
@@ -208,7 +192,112 @@ class GoogleGmailService
             'updated' => $updated,
             'processed' => $processed,
             'errors' => $errors,
-            'history_id' => $latestHistoryId,
+            'history_id' => $effectiveHistoryId,
+            'mode' => $syncBatch['mode'],
+        ];
+    }
+
+    /**
+     * @return array{message_ids:array<int,string>,history_id:?string,mode:string}
+     */
+    protected function messageIdsForSync(User $user, int $daysBack, int $maxMessages, ?Agent $agent): array
+    {
+        if (filled($user->gmail_history_id)) {
+            try {
+                return $this->incrementalMessageIds($user, $maxMessages, $agent);
+            } catch (Throwable $exception) {
+                if ((int) $exception->getCode() !== 404
+                    && ! str_contains(Str::lower($exception->getMessage()), 'starthistoryid')) {
+                    throw $exception;
+                }
+
+                \Log::notice('Gmail history checkpoint expired; falling back to a bounded recent sync', [
+                    'user_id' => $user->id,
+                    'history_id' => $user->gmail_history_id,
+                ]);
+            }
+        }
+
+        return $this->recentMessageIds($user, $daysBack, $maxMessages, $agent);
+    }
+
+    /**
+     * @return array{message_ids:array<int,string>,history_id:?string,mode:string}
+     */
+    protected function incrementalMessageIds(User $user, int $maxMessages, ?Agent $agent): array
+    {
+        $pageToken = null;
+        $messageIds = collect();
+        $checkpoint = (string) $user->gmail_history_id;
+        $responseHistoryId = $checkpoint;
+        $truncated = false;
+
+        do {
+            $response = $this->executeGmailCall($user, $agent, fn (GoogleGmail $gmail) => $gmail->users_history->listUsersHistory('me', array_filter([
+                'startHistoryId' => (string) $user->gmail_history_id,
+                'historyTypes' => ['messageAdded'],
+                'maxResults' => min(500, max(100, $maxMessages)),
+                'pageToken' => $pageToken,
+            ])));
+            $responseHistoryId = (string) ($response->getHistoryId() ?: $responseHistoryId);
+
+            foreach ($response->getHistory() ?? [] as $history) {
+                foreach ($history->getMessagesAdded() ?? [] as $addition) {
+                    $messageId = (string) ($addition->getMessage()?->getId() ?? '');
+                    if ($messageId !== '') {
+                        $messageIds->push($messageId);
+                    }
+                }
+                $checkpoint = (string) ($history->getId() ?: $checkpoint);
+                if ($messageIds->unique()->count() >= $maxMessages) {
+                    $truncated = true;
+                    break 2;
+                }
+            }
+
+            $pageToken = $response->getNextPageToken();
+        } while ($pageToken);
+
+        return [
+            'message_ids' => $messageIds->unique()->values()->all(),
+            'history_id' => $truncated || $pageToken ? $checkpoint : $responseHistoryId,
+            'mode' => 'history',
+        ];
+    }
+
+    /**
+     * @return array{message_ids:array<int,string>,history_id:?string,mode:string}
+     */
+    protected function recentMessageIds(User $user, int $daysBack, int $maxMessages, ?Agent $agent): array
+    {
+        $query = sprintf('newer_than:%dd -in:chats -in:spam -in:trash', $daysBack);
+        $pageToken = null;
+        $messageIds = collect();
+
+        do {
+            $remaining = $maxMessages - $messageIds->count();
+            if ($remaining <= 0) {
+                break;
+            }
+            $response = $this->executeGmailCall($user, $agent, fn (GoogleGmail $gmail) => $gmail->users_messages->listUsersMessages('me', array_filter([
+                'maxResults' => min(100, $remaining),
+                'q' => $query,
+                'includeSpamTrash' => false,
+                'pageToken' => $pageToken,
+            ])));
+            foreach ($response->getMessages() ?? [] as $message) {
+                $messageId = (string) ($message->getId() ?? '');
+                if ($messageId !== '') {
+                    $messageIds->push($messageId);
+                }
+            }
+            $pageToken = $response->getNextPageToken();
+        } while ($pageToken && $messageIds->count() < $maxMessages);
+
+        return [
+            'message_ids' => $messageIds->unique()->values()->all(),
+            'history_id' => null,
+            'mode' => 'recent',
         ];
     }
 
@@ -329,6 +418,14 @@ class GoogleGmailService
                 'error' => $token['error'] ?? 'missing_access_token',
                 'error_description' => $token['error_description'] ?? null,
             ]);
+
+            if (! $agent && ($token['error'] ?? null) === 'invalid_grant') {
+                $user->forceFill([
+                    'google_access_token' => null,
+                    'google_refresh_token' => null,
+                    'google_token_expires_at' => null,
+                ])->save();
+            }
 
             return false;
         }
