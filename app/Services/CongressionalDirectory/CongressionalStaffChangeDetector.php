@@ -5,13 +5,15 @@ namespace App\Services\CongressionalDirectory;
 use App\Models\CongressionalStaffChangeSignal;
 use App\Models\GmailMessage;
 use App\Models\OutreachCampaignRecipient;
+use App\Services\Outreach\OutreachResponseClassifier;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class CongressionalStaffChangeDetector
 {
     public function __construct(
-        protected CongressionalEmailEvidenceService $emailEvidence
+        protected CongressionalEmailEvidenceService $emailEvidence,
+        protected OutreachResponseClassifier $responseClassifier
     ) {}
 
     public function mightContainSignal(string $text): bool
@@ -115,9 +117,7 @@ class CongressionalStaffChangeDetector
         }
 
         $text = trim(($message->subject ?? '').' '.($message->snippet ?? '').' '.($message->body_text ?? ''));
-        $eventType = preg_match('/automatic reply|auto[ -]?reply|out of office|away from the office/i', $text) === 1
-            ? 'auto_reply'
-            : 'human_reply';
+        $eventType = $this->responseClassifier->classify($message);
         $this->emailEvidence->recordEvent(
             $staffEmail,
             $eventType,

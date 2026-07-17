@@ -64,6 +64,11 @@ class OutreachCampaignRecipient extends Model
         return $this->hasMany(OutreachRecipientEvent::class, 'campaign_recipient_id')->latest('occurred_at');
     }
 
+    public function emailEvidenceEvents(): HasMany
+    {
+        return $this->hasMany(CongressionalStaffEmailEvent::class, 'campaign_recipient_id')->latest('occurred_at');
+    }
+
     public function contactActivities(): HasMany
     {
         return $this->hasMany(ContactActivity::class, 'campaign_recipient_id');

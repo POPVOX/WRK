@@ -346,9 +346,9 @@
                     ['Failed', $analyticsStatuses['failed'] ?? 0, 'text-red-700'],
                     ['Suppressed', $analyticsStatuses['suppressed'] ?? 0, 'text-amber-700'],
                     ['Human replies', $analyticsEvents['human_reply'] ?? 0, 'text-emerald-700'],
-                    ['Auto-replies', $analyticsEvents['auto_reply'] ?? 0, 'text-indigo-700'],
+                    ['Auto-replies', $analytics['engagement']['auto_replied'], 'text-indigo-700'],
                     ['Bounce alerts', $analytics['bounce_signals'], 'text-red-700'],
-                    ['Opened', $analytics['engagement']['opened'], 'text-indigo-700'],
+                    ['Pixel opened', $analytics['engagement']['opened'], 'text-indigo-700'],
                 ] as [$label, $value, $color])
                     <div class="rounded-lg bg-gray-50 p-3">
                         <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{{ $label }}</p>
@@ -356,7 +356,7 @@
                     </div>
                 @endforeach
                 <div class="rounded-lg bg-gray-50 p-3">
-                    <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Link clicks</p>
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Link activity</p>
                     @if($analytics['clicks_tracked'])
                         <p class="mt-1 text-2xl font-bold text-indigo-700">{{ number_format($analytics['engagement']['clicked']) }}</p>
                     @else

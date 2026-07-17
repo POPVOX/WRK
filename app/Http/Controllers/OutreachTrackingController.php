@@ -10,9 +10,9 @@ use Symfony\Component\HttpFoundation\Response;
 
 class OutreachTrackingController extends Controller
 {
-    public function open(string $token, OutreachTrackingService $tracking): Response
+    public function open(string $token, Request $request, OutreachTrackingService $tracking): Response
     {
-        $tracking->recordOpen($token);
+        $tracking->recordOpen($token, $this->requestMetadata($request));
         $pixel = base64_decode('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==');
 
         return response($pixel, 200, [
@@ -24,11 +24,31 @@ class OutreachTrackingController extends Controller
     public function click(string $token, Request $request, OutreachTrackingService $tracking): RedirectResponse
     {
         try {
-            $destination = $tracking->recordClick($token, (string) $request->query('url'));
+            $destination = $tracking->recordClick(
+                $token,
+                (string) $request->query('url'),
+                $this->requestMetadata($request)
+            );
         } catch (RuntimeException) {
             abort(400, 'Invalid tracking destination.');
         }
 
         return redirect()->away($destination);
+    }
+
+    /** @return array<string, string> */
+    protected function requestMetadata(Request $request): array
+    {
+        $metadata = [];
+        $userAgent = trim((string) $request->userAgent());
+        if ($userAgent !== '') {
+            $metadata['user_agent'] = mb_substr($userAgent, 0, 500);
+        }
+
+        if ($request->ip()) {
+            $metadata['ip_hash'] = hash_hmac('sha256', (string) $request->ip(), (string) config('app.key'));
+        }
+
+        return $metadata;
     }
 }
