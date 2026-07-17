@@ -4,6 +4,7 @@ namespace App\Livewire\CongressionalDirectory;
 
 use App\Models\CongressionalStaffChangeSignal;
 use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -52,6 +53,21 @@ class ChangeSignalIndex extends Component
             'rejected' => 'Signal dismissed.',
             default => 'Signal returned to review.',
         });
+    }
+
+    public function reconcileImportedEvidence(): void
+    {
+        abort_unless(auth()->user()?->isAdmin(), 403);
+
+        $exitCode = Artisan::call('congressional:scan-gmail-changes', ['--limit' => 10000]);
+        if ($exitCode !== 0) {
+            $this->dispatch('notify', type: 'error', message: 'Gmail evidence reconciliation could not be completed.');
+
+            return;
+        }
+
+        $this->resetPage();
+        $this->dispatch('notify', type: 'success', message: 'Imported Gmail evidence reconciled.');
     }
 
     public function render()
