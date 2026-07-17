@@ -171,6 +171,37 @@ test('accepted delivery failure records a hard bounce for a known congressional 
             ->exists())->toBeTrue();
 });
 
+test('legacy delivery failure signals are updated and deduplicated during cleanup', function () {
+    $staffEmail = changeSignalProfile('Former Staff', 'former.staff@mail.house.gov');
+    $message = changeSignalMessage([
+        'subject' => 'Delivery Status Notification (Failure)',
+        'snippet' => 'Address not found. Your message was not delivered to former.staff@mail.house.gov.',
+        'body_text' => null,
+        'from_email' => 'mailer-daemon@googlemail.com',
+    ]);
+    $legacy = CongressionalStaffChangeSignal::query()->create([
+        'gmail_message_id' => $message->id,
+        'user_id' => $message->user_id,
+        'signal_key' => hash('sha256', 'legacy-bounce-key'),
+        'signal_type' => 'delivery_failure',
+        'status' => 'pending',
+        'target_emails' => [$staffEmail->email_normalized],
+        'replacement_contacts' => [[
+            'email' => $staffEmail->email_normalized,
+            'display_name' => 'Former Staff',
+        ]],
+        'summary' => 'Legacy delivery failure signal.',
+        'detected_at' => $message->sent_at,
+    ]);
+
+    $signal = app(CongressionalStaffChangeDetector::class)->detect($message);
+
+    expect($signal->id)->toBe($legacy->id)
+        ->and($signal->status)->toBe('accepted')
+        ->and($signal->replacement_contacts)->toBe([])
+        ->and(CongressionalStaffChangeSignal::query()->count())->toBe(1);
+});
+
 test('generic departure redirects are not added as staff profiles', function () {
     config()->set('features.congressional_directory_ui', true);
     $reviewer = User::factory()->create();
@@ -178,6 +209,9 @@ test('generic departure redirects are not added as staff profiles', function () 
     $signal = app(CongressionalStaffChangeDetector::class)->detect(changeSignalMessage([
         'body_text' => 'I am no longer with the office. Please contact scheduling@britt.senate.gov or Abigail_Avery@britt.senate.gov.',
     ]));
+
+    expect($signal->replacement_contacts)->toHaveCount(1)
+        ->and($signal->replacement_contacts[0]['email'])->toBe('abigail_avery@britt.senate.gov');
 
     Livewire::actingAs($reviewer)
         ->test(ChangeSignalIndex::class)
