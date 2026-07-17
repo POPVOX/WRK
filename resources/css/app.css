@@ -784,6 +784,89 @@
         font-weight: 700;
     }
 
+    /* Detail records behave like working documents, not dashboard card
+       collections. These rules flatten the legacy meeting modules while the
+       underlying editing and capture tools remain intact. */
+    .meeting-document-utilities > section,
+    .meeting-document-main > div,
+    .meeting-document-sidebar > div {
+        border-color: var(--border) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+
+    .meeting-document-main > div {
+        border-width: 0 0 1px !important;
+        padding-bottom: 1.5rem;
+    }
+
+    .meeting-document-main > div > .p-6,
+    .meeting-document-sidebar > div > .p-6 {
+        padding: 0 !important;
+    }
+
+    .meeting-document-main .bg-yellow-50,
+    .meeting-document-main .bg-blue-50,
+    .meeting-document-main .bg-purple-50,
+    .meeting-document-main .bg-indigo-50,
+    .meeting-document-main .from-purple-50,
+    .meeting-document-main .to-indigo-50,
+    .meeting-document-main .bg-gray-50,
+    .meeting-document-sidebar .bg-green-50,
+    .meeting-document-sidebar .bg-blue-50,
+    .meeting-document-sidebar .bg-purple-50,
+    .meeting-document-sidebar .bg-gray-50 {
+        background: transparent !important;
+    }
+
+    .meeting-document-main h3,
+    .meeting-document-sidebar h3,
+    .meeting-document-utilities h3 {
+        font-family: var(--font-display);
+        font-weight: 600;
+        color: var(--foreground) !important;
+    }
+
+    .meeting-document-main h4,
+    .meeting-document-sidebar dt {
+        color: #5c574d !important;
+    }
+
+    .meeting-document-sidebar {
+        min-width: 0;
+    }
+
+    .meeting-document-sidebar > div {
+        border-width: 0 0 1px !important;
+        padding-bottom: 1.5rem;
+    }
+
+    .meeting-document-sidebar a.rounded-lg,
+    .meeting-document-sidebar .rounded-lg {
+        border-radius: 0.375rem !important;
+    }
+
+    .meeting-document-utilities > section {
+        border-width: 1px 0 0 !important;
+    }
+
+    .meeting-document-utilities > section > div:first-child {
+        border-color: var(--border) !important;
+    }
+
+    @media (min-width: 1024px) {
+        .meeting-document-grid {
+            grid-template-columns: minmax(0, 1fr) 19rem;
+            gap: 2.25rem;
+        }
+
+        .meeting-document-sidebar {
+            border-left: 1px solid var(--border);
+            padding-left: 1.75rem;
+        }
+    }
+
     @media (max-width: 1023px) {
         .app-shell {
             grid-template-columns: minmax(0, 1fr);
