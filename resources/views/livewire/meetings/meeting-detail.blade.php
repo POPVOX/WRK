@@ -3,7 +3,14 @@
         <div class="min-w-0">
             <a href="{{ route('meetings.index') }}" wire:navigate class="desk-kicker">Meetings · {{ $meeting->meeting_date->format('M j, Y') }}</a>
             <h1 class="desk-page-title mt-2">{{ $meeting->title }}</h1>
-            <p class="desk-meta mt-2">{{ $meeting->meeting_date->format('l, F j, Y') }}@if($meeting->start_time) · {{ \Carbon\Carbon::parse($meeting->start_time)->format('g:i A') }}@endif @if($meeting->location) · {{ $meeting->location }}@endif · logged by {{ $meeting->user?->name ?: 'WRK' }}</p>
+            <p class="desk-meta mt-2">
+                {{ $meeting->meeting_date->format('l, F j, Y') }}
+                @if($meeting->start_time) · {{ \Carbon\Carbon::parse($meeting->start_time)->format('g:i A') }}@endif
+                @if($meeting->location)
+                    · {{ filter_var($meeting->location, FILTER_VALIDATE_URL) ? (str_contains(strtolower($meeting->location), 'zoom') ? 'Zoom' : 'Video call') : Str::limit($meeting->location, 70) }}
+                @endif
+                · logged by {{ $meeting->user?->name ?: 'WRK' }}
+            </p>
         </div>
         <div class="desk-toolbar">
             <select wire:change="updateStatus($event.target.value)" class="!min-h-9 text-sm" aria-label="Meeting status">@foreach(\App\Models\Meeting::STATUSES as $status)<option value="{{ $status }}" {{ $meeting->status === $status ? 'selected' : '' }}>{{ Str::headline($status) }}</option>@endforeach</select>
@@ -17,7 +24,7 @@
         </div>
     </header>
 
-    <div>
+    <div class="meeting-document">
         <div>
 
             <!-- Action Bar -->
@@ -93,7 +100,7 @@
             </div>
 
             {{-- Shared team thread + recurring journal --}}
-            <div class="mb-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="meeting-document-utilities mb-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <section class="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
                     <div class="p-4 border-b border-gray-100 dark:border-gray-700">
                         <h3 class="text-base font-semibold text-gray-900 dark:text-white">Team Thread</h3>
@@ -192,10 +199,10 @@
                 </section>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="meeting-document-grid grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 <!-- Main Content -->
-                <div class="lg:col-span-2 space-y-6">
+                <div class="meeting-document-main lg:col-span-2 space-y-6">
 
                     <!-- AI Summary -->
                     @if($meeting->ai_summary)
@@ -548,9 +555,13 @@
                                     placeholder="Meeting notes... Type @ to mention people, organizations, or staff. Or click Dictate to use your voice." />
                             @else
                                 @if($meeting->raw_notes)
-                                    <div class="prose dark:prose-invert max-w-none">
-                                        {!! nl2br(e($meeting->raw_notes)) !!}
-                                    </div>
+                                    @php
+                                        $displayNotes = preg_replace('/<br\s*\/?\s*>/i', "\n", (string) $meeting->raw_notes) ?? (string) $meeting->raw_notes;
+                                        $displayNotes = preg_replace('/<\/p\s*>/i', "\n\n", $displayNotes) ?? $displayNotes;
+                                        $displayNotes = html_entity_decode(strip_tags($displayNotes), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                                        $displayNotes = trim(preg_replace("/\n{3,}/", "\n\n", $displayNotes) ?? $displayNotes);
+                                    @endphp
+                                    <div class="prose dark:prose-invert max-w-none whitespace-pre-wrap">{{ $displayNotes }}</div>
                                 @else
                                     <p class="text-gray-500 dark:text-gray-400">No notes yet</p>
                                 @endif
@@ -724,7 +735,7 @@
                 </div>
 
                 <!-- Sidebar -->
-                <div class="space-y-6">
+                <aside class="meeting-document-sidebar space-y-6">
 
                     <!-- Meeting Info -->
                     <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm rounded-lg">
@@ -1053,7 +1064,7 @@
                             </div>
                         </div>
                     @endif
-                </div>
+                </aside>
             </div>
         </div>
     </div>
