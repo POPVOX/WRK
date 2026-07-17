@@ -186,3 +186,18 @@ test('generic departure redirects are not added as staff profiles', function () 
     expect(CongressionalStaffEmail::query()->where('email_normalized', 'scheduling@britt.senate.gov')->exists())->toBeFalse()
         ->and(CongressionalStaffEmail::query()->where('email_normalized', 'abigail_avery@britt.senate.gov')->exists())->toBeTrue();
 });
+
+test('backfill command scans only messages that may contain staff changes', function () {
+    changeSignalMessage([
+        'subject' => 'Re: policy briefing',
+        'snippet' => 'Thank you, this is helpful.',
+        'body_text' => null,
+    ]);
+    changeSignalMessage();
+
+    $this->artisan('congressional:scan-gmail-changes', ['--limit' => 100])
+        ->expectsOutput('Scanned 1 candidate Gmail messages; 1 matched a staff-change pattern.')
+        ->assertSuccessful();
+
+    expect(CongressionalStaffChangeSignal::query()->count())->toBe(1);
+});

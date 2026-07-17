@@ -38,6 +38,14 @@ Schedule::command('gmail:sync --sync --days=90 --max=500')
     ->onOneServer()
     ->description('Daily inline Gmail backstop sync');
 
+// Repair any imported staff-change evidence missed by an interrupted sync.
+Schedule::command('congressional:scan-gmail-changes --limit=10000')
+    ->dailyAt('06:10')
+    ->withoutOverlapping(30)
+    ->onOneServer()
+    ->runInBackground()
+    ->description('Daily congressional email evidence reconciliation');
+
 // Outreach scheduler: send due campaigns and run automation recipes.
 Schedule::command('outreach:run-scheduled')
     ->everyFiveMinutes()
