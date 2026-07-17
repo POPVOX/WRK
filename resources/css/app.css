@@ -855,6 +855,86 @@
         border-color: var(--border) !important;
     }
 
+    /* Organization records use the same relationship-document rhythm as
+       people: active work and history on the left, durable facts on the
+       right. The legacy modules keep their Livewire behavior but lose the
+       dashboard-card treatment. */
+    .organization-document {
+        display: flex;
+        max-width: 70rem;
+        flex-direction: column;
+        gap: 1.75rem;
+        margin-top: 1.5rem;
+    }
+
+    .organization-profile,
+    .organization-issues,
+    .organization-people,
+    .organization-media,
+    .organization-projects,
+    .organization-documents,
+    .organization-meetings {
+        min-width: 0;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+
+    .organization-issues,
+    .organization-people,
+    .organization-media,
+    .organization-meetings {
+        padding: 0 0 1.5rem !important;
+        border-bottom: 1px solid var(--border) !important;
+    }
+
+    .organization-projects,
+    .organization-documents {
+        padding: 0 0 1.5rem !important;
+        border-bottom: 1px solid var(--border) !important;
+    }
+
+    .organization-people h4,
+    .organization-issues h4,
+    .organization-media h4,
+    .organization-projects h4,
+    .organization-documents h4,
+    .organization-meetings h4 {
+        font-family: var(--font-display);
+        font-weight: 600;
+        color: var(--foreground) !important;
+    }
+
+    .organization-people .bg-gray-50,
+    .organization-documents .bg-gray-50,
+    .organization-meetings .bg-gray-50,
+    .organization-media .bg-white {
+        background: var(--surface) !important;
+    }
+
+    .organization-people .rounded-lg,
+    .organization-documents .rounded-lg,
+    .organization-media .rounded-lg {
+        border-radius: 0.375rem !important;
+    }
+
+    .organization-meetings thead,
+    .organization-meetings tbody,
+    .organization-meetings tr {
+        background: transparent !important;
+    }
+
+    .organization-meetings > div:first-child {
+        border-color: var(--border) !important;
+        padding: 0 0 0.75rem !important;
+    }
+
+    .organization-meetings th,
+    .organization-meetings td {
+        border-color: var(--border) !important;
+    }
+
     @media (min-width: 1024px) {
         .meeting-document-grid {
             grid-template-columns: minmax(0, 1fr) 19rem;
@@ -865,6 +945,7 @@
             border-left: 1px solid var(--border);
             padding-left: 1.75rem;
         }
+
     }
 
     @media (max-width: 1023px) {

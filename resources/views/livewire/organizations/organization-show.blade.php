@@ -13,14 +13,22 @@
 
     <header class="flex flex-col gap-5 border-b-2 border-[#26221c] pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div><a href="{{ route('organizations.index') }}" wire:navigate class="desk-kicker">People · Organizations</a><h1 class="desk-page-title mt-2">{{ $organization->name }}</h1><p class="desk-meta mt-2">{{ $organization->type ?: 'Organization' }} · {{ number_format($organization->people->count()) }} contacts · {{ number_format($organization->meetings->count()) }} meetings</p></div>
-        <div class="desk-toolbar">@if($organization->website)<a href="{{ $organization->website }}" target="_blank" rel="noopener" class="desk-button-secondary">Website ↗</a>@endif<button type="button" wire:click="startEditing" class="desk-button-secondary">Edit</button></div>
+        <div class="desk-toolbar">
+            @if($organization->website)
+                <a href="{{ $organization->website }}" target="_blank" rel="noopener" class="desk-button-secondary">Website ↗</a>
+            @endif
+            <button type="button" wire:click="startEditing" class="desk-button-secondary">Edit</button>
+            <button type="button" wire:click="delete"
+                wire:confirm="Are you sure you want to delete this organization? This will remove it from all meetings."
+                class="text-sm font-medium text-[#9d3f32] hover:underline">Delete</button>
+        </div>
     </header>
 
     <div>
-        <div class="space-y-6">
+        <div class="organization-document {{ $editing ? 'is-editing' : '' }}">
 
             <!-- Organization Profile Card -->
-            <div class="app-surface p-6">
+            <div class="organization-profile app-surface p-6">
                 @if($editing)
                     <!-- Edit Mode -->
                     <form wire:submit="save" class="space-y-4">
@@ -113,161 +121,75 @@
                         </div>
                     </form>
                 @else
-                    <!-- View Mode -->
-                    <div class="flex justify-between items-start">
-                        <div class="flex gap-4">
+                    <div class="space-y-5">
+                        <div class="flex items-start gap-3">
                             @if($organization->logo_url)
                                 <img src="{{ $organization->logo_url }}" alt="{{ $organization->name }} logo"
-                                    class="w-16 h-16 rounded-lg object-cover border border-gray-200 dark:border-gray-700">
+                                    class="h-12 w-12 rounded-md border border-[#d7d0c5] object-cover">
                             @else
-                                <div
-                                    class="w-16 h-16 rounded-lg bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center">
-                                    <span class="text-2xl font-bold text-indigo-600 dark:text-indigo-300">
-                                        {{ $organization->abbreviation ?: substr($organization->name, 0, 2) }}
-                                    </span>
+                                <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-[#eee9df] font-serif text-lg font-semibold text-[#7c4937]">
+                                    {{ $organization->abbreviation ?: Str::substr($organization->name, 0, 2) }}
                                 </div>
                             @endif
-                            <div>
-                                <div class="flex items-center gap-3">
-                                    <h3 class="text-2xl font-bold text-gray-900 dark:text-white">
-                                        {{ $organization->name }}
-                                        @if($organization->abbreviation)
-                                            <span
-                                                class="text-lg font-normal text-gray-500 dark:text-gray-400">({{ $organization->abbreviation }})</span>
-                                        @endif
-                                    </h3>
-                                    @if($organization->type)
-                                        <span
-                                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300">
-                                            {{ $organization->type }}
-                                        </span>
-                                    @endif
-                                    {{-- Geographic Tags --}}
-                                    @foreach($organization->regions as $region)
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
-                                            🌍 {{ $region->name }}
-                                        </span>
-                                    @endforeach
-                                    @foreach($organization->countries as $country)
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">
-                                            🏳️ {{ $country->name }}
-                                        </span>
-                                    @endforeach
-                                    @foreach($organization->usStates as $state)
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
-                                            🇺🇸 {{ $state->abbreviation }}
-                                        </span>
-                                    @endforeach
-                                </div>
-                                @if($organization->description)
-                                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400 max-w-2xl">
-                                        {{ Str::limit($organization->description, 200) }}
-                                    </p>
-                                @endif
-                                <div class="flex flex-wrap gap-4 mt-2">
-                                    @if($organization->website)
-                                        <a href="{{ $organization->website }}" target="_blank"
-                                            class="text-indigo-600 dark:text-indigo-400 hover:underline text-sm inline-flex items-center">
-                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                                            </svg>
-                                            {{ $organization->display_website }}
-                                        </a>
-                                    @endif
-                                    @if($organization->email)
-                                        <a href="mailto:{{ $organization->email }}"
-                                            class="text-indigo-600 dark:text-indigo-400 hover:underline text-sm inline-flex items-center">
-                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                            </svg>
-                                            {{ $organization->email }}
-                                        </a>
-                                    @endif
-                                    @if($organization->phone)
-                                        <a href="tel:{{ $organization->phone }}"
-                                            class="text-indigo-600 dark:text-indigo-400 hover:underline text-sm inline-flex items-center">
-                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                            </svg>
-                                            {{ $organization->phone }}
-                                        </a>
-                                    @endif
-                                    @if($organization->linkedin_url)
-                                        <a href="{{ $organization->linkedin_url }}" target="_blank"
-                                            class="text-blue-600 dark:text-blue-400 hover:underline text-sm inline-flex items-center">
-                                            <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24">
-                                                <path
-                                                    d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-                                            </svg>
-                                            LinkedIn
-                                        </a>
-                                    @endif
-                                </div>
-                                @if($organization->notes)
-                                    <p class="mt-3 text-gray-600 dark:text-gray-400">{{ $organization->notes }}</p>
-                                @endif
+                            <div class="min-w-0">
+                                <p class="desk-section-title">Details</p>
+                                <p class="mt-1 text-sm text-[#6f685f]">{{ $organization->type ?: 'Organization' }}@if($organization->abbreviation) · {{ $organization->abbreviation }}@endif</p>
                             </div>
                         </div>
-                        <div class="flex gap-2">
-                            @if($organization->linkedin_url && !$organization->logo_url)
-                                <button wire:click="fetchFromLinkedIn" wire:loading.attr="disabled"
-                                    class="px-3 py-2 text-sm font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900 rounded-md hover:bg-blue-200 dark:hover:bg-blue-800 disabled:opacity-50">
-                                    <span wire:loading.remove wire:target="fetchFromLinkedIn">Fetch LinkedIn</span>
-                                    <span wire:loading wire:target="fetchFromLinkedIn">Fetching...</span>
-                                </button>
-                            @endif
-                            <button wire:click="startEditing"
-                                class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600">
-                                <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                                Edit
+
+                        @if($organization->description)
+                            <p class="text-sm leading-6 text-[#4d473f]">{{ $organization->description }}</p>
+                        @endif
+
+                        <dl class="space-y-3 text-sm">
+                            <div>
+                                <dt class="desk-kicker">Email</dt>
+                                <dd class="mt-1">@if($organization->email)<a href="mailto:{{ $organization->email }}" class="hover:underline">{{ $organization->email }}</a>@else<span class="text-[#8a8379]">Not set</span>@endif</dd>
+                            </div>
+                            <div>
+                                <dt class="desk-kicker">Phone</dt>
+                                <dd class="mt-1">@if($organization->phone)<a href="tel:{{ $organization->phone }}" class="hover:underline">{{ $organization->phone }}</a>@else<span class="text-[#8a8379]">Not set</span>@endif</dd>
+                            </div>
+                            <div>
+                                <dt class="desk-kicker">Online</dt>
+                                <dd class="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                                    @if($organization->website)<a href="{{ $organization->website }}" target="_blank" rel="noopener" class="hover:underline">{{ $organization->display_website }} ↗</a>@endif
+                                    @if($organization->linkedin_url)<a href="{{ $organization->linkedin_url }}" target="_blank" rel="noopener" class="hover:underline">LinkedIn ↗</a>@endif
+                                    @if(!$organization->website && !$organization->linkedin_url)<span class="text-[#8a8379]">Not linked</span>@endif
+                                </dd>
+                            </div>
+                        </dl>
+
+                        @if($organization->regions->isNotEmpty() || $organization->countries->isNotEmpty() || $organization->usStates->isNotEmpty())
+                            <div>
+                                <p class="desk-kicker">Geographic focus</p>
+                                <p class="mt-1 text-sm leading-6 text-[#4d473f]">
+                                    {{ $organization->regions->pluck('name')->merge($organization->countries->pluck('name'))->merge($organization->usStates->pluck('abbreviation'))->join(' · ') }}
+                                </p>
+                            </div>
+                        @endif
+
+                        @if($organization->notes)
+                            <div>
+                                <p class="desk-kicker">Notes</p>
+                                <p class="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#4d473f]">{{ $organization->notes }}</p>
+                            </div>
+                        @endif
+
+                        @if($organization->linkedin_url && !$organization->logo_url)
+                            <button wire:click="fetchFromLinkedIn" wire:loading.attr="disabled" class="desk-button-secondary w-full justify-center disabled:opacity-50">
+                                <span wire:loading.remove wire:target="fetchFromLinkedIn">Refresh from LinkedIn</span>
+                                <span wire:loading wire:target="fetchFromLinkedIn">Refreshing…</span>
                             </button>
-                            <button wire:click="delete"
-                                wire:confirm="Are you sure you want to delete this organization? This will remove it from all meetings."
-                                class="px-3 py-2 text-sm font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900 rounded-md hover:bg-red-200 dark:hover:bg-red-800">
-                                <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                                Delete
-                            </button>
-                        </div>
+                        @endif
                     </div>
 
-                    <!-- Stats Row -->
-                    <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
-                            <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{ $meetings->count() }}
-                            </div>
-                            <div class="text-sm text-gray-600 dark:text-gray-400">Meetings</div>
-                        </div>
-                        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
-                            <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ $people->count() }}</div>
-                            <div class="text-sm text-gray-600 dark:text-gray-400">People</div>
-                        </div>
-                        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
-                            <div class="text-2xl font-bold text-purple-600 dark:text-purple-400">{{ $topIssues->count() }}
-                            </div>
-                            <div class="text-sm text-gray-600 dark:text-gray-400">Topics Discussed</div>
-                        </div>
-                        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
-                            <div class="text-2xl font-bold text-orange-600 dark:text-orange-400">0</div>
-                            <div class="text-sm text-gray-600 dark:text-gray-400">Projects (coming soon)</div>
-                        </div>
-                    </div>
                 @endif
             </div>
 
             <!-- Top Issues -->
             @if($topIssues->count() > 0)
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+                <div class="organization-issues bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
                     <h4 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Top Areas Discussed</h4>
                     <div class="flex flex-wrap gap-2">
                         @foreach($topIssues as $issue)
@@ -284,7 +206,7 @@
             @endif
 
             <!-- People -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+            <div class="organization-people bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
                 <div class="flex justify-between items-center mb-4">
                     <h4 class="text-lg font-semibold text-gray-900 dark:text-white">People</h4>
                     <button wire:click="toggleAddPersonForm"
@@ -369,7 +291,7 @@
 
             {{-- Media Coverage Section (only for media outlets) --}}
             @if(strtolower($organization->type ?? '') === 'media')
-                <div class="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg shadow-sm border border-indigo-100 dark:border-indigo-800 p-6">
+                <div class="organization-media bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg shadow-sm border border-indigo-100 dark:border-indigo-800 p-6">
                     {{-- Header with inline stats --}}
                     <div class="flex items-center justify-between mb-4">
                         <div class="flex items-center gap-3">
@@ -596,7 +518,7 @@
             @endif
 
             <!-- Projects -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+            <div class="organization-projects bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
                 <div class="flex justify-between items-center mb-4">
                     <h4 class="text-lg font-semibold text-gray-900 dark:text-white">Projects</h4>
                     <button wire:click="toggleAddProjectModal" class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">+ Add</button>
@@ -631,7 +553,7 @@
             </div>
 
             <!-- Documents & Notes -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+            <div class="organization-documents bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
                 <div class="flex justify-between items-center mb-4">
                     <h4 class="text-lg font-semibold text-gray-900 dark:text-white">Documents & Notes</h4>
                 </div>
@@ -697,7 +619,7 @@
             </div>
 
             <!-- Meetings Table -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
+            <div class="organization-meetings bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                     <h4 class="text-lg font-semibold text-gray-900 dark:text-white">Meetings</h4>
                 </div>
