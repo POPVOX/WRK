@@ -49,12 +49,15 @@ test('meeting records render imported html notes as readable text', function () 
         'title' => 'Imported calendar meeting',
         'meeting_date' => today(),
         'raw_notes' => '<p>First line<br/>Second line</p>',
+        'meeting_link' => 'https://example.zoom.us/j/123<br/><br/>Meeting agenda',
     ]);
 
     Livewire::actingAs($user)
         ->test(MeetingDetail::class, ['meeting' => $meeting])
         ->assertSee('First line')
         ->assertSee('Second line')
+        ->assertSee('href="https://example.zoom.us/j/123"', false)
         ->assertDontSee('&lt;p&gt;', false)
-        ->assertDontSee('&lt;br/&gt;', false);
+        ->assertDontSee('&lt;br/&gt;', false)
+        ->assertDontSee('href="https://example.zoom.us/j/123&lt;br/', false);
 });

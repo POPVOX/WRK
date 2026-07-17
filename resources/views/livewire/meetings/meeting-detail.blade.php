@@ -780,11 +780,18 @@
                                 </div>
 
                                 {{-- Meeting Link --}}
-                                @if($meeting->meeting_link)
+                                @php
+                                    $meetingJoinLink = null;
+
+                                    if ($meeting->meeting_link && preg_match('/https?:\/\/[^\s<>"\']+/i', (string) $meeting->meeting_link, $meetingLinkMatches)) {
+                                        $meetingJoinLink = rtrim($meetingLinkMatches[0], '.,;:)');
+                                    }
+                                @endphp
+                                @if($meetingJoinLink)
                                     <div>
                                         <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Join Link</dt>
                                         <dd class="mt-1">
-                                            <a href="{{ $meeting->meeting_link }}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition
+                                            <a href="{{ $meetingJoinLink }}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition
                                                           @if($meeting->meeting_link_type === 'zoom')
                                                               bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50
                                                           @elseif($meeting->meeting_link_type === 'google_meet')
@@ -1320,110 +1327,3 @@
         </div>
     @endif
 </div>
-
-@script
-<script>
-    // Voice Dictation Alpine Component
-    document.addEventListener('alpine:init', () => {
-        Alpine.data('voiceDictation', () => ({
-            isRecording: false,
-            interimTranscript: '',
-            recognition: null,
-
-            init() {
-                // Check for Web Speech API support
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                
-                if (!SpeechRecognition) {
-                    console.warn('Web Speech API not supported in this browser');
-                    return;
-                }
-
-                this.recognition = new SpeechRecognition();
-                this.recognition.continuous = true;
-                this.recognition.interimResults = true;
-                this.recognition.lang = 'en-US';
-
-                this.recognition.onresult = (event) => {
-                    let interim = '';
-                    let final = '';
-
-                    for (let i = event.resultIndex; i < event.results.length; i++) {
-                        const transcript = event.results[i][0].transcript;
-                        if (event.results[i].isFinal) {
-                            final += transcript + ' ';
-                        } else {
-                            interim += transcript;
-                        }
-                    }
-
-                    this.interimTranscript = interim;
-
-                    if (final.trim()) {
-                        // Send final transcript to Livewire
-                        $wire.appendDictation(final.trim());
-                        this.interimTranscript = '';
-                    }
-                };
-
-                this.recognition.onerror = (event) => {
-                    console.error('Speech recognition error:', event.error);
-                    this.isRecording = false;
-                    this.interimTranscript = '';
-                    
-                    if (event.error === 'not-allowed') {
-                        alert('Microphone access denied. Please allow microphone access in your browser settings.');
-                    }
-                };
-
-                this.recognition.onend = () => {
-                    // Stop recording if it ends unexpectedly
-                    if (this.isRecording) {
-                        // Try to restart if we're still supposed to be recording
-                        try {
-                            this.recognition.start();
-                        } catch (e) {
-                            this.isRecording = false;
-                        }
-                    }
-                };
-            },
-
-            toggleRecording() {
-                if (!this.recognition) {
-                    alert('Voice dictation is not supported in this browser. Please use Chrome, Edge, or Safari.');
-                    return;
-                }
-
-                if (this.isRecording) {
-                    this.stopRecording();
-                } else {
-                    this.startRecording();
-                }
-            },
-
-            startRecording() {
-                try {
-                    this.recognition.start();
-                    this.isRecording = true;
-                    this.interimTranscript = '';
-                } catch (e) {
-                    console.error('Failed to start recording:', e);
-                    alert('Failed to start voice dictation. Please try again.');
-                }
-            },
-
-            stopRecording() {
-                this.recognition.stop();
-                this.isRecording = false;
-                
-                // Append any remaining interim transcript
-                if (this.interimTranscript.trim()) {
-                    $wire.appendDictation(this.interimTranscript.trim());
-                }
-                this.interimTranscript = '';
-            }
-        }));
-    });
-</script>
-@endscript
