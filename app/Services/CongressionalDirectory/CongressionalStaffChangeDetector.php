@@ -3,6 +3,8 @@
 namespace App\Services\CongressionalDirectory;
 
 use App\Models\CongressionalStaffChangeSignal;
+use App\Models\CongressionalStaffEmail;
+use App\Models\CongressionalStaffEmailEvent;
 use App\Models\GmailMessage;
 use App\Models\OutreachCampaignRecipient;
 use App\Services\Outreach\OutreachResponseClassifier;
@@ -55,10 +57,12 @@ class CongressionalStaffChangeDetector
             $message->bcc_emails ?? []
         ))->filter()->map(fn ($email) => Str::lower((string) $email))->all();
 
-        $replacementEmails = collect($emails)->reject(fn (string $email) => in_array($email, $excluded, true))->values();
+        $replacementEmails = $deliveryFailure
+            ? collect()
+            : collect($emails)->reject(fn (string $email) => in_array($email, $excluded, true))->values();
         $sourceEmail = Str::lower((string) $message->from_email) ?: null;
         $targetEmails = $deliveryFailure
-            ? collect($emails)->reject(fn (string $email) => $email === Str::lower((string) $message->user?->email))->values()->all()
+            ? $this->deliveryFailureTargets($message, $emails)
             : array_values(array_filter([$sourceEmail]));
         $signalType = $deliveryFailure ? 'delivery_failure' : ($replacementEmails->isNotEmpty() ? 'departure_redirect' : 'departure');
         $replacementContacts = $replacementEmails->map(fn (string $email) => [
@@ -73,21 +77,44 @@ class CongressionalStaffChangeDetector
             $replacementEmails->implode(','),
         ]));
 
-        return CongressionalStaffChangeSignal::query()->updateOrCreate(
-            ['signal_key' => $signalKey],
-            [
-                'gmail_message_id' => $message->id,
-                'user_id' => $message->user_id,
-                'signal_type' => $signalType,
-                'status' => 'pending',
-                'source_email' => $sourceEmail,
-                'target_emails' => $targetEmails,
-                'replacement_contacts' => $replacementContacts,
-                'summary' => $this->summary($signalType, $sourceEmail, $replacementEmails->all()),
-                'evidence_excerpt' => Str::limit(preg_replace('/\s+/', ' ', $text) ?: $text, 600),
-                'detected_at' => $message->sent_at ?? now(),
-            ]
-        );
+        $signal = CongressionalStaffChangeSignal::query()->firstOrNew(['signal_key' => $signalKey]);
+        $isNew = ! $signal->exists;
+        $signal->fill([
+            'gmail_message_id' => $message->id,
+            'user_id' => $message->user_id,
+            'signal_type' => $signalType,
+            'source_email' => $sourceEmail,
+            'target_emails' => $targetEmails,
+            'replacement_contacts' => $replacementContacts,
+            'summary' => $this->summary($signalType, $sourceEmail, $replacementEmails->all()),
+            'evidence_excerpt' => Str::limit(preg_replace('/\s+/', ' ', $text) ?: $text, 600),
+            'detected_at' => $message->sent_at ?? now(),
+        ]);
+
+        if ($isNew) {
+            $signal->status = 'pending';
+        } elseif ($signal->status === 'pending' && $signal->reviewed_at) {
+            $signal->status = CongressionalStaffEmailEvent::query()
+                ->where('metadata->change_signal_id', $signal->id)
+                ->exists() ? 'accepted' : 'rejected';
+        }
+
+        $autoAccept = $deliveryFailure
+            && $signal->status === 'pending'
+            && ! $signal->reviewed_at
+            && $this->isClearHardBounce($message, $text, $targetEmails);
+        if ($autoAccept) {
+            $signal->status = 'accepted';
+            $signal->reviewed_at = now();
+        }
+
+        $signal->save();
+
+        if ($signal->status === 'accepted') {
+            $this->emailEvidence->recordAcceptedChangeSignal($signal->fresh());
+        }
+
+        return $signal->fresh();
     }
 
     protected function recordOutreachResponse(GmailMessage $message): void
@@ -141,6 +168,46 @@ class CongressionalStaffChangeDetector
             ->unique()
             ->values()
             ->all();
+    }
+
+    /** @param array<int, string> $emails @return array<int, string> */
+    protected function deliveryFailureTargets(GmailMessage $message, array $emails): array
+    {
+        $candidates = collect($emails)
+            ->map(fn (string $email) => Str::lower($email))
+            ->reject(fn (string $email) => in_array($email, [
+                Str::lower((string) $message->from_email),
+                Str::lower((string) $message->user?->email),
+            ], true))
+            ->unique()
+            ->values();
+        if ($candidates->isEmpty()) {
+            return [];
+        }
+
+        $known = CongressionalStaffEmail::query()
+            ->whereIn('email_normalized', $candidates)
+            ->pluck('email_normalized');
+        $sent = OutreachCampaignRecipient::query()
+            ->whereIn('email', $candidates)
+            ->whereNotNull('sent_at')
+            ->whereHas('campaign', fn ($query) => $query->where('user_id', $message->user_id))
+            ->when($message->sent_at, fn ($query) => $query->where('sent_at', '<=', $message->sent_at))
+            ->pluck('email');
+        $recognized = $known->merge($sent)->unique()->values();
+
+        return ($recognized->isNotEmpty() ? $recognized : $candidates)->all();
+    }
+
+    /** @param array<int, string> $targetEmails */
+    protected function isClearHardBounce(GmailMessage $message, string $text, array $targetEmails): bool
+    {
+        $sender = Str::lower(trim((string) $message->from_email));
+        $trustedSender = preg_match('/mailer-daemon|postmaster|mail delivery subsystem/', $sender.' '.Str::lower((string) $message->from_name)) === 1;
+        $hardFailure = preg_match('/address not found|no such user|user unknown|recipient address rejected|does not exist|\b550[ -]5\.[01]\./i', $text) === 1;
+        $knownAddress = CongressionalStaffEmail::query()->whereIn('email_normalized', $targetEmails)->exists();
+
+        return $trustedSender && $hardFailure && $knownAddress;
     }
 
     protected function displayNameFromEmail(string $email): string

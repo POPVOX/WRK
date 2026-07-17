@@ -5,15 +5,18 @@ namespace App\Jobs;
 use App\Models\User;
 use App\Services\GoogleGmailService;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-class SyncGmailMessages implements ShouldQueue
+class SyncGmailMessages implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public int $uniqueFor = 600;
 
     public function __construct(
         public User $user,
@@ -40,6 +43,12 @@ class SyncGmailMessages implements ShouldQueue
             'imported' => $summary['imported'] ?? 0,
             'updated' => $summary['updated'] ?? 0,
             'errors' => $summary['errors'] ?? 0,
+            'mode' => $summary['mode'] ?? null,
         ]);
+    }
+
+    public function uniqueId(): string
+    {
+        return 'gmail-sync-user-'.$this->user->id;
     }
 }

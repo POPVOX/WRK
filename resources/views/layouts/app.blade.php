@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>{{ $title ?? config('app.name', 'WRK') }} - {{ config('app.name', 'WRK') }}</title>
+    <title>{{ $title ?? config('app.name', 'WRKBench') }} - {{ config('app.name', 'WRKBench') }}</title>
     <meta name="description" content="WRKBench workspace for POPVOX Foundation.">
     <meta name="theme-color" content="#faf7f1">
 
@@ -100,7 +100,9 @@
     <div x-data="{ mobileNavOpen: false, mobileUserOpen: false }" class="app-shell">
         <aside class="app-sidebar hidden lg:flex lg:flex-col overflow-hidden">
             <div class="px-6 pt-5 pb-4">
-                <a href="{{ route('dashboard') }}" wire:navigate class="desk-wordmark text-[#26221c]">WRKBench</a>
+                <a href="{{ route('dashboard') }}" wire:navigate aria-label="WRKBench home" class="inline-flex">
+                    <x-wrkbench-logo class="h-10 w-auto" />
+                </a>
             </div>
 
             <nav class="flex-1 overflow-y-auto px-3 py-2">
@@ -190,7 +192,9 @@
                     <button type="button" @click="mobileNavOpen = !mobileNavOpen" class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#d8d0bf] text-[#4a453b]" aria-label="Open navigation">
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
                     </button>
-                    <a href="{{ route('dashboard') }}" wire:navigate class="desk-wordmark text-lg">WRKBench</a>
+                    <a href="{{ route('dashboard') }}" wire:navigate aria-label="WRKBench home" class="inline-flex">
+                        <x-wrkbench-logo class="h-8 w-auto" />
+                    </a>
                     <button type="button" @click="mobileUserOpen = !mobileUserOpen" class="desk-avatar h-9 w-9" aria-label="Open account menu">{{ $initials }}</button>
                 </div>
             </header>
@@ -198,7 +202,7 @@
             <div x-cloak x-show="mobileNavOpen" @click.self="mobileNavOpen = false" class="fixed inset-0 z-30 bg-black/25 lg:hidden">
                 <div class="h-full w-72 max-w-[86vw] overflow-y-auto border-r border-[#e4ddd0] bg-[#faf7f1] p-3 shadow-lg">
                     <div class="flex items-center justify-between border-b border-[#e4ddd0] px-2 pb-3">
-                        <span class="desk-wordmark">WRKBench</span>
+                        <x-wrkbench-logo class="h-8 w-auto" />
                         <button type="button" @click="mobileNavOpen = false" class="text-xl text-[#5c574d]" aria-label="Close navigation">×</button>
                     </div>
                     <nav class="space-y-1 pt-3">

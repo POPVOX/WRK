@@ -38,7 +38,7 @@ class CongressionalEmailEligibilityService
             ];
         }
 
-        if (in_array($staffEmail->verification_status, ['hard_bounced', 'unsubscribed', 'suppressed'], true)) {
+        if (in_array($staffEmail->verification_status, ['departed', 'hard_bounced', 'unsubscribed', 'suppressed'], true)) {
             return [
                 'tier' => 'blocked',
                 'campaign_eligible' => false,

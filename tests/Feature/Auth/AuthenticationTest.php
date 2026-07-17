@@ -14,7 +14,8 @@ test('login screen can be rendered', function () {
 test('login screen directs staff to Google Workspace authentication', function () {
     $this->get('/login')
         ->assertOk()
-        ->assertSee('WRK uses Google Workspace sign-in only')
+        ->assertSee('WRKBench uses Google Workspace sign-in only')
+        ->assertSee('aria-label="WRKBench"', false)
         ->assertSee('Continue with Google');
 });
 

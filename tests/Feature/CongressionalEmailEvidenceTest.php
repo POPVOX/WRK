@@ -75,6 +75,40 @@ test('hard bounce evidence creates a global idempotent suppression', function ()
         ->and($eligibility->evaluate($second->fresh())['tier'])->toBe('blocked');
 });
 
+test('automatic and departure replies reconcile existing evidence idempotently', function () {
+    $evidence = app(CongressionalEmailEvidenceService::class);
+    $staffEmail = $evidence->addAddress(
+        congressionalEmailProfile('Taylor Auto Reply'),
+        'taylor.auto@mail.house.gov',
+        'guessed'
+    );
+    $autoReplyKey = hash('sha256', 'auto-reply-existing');
+
+    $evidence->recordEvent($staffEmail, 'auto_reply', eventKey: $autoReplyKey);
+    expect($staffEmail->fresh()->verification_status)->toBe('observed');
+
+    $staffEmail->update(['verification_status' => 'unverified', 'last_observed_at' => null]);
+    $evidence->recordEvent($staffEmail->fresh(), 'auto_reply', eventKey: $autoReplyKey);
+    expect($staffEmail->fresh()->verification_status)->toBe('observed')
+        ->and(CongressionalStaffEmailEvent::query()->where('event_key', $autoReplyKey)->count())->toBe(1);
+
+    $departureKey = hash('sha256', 'departure-existing');
+    $evidence->recordEvent($staffEmail->fresh(), 'departure_auto_reply', eventKey: $departureKey);
+    expect($staffEmail->fresh()->verification_status)->toBe('departed')
+        ->and(OutreachEmailSuppression::query()
+            ->where('email_normalized', 'taylor.auto@mail.house.gov')
+            ->where('reason', 'departed')
+            ->exists())->toBeTrue()
+        ->and(app(CongressionalEmailEligibilityService::class)->evaluate($staffEmail->fresh())['tier'])->toBe('blocked');
+
+    $evidence->recordEvent($staffEmail->fresh(), 'hard_bounce', eventKey: hash('sha256', 'later-hard-bounce'));
+    $evidence->recordEvent($staffEmail->fresh(), 'departure_auto_reply', eventKey: $departureKey);
+    expect($staffEmail->fresh()->verification_status)->toBe('hard_bounced')
+        ->and(OutreachEmailSuppression::query()
+            ->where('email_normalized', 'taylor.auto@mail.house.gov')
+            ->value('reason'))->toBe('hard_bounce');
+});
+
 test('staff profile records and manages email evidence without sending', function () {
     config()->set('features.congressional_directory_ui', true);
     $user = User::factory()->create();
