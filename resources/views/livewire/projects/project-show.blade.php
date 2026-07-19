@@ -110,13 +110,12 @@
 
     <div class="app-page-frame !max-w-none !gap-6">
             @if($editing)
-                <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-                    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" wire:click="cancelEditing"></div>
-                        <div
-                            class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="project-edit-title" role="dialog" aria-modal="true">
+                    <div class="flex min-h-screen items-center justify-center p-4">
+                        <div class="desk-modal-backdrop fixed inset-0" wire:click="cancelEditing"></div>
+                        <div class="desk-modal-panel relative w-full max-w-lg p-6">
                             <form wire:submit="save" class="space-y-4">
-                                <h3 class="text-lg font-medium text-gray-900 dark:text-white">Edit Project</h3>
+                                <div><h3 id="project-edit-title" class="desk-display text-xl font-semibold">Edit project</h3><p class="desk-meta mt-1">Update the durable project details. Brief content stays unchanged.</p></div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
                                     <input type="text" wire:model="name"
@@ -137,11 +136,9 @@
                                         @endforeach
                                     </select>
                                 </div>
-                                <div class="flex justify-end gap-3 pt-4">
-                                    <button type="button" wire:click="cancelEditing"
-                                        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-md">Cancel</button>
-                                    <button type="submit"
-                                        class="px-4 py-2 text-sm text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Save</button>
+                                <div class="flex justify-end gap-2 border-t border-[#e4ddd0] pt-4">
+                                    <button type="button" wire:click="cancelEditing" class="desk-button-secondary">Cancel</button>
+                                    <button type="submit" class="desk-button-primary">Save changes</button>
                                 </div>
                             </form>
                         </div>

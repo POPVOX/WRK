@@ -11,8 +11,8 @@
 
     <div>
         <div>
-            <div class="app-surface overflow-hidden">
-                <form wire:submit="save" class="p-6 space-y-6">
+            <div class="meeting-capture-shell overflow-hidden">
+                <form wire:submit="save" class="meeting-capture-form">
 
                     <!-- Meeting Title -->
                     <div>
@@ -70,9 +70,7 @@
                     </div>
 
                     <!-- Voice Recording Section -->
-                    <div
-                        x-data="voiceRecorder()"
-                        class="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-gray-700 dark:to-gray-700 rounded-lg p-4 border border-purple-200 dark:border-gray-600">
+                    <div x-data="voiceRecorder()" class="meeting-capture-voice">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                             <svg class="w-5 h-5 inline-block mr-1 text-purple-600" fill="none" stroke="currentColor"
                                 viewBox="0 0 24 24">
@@ -495,21 +493,21 @@
                     </div>
 
                     <!-- Submit -->
-                    <div class="flex items-center justify-end gap-4">
+                    <div class="meeting-capture-actions flex items-center justify-end gap-3">
                         @error('save')
                             <span class="mr-auto text-sm text-red-600 dark:text-red-400">{{ $message }}</span>
                         @enderror
-                        <a href="{{ route('meetings.index') }}"
-                            class="text-sm text-gray-600 dark:text-gray-400 hover:underline">
+                        <a href="{{ route('meetings.index') }}" wire:navigate class="desk-button-secondary">
                             Cancel
                         </a>
-                        <button type="submit" {{ $isExtracting ? 'disabled' : '' }}
-                            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition ease-in-out duration-150 {{ $isExtracting ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:bg-indigo-700 active:bg-indigo-900' }}">
-                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <button type="submit" {{ $isExtracting ? 'disabled' : '' }} wire:loading.attr="disabled" wire:target="save"
+                            class="desk-button-primary {{ $isExtracting ? 'cursor-not-allowed opacity-50' : '' }}">
+                            <svg wire:loading.remove wire:target="save" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M5 13l4 4L19 7" />
                             </svg>
-                            Save Meeting
+                            <span wire:loading.remove wire:target="save">{{ $editingMeeting ? 'Save changes' : 'Save meeting' }}</span>
+                            <span wire:loading wire:target="save">Saving…</span>
                         </button>
                     </div>
                 </form>
