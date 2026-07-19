@@ -1,11 +1,11 @@
-<div class="desk-page" @if($gmailConnected) wire:init="syncGmailOnOpen" @endif>
+<div class="desk-page" @if($gmailConnected) wire:init="syncGmailOnOpen" @endif @if($isSyncingGmail) wire:poll.5s="refreshGmailSyncStatus" @endif>
     <div class="app-page-frame-wide !max-w-none !gap-5">
         <x-desk-page-header eyebrow="Triage" title="Inbox" description="Email that needs action, with CRM context and a clear next step.">
             <x-slot:actions>
                 @if($readOnlyMode)<span class="text-xs font-semibold text-[#8a6d1f]">Gmail is read-only</span>@endif
                 <button type="button" wire:click="openComposer" class="desk-button-primary" @disabled($readOnlyMode)>＋ Compose</button>
-                <button type="button" wire:click="syncGmail" wire:loading.attr="disabled" class="desk-button-secondary">
-                    <span wire:loading.remove wire:target="syncGmail">{{ $lastGmailSyncAt ? 'Gmail '.$lastGmailSyncAt : 'Sync Gmail' }}</span><span wire:loading wire:target="syncGmail">Syncing…</span>
+                <button type="button" wire:click="syncGmail" wire:loading.attr="disabled" class="desk-button-secondary" @disabled($isSyncingGmail)>
+                    {{ $isSyncingGmail ? 'Syncing Gmail…' : ($lastGmailSyncAt ? 'Gmail '.$lastGmailSyncAt : 'Sync Gmail') }}
                 </button>
                 <button type="button" wire:click="toggleContextPanel" class="desk-button-secondary">{{ $showContextPanel ? 'Close context' : 'Open context' }}</button>
             </x-slot:actions>
