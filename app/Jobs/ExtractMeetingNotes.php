@@ -25,6 +25,8 @@ class ExtractMeetingNotes implements ShouldQueue
         public int $userId,
         public string $notes,
         public string $notesHash,
+        public string $meetingType = 'stakeholder',
+        public ?string $aiFocus = null,
     ) {}
 
     public function handle(MeetingAIService $service): void
@@ -35,7 +37,11 @@ class ExtractMeetingNotes implements ShouldQueue
         ], now()->addMinutes(15));
 
         try {
-            $data = $service->extractMeetingData($this->notes);
+            $data = $service->extractMeetingData(
+                $this->notes,
+                meetingType: $this->meetingType,
+                aiFocus: $this->aiFocus,
+            );
 
             Cache::put($this->cacheKey(), [
                 'status' => 'complete',

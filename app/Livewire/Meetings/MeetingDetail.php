@@ -42,6 +42,12 @@ class MeetingDetail extends Component
 
     public string $commitmentsMade = '';
 
+    public string $meetingType = Meeting::TYPE_STAKEHOLDER;
+
+    public string $aiFocus = '';
+
+    public array $suggestedActions = [];
+
     public ?int $leadContactId = null;
 
     // Relationship selections
@@ -138,6 +144,8 @@ class MeetingDetail extends Component
         $this->aiSummary = $this->meeting->ai_summary ?? '';
         $this->keyAsk = $this->meeting->key_ask ?? '';
         $this->commitmentsMade = $this->meeting->commitments_made ?? '';
+        $this->meetingType = $this->meeting->meeting_type ?: Meeting::TYPE_STAKEHOLDER;
+        $this->aiFocus = $this->meeting->ai_focus ?? '';
 
         $this->selectedOrganizations = $this->meeting->organizations->pluck('id')->toArray();
         $this->selectedPeople = $this->meeting->people->pluck('id')->toArray();
@@ -231,6 +239,8 @@ class MeetingDetail extends Component
             'prep_notes' => 'nullable|string',
             'agendaNotes' => 'nullable|string',
             'raw_notes' => 'nullable|string',
+            'meetingType' => 'required|in:stakeholder,internal,research,briefing,formal',
+            'aiFocus' => 'nullable|string|max:1000',
         ]);
 
         $this->meeting->update([
@@ -244,6 +254,8 @@ class MeetingDetail extends Component
             'ai_summary' => $this->aiSummary ?: null,
             'key_ask' => $this->keyAsk ?: null,
             'commitments_made' => $this->commitmentsMade ?: null,
+            'meeting_type' => $this->meetingType,
+            'ai_focus' => $this->aiFocus ?: null,
             'lead_contact_id' => $this->leadContactId,
         ]);
 
@@ -557,7 +569,11 @@ class MeetingDetail extends Component
 
         try {
             $aiService = app(MeetingAIService::class);
-            $extraction = $aiService->extractMeetingData($this->raw_notes);
+            $extraction = $aiService->extractMeetingData(
+                $this->raw_notes,
+                meetingType: $this->meetingType,
+                aiFocus: $this->aiFocus ?: null,
+            );
 
             // Update the AI summary
             if (! empty($extraction['ai_summary'])) {
@@ -576,20 +592,96 @@ class MeetingDetail extends Component
 
             // Also save a quick summary for display
             $this->notesSummary = $extraction['ai_summary'] ?? '';
+            $this->suggestedActions = $extraction['action_items'] ?? [];
 
             // Auto-save the extraction results
             $this->meeting->update([
                 'ai_summary' => $this->aiSummary,
                 'key_ask' => $this->keyAsk,
                 'commitments_made' => $this->commitmentsMade,
+                'meeting_type' => $this->meetingType,
+                'ai_focus' => $this->aiFocus ?: null,
+                'ai_generated_at' => now(),
             ]);
 
-            $this->dispatch('notify', type: 'success', message: 'Notes summarized with AI!');
+            $actionCount = count($this->suggestedActions);
+            $message = $actionCount > 0
+                ? "AI recap refreshed. Review {$actionCount} proposed follow-up ".Str::plural('task', $actionCount).'.'
+                : 'AI recap refreshed. Your original notes were not changed.';
+            $this->dispatch('notify', type: 'success', message: $message);
         } catch (\Exception $e) {
             $this->dispatch('notify', type: 'error', message: 'Failed to summarize: '.$e->getMessage());
         } finally {
             $this->isSummarizing = false;
         }
+    }
+
+    public function acceptSuggestedAction(string $key): void
+    {
+        $action = $this->suggestedActionByKey($key);
+        if (! $action) {
+            return;
+        }
+
+        $ownerNote = trim((string) ($action['owner_name'] ?? ''));
+        Action::createResilient([
+            'meeting_id' => $this->meeting->id,
+            'description' => (string) $action['description'],
+            'notes' => $ownerNote !== '' ? "Proposed owner from meeting notes: {$ownerNote}" : null,
+            'due_date' => $action['due_date'] ?? null,
+            'priority' => Action::PRIORITY_MEDIUM,
+            'status' => Action::STATUS_PENDING,
+            'source' => Action::SOURCE_AI_SUGGESTED,
+            'assigned_to' => Auth::id(),
+        ]);
+
+        $this->suggestedActions = $this->removeSuggestedAction($key);
+        $this->meeting->load('actions.assignedTo');
+        $this->dispatch('notify', type: 'success', message: 'Follow-up added to the meeting tasks.');
+    }
+
+    public function rejectSuggestedAction(string $key): void
+    {
+        $this->suggestedActions = $this->removeSuggestedAction($key);
+    }
+
+    public function acceptAllSuggestedActions(): void
+    {
+        $keys = collect($this->suggestedActions)
+            ->map(fn (array $action): string => $this->actionSuggestionKey($action))
+            ->all();
+
+        foreach ($keys as $key) {
+            $this->acceptSuggestedAction($key);
+        }
+    }
+
+    public function actionSuggestionKey(array $action): string
+    {
+        return sha1(json_encode([
+            $action['description'] ?? '',
+            $action['owner_name'] ?? null,
+            $action['due_date'] ?? null,
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    protected function suggestedActionByKey(string $key): ?array
+    {
+        foreach ($this->suggestedActions as $action) {
+            if (hash_equals($this->actionSuggestionKey($action), $key)) {
+                return $action;
+            }
+        }
+
+        return null;
+    }
+
+    protected function removeSuggestedAction(string $key): array
+    {
+        return collect($this->suggestedActions)
+            ->reject(fn (array $action): bool => hash_equals($this->actionSuggestionKey($action), $key))
+            ->values()
+            ->all();
     }
 
     /**

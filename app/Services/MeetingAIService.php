@@ -41,6 +41,8 @@ class MeetingAIService
         ?string $model = null,
         int $timeout = 90,
         int $maxTokens = 1600,
+        string $meetingType = 'stakeholder',
+        ?string $aiFocus = null,
     ): array {
         if (! config('ai.enabled')) {
             throw new MeetingExtractionException(
@@ -59,9 +61,21 @@ class MeetingAIService
         }
 
         $text = self::prepareNotes($text);
+        $meetingType = array_key_exists($meetingType, \App\Models\Meeting::TYPE_LABELS)
+            ? $meetingType
+            : \App\Models\Meeting::TYPE_STAKEHOLDER;
+        $purposeLabel = \App\Models\Meeting::TYPE_LABELS[$meetingType];
+        $purposeInstruction = $this->purposeInstruction($meetingType);
+        $focusInstruction = trim((string) $aiFocus) !== ''
+            ? 'The note-taker specifically asked you to notice: '.Str::limit(Str::squish((string) $aiFocus), 1000, '')
+            : 'The note-taker did not provide additional focus instructions.';
 
         $prompt = <<<PROMPT
 Analyze the following meeting notes or transcript and extract structured information.
+Meeting purpose: {$purposeLabel}.
+For this purpose: {$purposeInstruction}
+{$focusInstruction}
+
 Return a JSON object with these fields:
 - suggested_title: a short, descriptive title for this meeting (max 60 chars, e.g. "Housing Policy Discussion with City Council")
 - organizations: array of organization/company names mentioned
@@ -71,8 +85,9 @@ Return a JSON object with these fields:
 - commitments_made: any promises, agreements, or next steps committed to (string, can be empty)
 - suggested_date: if a meeting date is mentioned, extract it in YYYY-MM-DD format (can be null)
 - ai_summary: a brief 2-3 sentence summary of the meeting
+- action_items: array of proposed follow-ups. Each item must contain description, owner_name, and due_date. Use null for an unknown owner or due date; due_date must be YYYY-MM-DD when known.
 
-Only include items that are clearly mentioned. Don't invent or assume information.
+Only include items that are clearly supported by the notes. Do not invent or assume information. Distinguish a concrete follow-up from a topic that was merely discussed. The user's raw notes are the source of truth; your output is a reviewable draft.
 
 Meeting notes:
 ---
@@ -154,6 +169,7 @@ PROMPT;
             'commitments_made' => trim((string) ($data['commitments_made'] ?? '')),
             'suggested_date' => $this->normalizeDate($data['suggested_date'] ?? null),
             'ai_summary' => trim((string) ($data['ai_summary'] ?? '')),
+            'action_items' => $this->normalizeActionItems($data['action_items'] ?? []),
         ];
 
         if ($normalized['suggested_title'] === ''
@@ -162,7 +178,8 @@ PROMPT;
             && $normalized['people'] === []
             && $normalized['issues'] === []
             && $normalized['key_ask'] === ''
-            && $normalized['commitments_made'] === '') {
+            && $normalized['commitments_made'] === ''
+            && $normalized['action_items'] === []) {
             throw new MeetingExtractionException(
                 'no_information',
                 'The AI could not identify meeting details in these notes. Add a little more context and retry.'
@@ -170,6 +187,17 @@ PROMPT;
         }
 
         return $normalized;
+    }
+
+    protected function purposeInstruction(string $meetingType): string
+    {
+        return match ($meetingType) {
+            \App\Models\Meeting::TYPE_INTERNAL => 'Prioritize decisions, owners, blockers, unresolved questions, and concrete next steps.',
+            \App\Models\Meeting::TYPE_RESEARCH => 'Prioritize attributable observations, useful quotations, hypotheses, tensions, and unanswered questions.',
+            \App\Models\Meeting::TYPE_BRIEFING => 'Prioritize key takeaways, evidence presented, risks, questions raised, and requested follow-up.',
+            \App\Models\Meeting::TYPE_FORMAL => 'Prioritize decisions, commitments, motions or approvals, official record details, and accountable owners.',
+            default => 'Prioritize relationship context, the other party’s goals, requests, commitments, and appropriate follow-up.',
+        };
     }
 
     public static function prepareNotes(string $text): string
@@ -271,5 +299,31 @@ PROMPT;
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /** @return array<int, array{description: string, owner_name: ?string, due_date: ?string}> */
+    protected function normalizeActionItems(mixed $values): array
+    {
+        if (! is_array($values)) {
+            return [];
+        }
+
+        return collect($values)
+            ->filter(fn (mixed $value): bool => is_array($value))
+            ->map(function (array $value): array {
+                $description = Str::limit(Str::squish((string) ($value['description'] ?? '')), 1000, '');
+                $owner = Str::limit(Str::squish((string) ($value['owner_name'] ?? '')), 255, '');
+
+                return [
+                    'description' => $description,
+                    'owner_name' => $owner !== '' ? $owner : null,
+                    'due_date' => $this->normalizeDate($value['due_date'] ?? null),
+                ];
+            })
+            ->filter(fn (array $value): bool => $value['description'] !== '')
+            ->unique(fn (array $value): string => Str::lower($value['description']))
+            ->take(20)
+            ->values()
+            ->all();
     }
 }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Meetings\MeetingCapture;
+use App\Models\Action;
 use App\Models\Meeting;
 use App\Models\Organization;
 use App\Models\Person;
@@ -95,6 +96,70 @@ test('meeting capture extracts current notes into reviewable fields and relation
     Http::assertSent(fn ($request): bool => $request->url() === AnthropicClient::API_URL
         && $request['model'] === config('ai.meeting_extraction_model')
         && str_contains($request['messages'][0]['content'], $notes));
+});
+
+test('meeting capture uses purpose and focus instructions and only creates accepted follow ups', function () {
+    config()->set('services.anthropic.api_key', 'test-anthropic-key');
+    config()->set('ai.enabled', true);
+
+    Http::fake([
+        AnthropicClient::API_URL => Http::response([
+            'content' => [['type' => 'text', 'text' => json_encode([
+                'suggested_title' => 'Internal launch review',
+                'organizations' => [],
+                'people' => [],
+                'issues' => [],
+                'key_ask' => '',
+                'commitments_made' => 'Marci will send the revised plan.',
+                'suggested_date' => null,
+                'ai_summary' => 'The team reviewed the launch blockers.',
+                'action_items' => [
+                    ['description' => 'Send the revised launch plan', 'owner_name' => 'Marci', 'due_date' => '2026-07-21'],
+                    ['description' => 'Book a follow-up meeting', 'owner_name' => null, 'due_date' => null],
+                ],
+            ])]],
+            'stop_reason' => 'end_turn',
+            'usage' => ['input_tokens' => 80, 'output_tokens' => 70],
+        ], 200),
+    ]);
+
+    $notes = 'We identified a blocker. Marci will send the revised plan by July 21.';
+    $component = Livewire::actingAs(User::factory()->create())
+        ->test(MeetingCapture::class)
+        ->set('meetingType', Meeting::TYPE_INTERNAL)
+        ->set('aiFocus', 'Capture blockers and accountable owners.')
+        ->set('raw_notes', $notes)
+        ->call('extractWithAI')
+        ->assertSet('raw_notes', $notes)
+        ->assertCount('suggestedActions', 2);
+
+    $firstAction = $component->get('suggestedActions')[0];
+    $key = $component->instance()->actionSuggestionKey($firstAction);
+    $component
+        ->call('acceptSuggestedAction', $key)
+        ->assertCount('suggestedActions', 1)
+        ->assertCount('acceptedSuggestedActions', 1)
+        ->call('save')
+        ->assertRedirect();
+
+    $meeting = Meeting::query()->where('title', 'Internal launch review')->firstOrFail();
+    expect($meeting->meeting_type)->toBe(Meeting::TYPE_INTERNAL)
+        ->and($meeting->ai_focus)->toBe('Capture blockers and accountable owners.')
+        ->and($meeting->raw_notes)->toBe($notes)
+        ->and($meeting->ai_generated_at)->not->toBeNull();
+
+    expect($meeting->actions)->toHaveCount(1)
+        ->and($meeting->actions->first()->description)->toBe('Send the revised launch plan')
+        ->and($meeting->actions->first()->source)->toBe(Action::SOURCE_AI_SUGGESTED)
+        ->and($meeting->actions->first()->notes)->toContain('Marci');
+
+    Http::assertSent(function ($request): bool {
+        $prompt = $request['messages'][0]['content'];
+
+        return str_contains($prompt, 'Internal working meeting')
+            && str_contains($prompt, 'Capture blockers and accountable owners.')
+            && str_contains($prompt, 'action_items');
+    });
 });
 
 test('meeting extraction replaces the retired Sonnet 4 model configured in an environment', function () {
