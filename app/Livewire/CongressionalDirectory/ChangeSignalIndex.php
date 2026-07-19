@@ -4,6 +4,7 @@ namespace App\Livewire\CongressionalDirectory;
 
 use App\Models\CongressionalStaffChangeSignal;
 use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
+use App\Services\GoogleGmailService;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
@@ -46,6 +47,7 @@ class ChangeSignalIndex extends Component
 
         if ($status === 'accepted') {
             app(CongressionalEmailEvidenceService::class)->recordAcceptedChangeSignal($signal->fresh());
+            app(GoogleGmailService::class)->archiveProcessedStaffChangeSignal($signal->fresh());
         }
 
         $this->dispatch('notify', type: 'success', message: match ($status) {

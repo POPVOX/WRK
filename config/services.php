@@ -52,13 +52,16 @@ return [
         'login_redirect_uri' => env('GOOGLE_LOGIN_REDIRECT_URI', env('APP_URL', 'http://localhost').'/auth/google/callback'),
         'connect_timeout' => (int) env('GOOGLE_CONNECT_TIMEOUT', 10),
         'request_timeout' => (int) env('GOOGLE_REQUEST_TIMEOUT', 60),
-        'workspace_scopes' => array_values(array_filter(array_map(
+        'workspace_scopes' => array_values(array_unique(array_filter(array_merge(array_map(
             static fn ($scope) => trim((string) $scope),
             explode(',', (string) env(
                 'GOOGLE_WORKSPACE_SCOPES',
-                'https://www.googleapis.com/auth/calendar.readonly,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/gmail.compose'
+                'https://www.googleapis.com/auth/calendar.readonly,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/gmail.compose,https://www.googleapis.com/auth/gmail.modify'
             ))
-        ))),
+        ), [
+            // Required for processed-message cleanup (mark read + archive).
+            'https://www.googleapis.com/auth/gmail.modify',
+        ])))),
     ],
 
     'box' => [

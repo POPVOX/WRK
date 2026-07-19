@@ -25,6 +25,9 @@ class GmailMessage extends Model
         'sent_at',
         'is_inbound',
         'labels',
+        'automation_processed_at',
+        'automation_disposition',
+        'automation_error',
     ];
 
     protected $casts = [
@@ -34,6 +37,7 @@ class GmailMessage extends Model
         'labels' => 'array',
         'sent_at' => 'datetime',
         'is_inbound' => 'boolean',
+        'automation_processed_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

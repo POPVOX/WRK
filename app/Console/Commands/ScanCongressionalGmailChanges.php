@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\GmailMessage;
 use App\Services\CongressionalDirectory\CongressionalStaffChangeDetector;
+use App\Services\GoogleGmailService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
 
@@ -13,8 +14,10 @@ class ScanCongressionalGmailChanges extends Command
 
     protected $description = 'Create reviewable congressional staff-change signals from imported Gmail messages';
 
-    public function handle(CongressionalStaffChangeDetector $detector): int
-    {
+    public function handle(
+        CongressionalStaffChangeDetector $detector,
+        GoogleGmailService $gmailService
+    ): int {
         if (! Schema::hasTable('congressional_staff_change_signals')) {
             $this->error('Congressional change-signal tables are missing. Run migrations first.');
 
@@ -36,10 +39,13 @@ class ScanCongressionalGmailChanges extends Command
             })
             ->latest('sent_at')
             ->limit($limit)
-            ->each(function (GmailMessage $message) use ($detector, &$scanned, &$signals): void {
+            ->each(function (GmailMessage $message) use ($detector, $gmailService, &$scanned, &$signals): void {
                 $scanned++;
-                if ($detector->detect($message)) {
+                if ($signal = $detector->detect($message)) {
                     $signals++;
+                    if ($signal->status === 'accepted') {
+                        $gmailService->archiveProcessedStaffChangeSignal($signal);
+                    }
                 }
             });
 
