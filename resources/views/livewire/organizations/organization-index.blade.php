@@ -798,9 +798,9 @@
 </div>
 
 @if($confirmingBulkDelete)
-    <div class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="absolute inset-0 bg-gray-900/70" wire:click="cancelBulkDelete"></div>
-        <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-gray-200 dark:border-gray-700">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="organization-delete-title">
+        <div class="desk-modal-backdrop absolute inset-0" wire:click="cancelBulkDelete"></div>
+        <div class="desk-modal-panel relative w-full max-w-md overflow-hidden">
             <div class="p-6 text-center">
                 <div class="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/40 mb-4">
                     <svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -808,32 +808,28 @@
                     </svg>
                 </div>
                 @if($showTrashed)
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Permanently Delete {{ count($selected) }} Organization(s)?</h3>
+                    <h3 id="organization-delete-title" class="desk-display text-xl font-semibold mb-2">Permanently delete {{ count($selected) }} organization(s)?</h3>
                     <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
                         This action is <strong>permanent</strong> and cannot be undone. People linked to these organizations will have their organization cleared.
                     </p>
                     <div class="flex items-center justify-center gap-3">
-                        <button wire:click="cancelBulkDelete"
-                            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+                        <button wire:click="cancelBulkDelete" class="desk-button-secondary">
                             Cancel
                         </button>
-                        <button wire:click="bulkPermanentlyDelete"
-                            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+                        <button wire:click="bulkPermanentlyDelete" class="desk-button-danger">
                             Delete Forever
                         </button>
                     </div>
                 @else
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Move {{ count($selected) }} Organization(s) to Trash?</h3>
+                    <h3 id="organization-delete-title" class="desk-display text-xl font-semibold mb-2">Move {{ count($selected) }} organization(s) to trash?</h3>
                     <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
                         These organizations will be moved to the trash. You can restore them later from the trash view.
                     </p>
                     <div class="flex items-center justify-center gap-3">
-                        <button wire:click="cancelBulkDelete"
-                            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+                        <button wire:click="cancelBulkDelete" class="desk-button-secondary">
                             Cancel
                         </button>
-                        <button wire:click="bulkDelete"
-                            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+                        <button wire:click="bulkDelete" class="desk-button-danger">
                             Move to Trash
                         </button>
                     </div>

@@ -601,9 +601,141 @@
         box-shadow: 0 24px 70px rgba(38, 34, 28, 0.18);
     }
 
+    .desk-modal-backdrop {
+        background: rgba(38, 34, 28, 0.58);
+        backdrop-filter: blur(2px);
+    }
+
+    .desk-modal-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        border-bottom: 1px solid var(--border);
+        padding: 1rem 1.25rem;
+    }
+
+    .desk-modal-body {
+        padding: 1.25rem;
+    }
+
+    .desk-modal-footer {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        border-top: 1px solid var(--border);
+        padding: 0.9rem 1.25rem;
+    }
+
     .desk-form-section {
         padding-top: 1rem;
         border-top: 1px solid var(--border);
+    }
+
+    .desk-error-summary {
+        border: 1px solid #dfb8b0;
+        border-radius: 0.5rem;
+        background: #fbefec;
+        padding: 0.75rem 0.9rem;
+        color: var(--danger);
+    }
+
+    .meeting-capture-shell {
+        max-width: 64rem;
+        margin-inline: auto;
+    }
+
+    .meeting-capture-form {
+        border-top: 2px solid var(--foreground);
+    }
+
+    .meeting-capture-form > div {
+        padding: 1.25rem 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .meeting-capture-form > div > label:first-child,
+    .meeting-capture-form > div > div:first-child label:first-child {
+        color: #5c574d !important;
+        font-family: var(--font-data);
+        font-size: 0.7rem !important;
+        font-weight: 500 !important;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+
+    .meeting-capture-form input,
+    .meeting-capture-form select,
+    .meeting-capture-form textarea {
+        border-color: var(--border-strong) !important;
+        border-radius: 0.45rem !important;
+        background: var(--surface) !important;
+        box-shadow: none !important;
+    }
+
+    .meeting-capture-form input:focus,
+    .meeting-capture-form select:focus,
+    .meeting-capture-form textarea:focus {
+        border-color: var(--primary) !important;
+        --tw-ring-color: rgba(138, 75, 45, 0.16) !important;
+    }
+
+    .meeting-capture-voice {
+        border: 1px solid var(--border) !important;
+        border-radius: 0.5rem;
+        background: var(--background-inset) !important;
+        padding: 1rem !important;
+    }
+
+    .meeting-capture-actions {
+        position: sticky;
+        bottom: 0;
+        z-index: 10;
+        margin-inline: -1rem;
+        border: 1px solid var(--border) !important;
+        border-radius: 0.5rem;
+        background: color-mix(in srgb, var(--surface) 94%, transparent);
+        padding: 0.75rem 1rem !important;
+        box-shadow: 0 -8px 24px rgba(38, 34, 28, 0.06);
+        backdrop-filter: blur(8px);
+    }
+
+    .project-create-workspace {
+        display: grid;
+        gap: 1.75rem;
+    }
+
+    .project-create-notice {
+        grid-column: 1 / -1;
+    }
+
+    .project-create-chat,
+    .project-create-preview {
+        min-width: 0;
+        border-top: 2px solid var(--foreground);
+        padding-top: 1rem;
+    }
+
+    .project-create-chat h3,
+    .project-create-preview h3 {
+        font-family: var(--font-display);
+        font-weight: 600;
+    }
+
+    .project-chat-log {
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        background: var(--background-inset);
+    }
+
+    .project-create-preview > .grid > .rounded-lg,
+    .project-create-preview > .rounded-lg {
+        border-color: var(--border) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        padding-inline: 0 !important;
+        box-shadow: none !important;
     }
 
     .desk-wordmark,
@@ -666,7 +798,8 @@
 
     .desk-button-primary,
     .desk-button-dark,
-    .desk-button-secondary {
+    .desk-button-secondary,
+    .desk-button-danger {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -708,6 +841,17 @@
 
     .desk-button-secondary:hover {
         background: var(--background-rail);
+    }
+
+    .desk-button-danger {
+        border: 1px solid var(--danger);
+        background: var(--danger);
+        color: #fffaf7;
+    }
+
+    .desk-button-danger:hover {
+        border-color: #8f2f24;
+        background: #8f2f24;
     }
 
     .desk-link {
@@ -944,6 +1088,16 @@
         .meeting-document-sidebar {
             border-left: 1px solid var(--border);
             padding-left: 1.75rem;
+        }
+
+        .project-create-workspace {
+            grid-template-columns: minmax(20rem, 0.8fr) minmax(0, 1.2fr);
+            align-items: start;
+        }
+
+        .project-create-chat {
+            position: sticky;
+            top: 1.5rem;
         }
 
     }

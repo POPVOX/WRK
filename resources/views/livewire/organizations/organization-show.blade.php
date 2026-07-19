@@ -285,7 +285,7 @@
                         @endforeach
                     </div>
                 @else
-                    <p class="text-gray-500 dark:text-gray-400 text-sm text-center py-4">No people added yet. Click "Add Person" to add someone.</p>
+                    <div class="desk-empty">No contacts are linked yet. <button type="button" wire:click="toggleAddPersonForm" class="desk-link">＋ Add the first person</button></div>
                 @endif
             </div>
 
@@ -548,7 +548,7 @@
                         @endforeach
                     </div>
                 @else
-                    <p class="text-gray-500 dark:text-gray-400 text-sm">Not linked to any projects yet.</p>
+                    <div class="desk-empty">No projects are linked yet. <button type="button" wire:click="toggleAddProjectModal" class="desk-link">＋ Link a project</button></div>
                 @endif
             </div>
 
@@ -614,7 +614,7 @@
                         @endforeach
                     </div>
                 @else
-                    <p class="text-gray-500 dark:text-gray-400 text-sm text-center py-4">No documents uploaded yet.</p>
+                    <div class="desk-empty">No documents or notes have been added yet.</div>
                 @endif
             </div>
 
@@ -696,9 +696,7 @@
                         </table>
                     </div>
                 @else
-                    <div class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
-                        No meetings recorded yet with this organization.
-                    </div>
+                    <div class="desk-empty">No meetings have been recorded with this organization. <a href="{{ route('meetings.create', ['organization' => $organization->id]) }}" wire:navigate class="desk-link">＋ Log a meeting</a></div>
                 @endif
             </div>
         </div>
@@ -706,11 +704,12 @@
 
     <!-- Project Link Modal -->
     @if($showAddProjectModal)
-        <div class="fixed inset-0 z-50 overflow-y-auto">
-            <div class="flex items-center justify-center min-h-screen px-4">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" wire:click="toggleAddProjectModal"></div>
-                <div class="relative bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
-                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Link to Project</h3>
+        <div class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="organization-project-title">
+            <div class="flex min-h-screen items-center justify-center p-4">
+                <div class="desk-modal-backdrop fixed inset-0" wire:click="toggleAddProjectModal"></div>
+                <div class="desk-modal-panel relative w-full max-w-md p-6">
+                    <h3 id="organization-project-title" class="desk-display text-xl font-semibold mb-1">Link a project</h3>
+                    <p class="desk-meta mb-4">Connect this organization to active work and record its role.</p>
                     <div class="space-y-4">
                         <div>
                             <input type="text" wire:model.live.debounce.300ms="projectSearch" placeholder="Search projects..."
@@ -733,8 +732,8 @@
                                 class="mt-1 w-full rounded-md border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                         </div>
                         <div class="flex justify-end gap-3">
-                            <button wire:click="toggleAddProjectModal" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">Cancel</button>
-                            <button wire:click="linkProject" class="px-4 py-2 text-sm text-white bg-indigo-600 rounded-md hover:bg-indigo-700" @if(!$selectedProjectId) disabled @endif>Link</button>
+                            <button wire:click="toggleAddProjectModal" class="desk-button-secondary">Cancel</button>
+                            <button wire:click="linkProject" class="desk-button-primary disabled:opacity-50" @if(!$selectedProjectId) disabled @endif>Link project</button>
                         </div>
                     </div>
                 </div>

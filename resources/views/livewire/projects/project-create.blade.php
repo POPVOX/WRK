@@ -16,10 +16,9 @@
     </x-desk-page-header>
 
     <div>
-        <div class="space-y-6">
+        <div class="project-create-workspace">
             @if($isDuplicate)
-                <div
-                    class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3 flex items-center gap-3">
+                <div class="project-create-notice desk-inset px-4 py-3 flex items-center gap-3">
                     <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -30,7 +29,7 @@
                 </div>
             @endif
 
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <section class="project-create-chat">
                 <div class="flex items-start justify-between gap-4 mb-4">
                     <div>
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Create With Chat</h3>
@@ -43,7 +42,7 @@
                     @endif
                 </div>
 
-                <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-4 h-72 overflow-y-auto space-y-3">
+                <div class="project-chat-log h-72 overflow-y-auto space-y-3 p-4">
                     @foreach($chatMessages as $message)
                         <div class="flex {{ ($message['role'] ?? 'assistant') === 'user' ? 'justify-end' : 'justify-start' }}">
                             <div
@@ -74,9 +73,9 @@
                         </button>
                     </div>
                 </form>
-            </div>
+            </section>
 
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+            <section class="project-create-preview space-y-4">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Project Profile Preview</h3>
@@ -245,12 +244,10 @@
                 @endif
 
                 <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
-                    <a href="{{ route('projects.index') }}" wire:navigate
-                        class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">
+                    <a href="{{ route('projects.index') }}" wire:navigate class="desk-button-secondary">
                         Cancel
                     </a>
-                    <button type="button" wire:click="save"
-                        class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-60"
+                    <button type="button" wire:click="save" class="desk-button-primary disabled:opacity-60"
                         @disabled($name === '' || $isExtracting)
                         wire:loading.attr="disabled"
                         wire:target="save">
@@ -260,7 +257,7 @@
                 </div>
 
                 @if($saveError)
-                    <div class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3">
+                    <div class="desk-error-summary">
                         <p class="text-sm font-medium text-red-700 dark:text-red-300">{{ $saveError }}</p>
                     </div>
                 @endif
@@ -270,7 +267,7 @@
                 @enderror
 
                 @if($errors->any())
-                    <div class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3">
+                    <div class="desk-error-summary">
                         <p class="text-sm font-medium text-red-700 dark:text-red-300">Could not create project yet:</p>
                         <ul class="mt-1 text-sm text-red-700 dark:text-red-300 list-disc pl-5 space-y-0.5">
                             @foreach($errors->all() as $error)
@@ -279,7 +276,7 @@
                         </ul>
                     </div>
                 @endif
-            </div>
+            </section>
         </div>
     </div>
 </div>

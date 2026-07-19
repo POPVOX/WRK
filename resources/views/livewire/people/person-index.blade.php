@@ -1031,12 +1031,11 @@
 
 {{-- Import CSV Modal --}}
 @if($showImportModal)
-    <div class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="absolute inset-0 bg-gray-900/70" wire:click="closeImportModal"></div>
-        <div
-            class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-xl mx-4 overflow-hidden border border-gray-200 dark:border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <h3 class="font-semibold text-gray-900 dark:text-white">Import Contacts (CSV)</h3>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="contact-import-title">
+        <div class="desk-modal-backdrop absolute inset-0" wire:click="closeImportModal"></div>
+        <div class="desk-modal-panel relative w-full max-w-xl overflow-hidden">
+            <div class="desk-modal-header">
+                <div><h3 id="contact-import-title" class="desk-display text-xl font-semibold">Import contacts</h3><p class="desk-meta mt-1">Upload a CSV and review the accepted fields before importing.</p></div>
                 <button class="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="closeImportModal">
                     <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor"
                         viewBox="0 0 24 24">
@@ -1044,15 +1043,17 @@
                     </svg>
                 </button>
             </div>
-            <div class="p-6 space-y-4">
+            <div class="desk-modal-body space-y-4">
                 <p class="text-sm text-gray-600 dark:text-gray-400">Accepted columns (header names): name, email,
                     organization, title, phone, source, tags (comma or |), owner_email</p>
                 <form wire:submit.prevent="importContacts" class="space-y-3">
                     <input type="file" wire:model="importFile"
                         class="w-full text-sm text-gray-600 dark:text-gray-300 file:mr-4 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
                     <div class="flex justify-end">
-                        <button type="submit"
-                            class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">Import</button>
+                        <button type="submit" wire:loading.attr="disabled" wire:target="importContacts" class="desk-button-primary disabled:opacity-50">
+                            <span wire:loading.remove wire:target="importContacts">Import contacts</span>
+                            <span wire:loading wire:target="importContacts">Importing…</span>
+                        </button>
                     </div>
                 </form>
 
@@ -1064,10 +1065,8 @@
                     </div>
                 @endif
             </div>
-            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-right">
-                <button
-                    class="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                    wire:click="closeImportModal">Close</button>
+            <div class="desk-modal-footer">
+                <button class="desk-button-secondary" wire:click="closeImportModal">Close</button>
             </div>
         </div>
     </div>
@@ -1076,9 +1075,9 @@
 
 {{-- Bulk Delete Confirmation Modal --}}
 @if($confirmingBulkDelete)
-    <div class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="absolute inset-0 bg-gray-900/70" wire:click="cancelBulkDelete"></div>
-        <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-gray-200 dark:border-gray-700">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="contact-delete-title">
+        <div class="desk-modal-backdrop absolute inset-0" wire:click="cancelBulkDelete"></div>
+        <div class="desk-modal-panel relative w-full max-w-md overflow-hidden">
             <div class="p-6 text-center">
                 <div class="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/40 mb-4">
                     <svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1086,32 +1085,28 @@
                     </svg>
                 </div>
                 @if($showTrashed)
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Permanently Delete {{ count($selected) }} Contact(s)?</h3>
+                    <h3 id="contact-delete-title" class="desk-display text-xl font-semibold mb-2">Permanently delete {{ count($selected) }} contact(s)?</h3>
                     <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
                         This action is <strong>permanent</strong> and cannot be undone. All meeting and project associations will be removed.
                     </p>
                     <div class="flex items-center justify-center gap-3">
-                        <button wire:click="cancelBulkDelete"
-                            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+                        <button wire:click="cancelBulkDelete" class="desk-button-secondary">
                             Cancel
                         </button>
-                        <button wire:click="bulkPermanentlyDelete"
-                            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+                        <button wire:click="bulkPermanentlyDelete" class="desk-button-danger">
                             Delete Forever
                         </button>
                     </div>
                 @else
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Move {{ count($selected) }} Contact(s) to Trash?</h3>
+                    <h3 id="contact-delete-title" class="desk-display text-xl font-semibold mb-2">Move {{ count($selected) }} contact(s) to trash?</h3>
                     <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
                         These contacts will be moved to the trash. You can restore them later from the trash view.
                     </p>
                     <div class="flex items-center justify-center gap-3">
-                        <button wire:click="cancelBulkDelete"
-                            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+                        <button wire:click="cancelBulkDelete" class="desk-button-secondary">
                             Cancel
                         </button>
-                        <button wire:click="bulkDelete"
-                            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+                        <button wire:click="bulkDelete" class="desk-button-danger">
                             Move to Trash
                         </button>
                     </div>
