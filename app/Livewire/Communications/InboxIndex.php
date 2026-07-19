@@ -72,6 +72,8 @@ class InboxIndex extends Component
 
     public bool $isSyncingGmail = false;
 
+    public ?string $gmailSyncStartedAt = null;
+
     public ?string $lastGmailSyncAt = null;
 
     public bool $readOnlyMode = false;
@@ -308,16 +310,49 @@ class InboxIndex extends Component
 
     public function syncGmail(): void
     {
+        $this->queueGmailSync(notify: true);
+    }
+
+    public function syncGmailOnOpen(): void
+    {
+        $this->queueGmailSync(notify: false);
+    }
+
+    public function refreshGmailSyncStatus(): void
+    {
         $user = Auth::user();
-        if (! $user) {
+        if (! $user || ! $this->isSyncingGmail || ! $this->gmailSyncStartedAt) {
             return;
         }
 
-        if ($this->isSyncingGmail) {
+        $user->refresh();
+        $this->lastGmailSyncAt = $user->gmail_import_date?->diffForHumans();
+
+        $startedAt = Carbon::parse($this->gmailSyncStartedAt);
+        if ($user->gmail_import_date?->gte($startedAt->copy()->subSecond())) {
+            $this->isSyncingGmail = false;
+            $this->gmailSyncStartedAt = null;
+
             return;
         }
 
-        $this->isSyncingGmail = true;
+        if ($startedAt->lte(now()->subMinutes(3))) {
+            $this->isSyncingGmail = false;
+            $this->gmailSyncStartedAt = null;
+            $this->dispatch(
+                'notify',
+                type: 'info',
+                message: 'Gmail sync is still running in the background. New messages will appear automatically when it finishes.'
+            );
+        }
+    }
+
+    private function queueGmailSync(bool $notify): void
+    {
+        $user = Auth::user();
+        if (! $user || $this->isSyncingGmail) {
+            return;
+        }
 
         try {
             $gmailService = app(GoogleGmailService::class);
@@ -331,48 +366,39 @@ class InboxIndex extends Component
                     snapshot: null,
                     details: ['reason' => 'google_not_connected']
                 );
-            } else {
-                // Perform a fast inline sync first so the Inbox updates immediately for the user.
-                $inlineSummary = $gmailService->syncRecentMessages($user, 30, 120);
 
-                $queueName = (string) (config('queue.gmail_queue') ?: env('GMAIL_SYNC_QUEUE', 'default'));
-                try {
-                    // Keep deeper backfill queued so history continues to catch up when workers are healthy.
-                    SyncGmailMessages::dispatch($user, 90, 300)->onQueue($queueName);
-                } catch (\Throwable $queueException) {
-                    \Log::warning('Failed to enqueue background Gmail sync after inline sync', [
-                        'user_id' => $user->id,
-                        'queue' => $queueName,
-                        'error' => $queueException->getMessage(),
-                    ]);
-                }
+                return;
+            }
 
-                $imported = (int) ($inlineSummary['imported'] ?? 0);
-                $updated = (int) ($inlineSummary['updated'] ?? 0);
-                $processed = (int) ($inlineSummary['processed'] ?? 0);
-                $errors = (int) ($inlineSummary['errors'] ?? 0);
+            $queueName = (string) (config('queue.gmail_queue') ?: env('GMAIL_SYNC_QUEUE', 'default'));
+            $this->gmailSyncStartedAt = now()->toIso8601String();
+            $this->isSyncingGmail = true;
 
+            SyncGmailMessages::dispatch($user, 90, 300)->onQueue($queueName);
+
+            if ($notify) {
                 $this->dispatch(
                     'notify',
                     type: 'success',
-                    message: "Gmail sync complete (processed {$processed}, imported {$imported}, updated {$updated}, errors {$errors})."
-                );
-                $this->recordInboxAction(
-                    suggestionKey: 'sync_gmail',
-                    actionLabel: 'Sync Gmail',
-                    actionStatus: 'applied',
-                    snapshot: null,
-                    details: [
-                        'queue' => $queueName,
-                        'inline_days_back' => 30,
-                        'inline_max_messages' => 120,
-                        'queued_days_back' => 90,
-                        'queued_max_messages' => 300,
-                        'inline_summary' => $inlineSummary,
-                    ]
+                    message: 'Gmail sync started. You can keep using the Inbox while it runs.'
                 );
             }
+
+            $this->recordInboxAction(
+                suggestionKey: 'sync_gmail',
+                actionLabel: 'Sync Gmail',
+                actionStatus: 'applied',
+                snapshot: null,
+                details: [
+                    'queue' => $queueName,
+                    'queued_days_back' => 90,
+                    'queued_max_messages' => 300,
+                    'trigger' => $notify ? 'manual' : 'inbox_open',
+                ]
+            );
         } catch (\Throwable $exception) {
+            $this->isSyncingGmail = false;
+            $this->gmailSyncStartedAt = null;
             $this->dispatch('notify', type: 'error', message: 'Gmail sync failed: '.$exception->getMessage());
             $this->recordInboxAction(
                 suggestionKey: 'sync_gmail',
@@ -381,16 +407,7 @@ class InboxIndex extends Component
                 snapshot: null,
                 details: ['error' => $exception->getMessage()]
             );
-        } finally {
-            $user->refresh();
-            $this->lastGmailSyncAt = $user->gmail_import_date?->diffForHumans();
-            $this->isSyncingGmail = false;
         }
-    }
-
-    public function syncGmailOnOpen(): void
-    {
-        $this->syncGmail();
     }
 
     public function sendCompose(): void

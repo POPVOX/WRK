@@ -18,18 +18,6 @@ test('opening the connected inbox always starts a Gmail sync', function () {
     ]);
     $gmail = Mockery::mock(GoogleGmailService::class);
     $gmail->shouldReceive('isConnected')->twice()->with($user)->andReturnTrue();
-    $gmail->shouldReceive('syncRecentMessages')
-        ->once()
-        ->with($user, 30, 120)
-        ->andReturn([
-            'connected' => true,
-            'imported' => 1,
-            'updated' => 0,
-            'processed' => 1,
-            'errors' => 0,
-            'history_id' => '123',
-            'mode' => 'history',
-        ]);
     app()->instance(GoogleGmailService::class, $gmail);
 
     Livewire::actingAs($user)
@@ -37,9 +25,39 @@ test('opening the connected inbox always starts a Gmail sync', function () {
         ->assertSet('gmailConnected', true)
         ->assertSeeHtml('wire:init="syncGmailOnOpen"')
         ->call('syncGmailOnOpen')
+        ->assertSet('isSyncingGmail', true)
+        ->assertSet('gmailSyncStartedAt', fn ($value) => filled($value))
+        ->assertSeeHtml('wire:poll.5s="refreshGmailSyncStatus"')
         ->assertHasNoErrors();
 
     Queue::assertPushed(SyncGmailMessages::class, fn (SyncGmailMessages $job) => $job->user->is($user));
+});
+
+test('the inbox stops polling after a queued Gmail sync completes', function () {
+    Queue::fake();
+    $user = User::factory()->create([
+        'google_access_token' => 'connected-token',
+        'google_refresh_token' => 'refresh-token',
+        'google_token_expires_at' => now()->addHour(),
+        'gmail_import_date' => now()->subHour(),
+    ]);
+    $gmail = Mockery::mock(GoogleGmailService::class);
+    $gmail->shouldReceive('isConnected')->twice()->with($user)->andReturnTrue();
+    app()->instance(GoogleGmailService::class, $gmail);
+
+    $component = Livewire::actingAs($user)
+        ->test(InboxIndex::class)
+        ->call('syncGmailOnOpen')
+        ->assertSet('isSyncingGmail', true);
+
+    $user->forceFill(['gmail_import_date' => now()->addSecond()])->save();
+
+    $component
+        ->call('refreshGmailSyncStatus')
+        ->assertSet('isSyncingGmail', false)
+        ->assertSet('gmailSyncStartedAt', null)
+        ->assertSet('lastGmailSyncAt', fn ($value) => filled($value))
+        ->assertDontSeeHtml('wire:poll.5s="refreshGmailSyncStatus"');
 });
 
 test('Gmail sync runs every ten minutes and reconciliation follows two minutes later', function () {
