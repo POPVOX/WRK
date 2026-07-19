@@ -71,14 +71,16 @@ test('hard bounce evidence creates a global idempotent suppression', function ()
 
     expect(OutreachEmailSuppression::query()->count())->toBe(1)
         ->and(CongressionalStaffEmailEvent::query()->where('event_key', $eventKey)->count())->toBe(1)
+        ->and($first->profile->fresh()->status)->toBe(CongressionalStaffProfile::STATUS_INACTIVE)
         ->and($eligibility->evaluate($first->fresh())['tier'])->toBe('blocked')
         ->and($eligibility->evaluate($second->fresh())['tier'])->toBe('blocked');
 });
 
 test('automatic and departure replies reconcile existing evidence idempotently', function () {
     $evidence = app(CongressionalEmailEvidenceService::class);
+    $profile = congressionalEmailProfile('Taylor Auto Reply');
     $staffEmail = $evidence->addAddress(
-        congressionalEmailProfile('Taylor Auto Reply'),
+        $profile,
         'taylor.auto@mail.house.gov',
         'guessed'
     );
@@ -95,6 +97,7 @@ test('automatic and departure replies reconcile existing evidence idempotently',
     $departureKey = hash('sha256', 'departure-existing');
     $evidence->recordEvent($staffEmail->fresh(), 'departure_auto_reply', eventKey: $departureKey);
     expect($staffEmail->fresh()->verification_status)->toBe('departed')
+        ->and($profile->fresh()->status)->toBe(CongressionalStaffProfile::STATUS_INACTIVE)
         ->and(OutreachEmailSuppression::query()
             ->where('email_normalized', 'taylor.auto@mail.house.gov')
             ->where('reason', 'departed')

@@ -125,7 +125,7 @@ class StaffIndex extends Component
             return;
         }
 
-        $profileIds = CongressionalStaffProfile::query()
+        $profileIds = $this->filteredStaffQuery()
             ->whereKey(collect($this->checkedProfileIds)->map(fn ($id) => (int) $id)->filter()->unique())
             ->pluck('id');
         $added = $this->insertProfiles($list, $profileIds->all());
@@ -212,9 +212,12 @@ class StaffIndex extends Component
             })
             ->when($this->chamber !== '', fn (Builder $query) => $query->where('chamber', $this->chamber))
             ->when($this->status === 'current', fn (Builder $query) => $query
+                ->directoryActive()
                 ->whereHas('positions', fn (Builder $query) => $query->where('is_current', true)))
             ->when($this->status === 'former', fn (Builder $query) => $query
-                ->whereDoesntHave('positions', fn (Builder $query) => $query->where('is_current', true)))
+                ->where(fn (Builder $query) => $query
+                    ->directoryInactive()
+                    ->orWhereDoesntHave('positions', fn (Builder $query) => $query->where('is_current', true))))
             ->when($this->officeType !== '', fn (Builder $query) => $query
                 ->whereHas('positions.office', fn (Builder $query) => $query->where('office_type', $this->officeType)))
             ->when($this->title !== '', fn (Builder $query) => $query
@@ -246,6 +249,7 @@ class StaffIndex extends Component
                 ->pluck('office_type'),
             'totalProfiles' => CongressionalStaffProfile::query()->count(),
             'currentProfiles' => CongressionalStaffProfile::query()
+                ->directoryActive()
                 ->whereHas('positions', fn (Builder $query) => $query->where('is_current', true))
                 ->count(),
             'linkedProfiles' => CongressionalStaffProfile::query()->whereNotNull('person_id')->count(),

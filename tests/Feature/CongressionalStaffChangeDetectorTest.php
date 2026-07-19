@@ -7,6 +7,7 @@ use App\Models\CongressionalStaffChangeSignal;
 use App\Models\CongressionalStaffEmail;
 use App\Models\CongressionalStaffProfile;
 use App\Models\GmailMessage;
+use App\Models\OutreachEmailSuppression;
 use App\Models\User;
 use App\Services\CongressionalDirectory\CongressionalEmailEvidenceService;
 use App\Services\CongressionalDirectory\CongressionalStaffChangeDetector;
@@ -121,7 +122,7 @@ test('outbound messages never create staff-change signals', function () {
     expect(app(CongressionalStaffChangeDetector::class)->detect($message))->toBeNull();
 });
 
-test('team members can confirm departure evidence and safely add person replacements', function () {
+test('automatic departure reconciliation safely adds person replacements for team review', function () {
     config()->set('features.congressional_directory_ui', true);
     $reviewer = User::factory()->create();
     changeSignalProfile('Caroline Moore', 'caroline.moore@britt.senate.gov');
@@ -129,11 +130,11 @@ test('team members can confirm departure evidence and safely add person replacem
 
     Livewire::actingAs($reviewer)
         ->test(ChangeSignalIndex::class)
-        ->assertSee('abigail_avery@britt.senate.gov')
-        ->call('review', $signal->id, 'accepted');
+        ->set('status', 'accepted')
+        ->assertSee('abigail_avery@britt.senate.gov');
 
     expect($signal->fresh()->status)->toBe('accepted')
-        ->and($signal->fresh()->reviewed_by)->toBe($reviewer->id)
+        ->and($signal->fresh()->reviewed_by)->toBeNull()
         ->and($signal->fresh()->reviewed_at)->not->toBeNull()
         ->and(CongressionalStaffEmail::query()->where('email_normalized', 'abigail_avery@britt.senate.gov')->exists())->toBeTrue()
         ->and(CongressionalStaffEmail::query()->where('email_normalized', 'johnhenry_woods@britt.senate.gov')->exists())->toBeTrue()
@@ -164,10 +165,58 @@ test('accepted delivery failure records a hard bounce for a known congressional 
     expect($signal->status)->toBe('accepted')
         ->and($signal->reviewed_at)->not->toBeNull()
         ->and($signal->replacement_contacts)->toBe([])
+        ->and($profile->fresh()->status)->toBe(CongressionalStaffProfile::STATUS_INACTIVE)
         ->and(CongressionalStaffEmail::query()->find($staffEmail->id)->verification_status)->toBe('hard_bounced')
         ->and(\App\Models\OutreachEmailSuppression::query()
             ->where('email_normalized', 'former.staff@mail.house.gov')
             ->where('reason', 'hard_bounce')
+            ->exists())->toBeTrue();
+});
+
+test('clear departure wording is accepted automatically and retires the staff profile', function (string $messageText) {
+    $name = 'Departure '.substr(hash('sha256', $messageText), 0, 8);
+    $staffEmail = changeSignalProfile($name, strtolower(str_replace(' ', '.', $name)).'@mail.house.gov');
+    $message = changeSignalMessage([
+        'from_email' => $staffEmail->email_normalized,
+        'from_name' => $name,
+        'body_text' => $messageText,
+    ]);
+
+    $signal = app(CongressionalStaffChangeDetector::class)->detect($message);
+
+    expect($signal)->not->toBeNull()
+        ->and($signal->status)->toBe('accepted')
+        ->and($signal->signal_type)->toBeIn(['departure', 'departure_redirect'])
+        ->and($staffEmail->profile->fresh()->status)->toBe(CongressionalStaffProfile::STATUS_INACTIVE)
+        ->and($staffEmail->profile->fresh()->currentPosition)->toBeNull()
+        ->and(OutreachEmailSuppression::query()
+            ->where('email_normalized', $staffEmail->email_normalized)
+            ->where('reason', 'departed')
+            ->exists())->toBeTrue();
+})->with([
+    'no longer works in office' => 'I no longer work in the office of Representative Example.',
+    'inbox retired after role transition' => 'This inbox is no longer monitored because I have transitioned out of my role.',
+    'left Capitol Hill' => 'I am no longer on Capitol Hill. Please contact the front office for assistance.',
+    'last day with office' => 'My last day with the Senate office was June 30.',
+]);
+
+test('an observed move to another congressional address suppresses the old address without retiring the person', function () {
+    $staffEmail = changeSignalProfile('Kathleen Gayle', 'kathleen_gayle@rounds.senate.gov');
+    $message = changeSignalMessage([
+        'from_email' => $staffEmail->email_normalized,
+        'from_name' => 'Kathleen Gayle',
+        'body_text' => 'I am no longer with Senator Rounds. I have moved to the Senate Banking Committee and can be reached at Kathleen_Gayle@banking.senate.gov.',
+    ]);
+
+    $signal = app(CongressionalStaffChangeDetector::class)->detect($message);
+
+    expect($signal?->status)->toBe('accepted')
+        ->and($signal?->signal_type)->toBe('departure_redirect')
+        ->and($staffEmail->profile->fresh()->status)->toBe('reported_active')
+        ->and($staffEmail->fresh()->verification_status)->toBe('departed')
+        ->and(CongressionalStaffEmail::query()
+            ->where('profile_id', $staffEmail->profile_id)
+            ->where('email_normalized', 'kathleen_gayle@banking.senate.gov')
             ->exists())->toBeTrue();
 });
 
@@ -250,7 +299,7 @@ test('administrators can reconcile imported Gmail evidence from the review page'
 
     Livewire::actingAs($admin)
         ->test(ChangeSignalIndex::class)
-        ->assertSee('Reconcile Gmail evidence')
+        ->assertDontSee('Reconcile Gmail evidence')
         ->call('reconcileImportedEvidence')
         ->assertHasNoErrors();
 

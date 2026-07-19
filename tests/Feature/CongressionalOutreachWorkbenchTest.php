@@ -138,6 +138,8 @@ test('dry run resolves the safest address and excludes unsafe recipient records'
     $preferred = workbenchProfile('Avery Preferred');
     $noAddress = workbenchProfile('Bailey No Address');
     $inactive = workbenchProfile('Casey Former', false);
+    $statusInactive = workbenchProfile('Casey Status Inactive');
+    $statusInactive->update(['status' => CongressionalStaffProfile::STATUS_INACTIVE]);
     $suppressed = workbenchProfile('Dana Suppressed');
     $duplicateOne = workbenchProfile('Emery Duplicate');
     $duplicateTwo = workbenchProfile('Finley Duplicate');
@@ -146,6 +148,7 @@ test('dry run resolves the safest address and excludes unsafe recipient records'
     $guessed->update(['is_primary' => true]);
     $sourced = $evidence->addAddress($preferred, 'avery.sourced@house.gov', 'sourced');
     $evidence->addAddress($inactive, 'casey@house.gov', 'sourced');
+    $evidence->addAddress($statusInactive, 'casey.inactive@house.gov', 'sourced');
     $blocked = $evidence->addAddress($suppressed, 'dana@house.gov', 'sourced');
     OutreachEmailSuppression::query()->create([
         'email_normalized' => $blocked->email_normalized,
@@ -159,7 +162,7 @@ test('dry run resolves the safest address and excludes unsafe recipient records'
     $workbench = app(CongressionalOutreachWorkbenchService::class);
     $draft = builtWorkbenchDraft(
         $workbench,
-        workbenchList($user, [$preferred, $noAddress, $inactive, $suppressed, $duplicateOne, $duplicateTwo]),
+        workbenchList($user, [$preferred, $noAddress, $inactive, $statusInactive, $suppressed, $duplicateOne, $duplicateTwo]),
         $user,
         'Safety review'
     );
@@ -170,6 +173,7 @@ test('dry run resolves the safest address and excludes unsafe recipient records'
         ->and($preferredRecipient->review_status)->toBe('pending')
         ->and($draft->recipients()->where('profile_id', $noAddress->id)->sole()->exclusion_reason)->toBe('no_address')
         ->and($draft->recipients()->where('profile_id', $inactive->id)->sole()->exclusion_reason)->toBe('inactive_profile')
+        ->and($draft->recipients()->where('profile_id', $statusInactive->id)->sole()->exclusion_reason)->toBe('inactive_profile')
         ->and($draft->recipients()->where('profile_id', $suppressed->id)->sole()->exclusion_reason)->toBe('blocked_address')
         ->and($draft->recipients()->where('exclusion_reason', 'duplicate_address')->count())->toBe(1);
 });
@@ -213,6 +217,34 @@ test('bulk review skips provisional addresses while individual review can approv
         ->and($preview['body'])->toContain('Legislative Assistant')
         ->and($draft->fresh()->status)->toBe('ready')
         ->and(OutreachCampaign::query()->count())->toBe(0);
+});
+
+test('staff inactivity automatically removes approved unsent campaign recipients', function () {
+    $user = User::factory()->create();
+    $profile = workbenchProfile('Retired Before Send');
+    $evidence = app(CongressionalEmailEvidenceService::class);
+    $staffEmail = $evidence->addAddress($profile, 'retired.before.send@mail.house.gov', 'observed');
+    $workbench = app(CongressionalOutreachWorkbenchService::class);
+    $draft = builtWorkbenchDraft(
+        $workbench,
+        workbenchList($user, [$profile]),
+        $user,
+        'Retirement safety'
+    );
+    $recipient = $draft->recipients()->sole();
+    $workbench->approve($recipient, $user->id);
+
+    $evidence->recordEvent(
+        $staffEmail,
+        'departure_auto_reply',
+        evidenceExcerpt: 'This staffer is no longer with the office.',
+        eventKey: hash('sha256', 'retired-before-send')
+    );
+
+    expect($profile->fresh()->status)->toBe(CongressionalStaffProfile::STATUS_INACTIVE)
+        ->and($recipient->fresh()->review_status)->toBe('excluded')
+        ->and($recipient->fresh()->exclusion_reason)->toBe('inactive_profile')
+        ->and($draft->recipients()->where('review_status', 'approved')->count())->toBe(0);
 });
 
 test('staff can create and inspect a persistent dry run without sending', function () {

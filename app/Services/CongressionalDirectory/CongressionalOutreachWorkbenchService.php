@@ -219,7 +219,9 @@ class CongressionalOutreachWorkbenchService
             ->where('verification_status', 'unverified')
             ->whereNotNull('staff_email_id')
             ->whereNotNull('email_normalized')
-            ->whereHas('profile.currentPosition')
+            ->whereHas('profile', fn ($query) => $query
+                ->directoryActive()
+                ->whereHas('currentPosition'))
             ->whereDoesntHave('outreachCampaignRecipients')
             ->whereNotIn('email_normalized', OutreachEmailSuppression::query()->select('email_normalized'))
             ->orderBy('id');
@@ -495,7 +497,7 @@ class CongressionalOutreachWorkbenchService
         string $tier,
         ?CongressionalStaffEmail $staffEmail
     ): ?string {
-        if (! $profile?->currentPosition) {
+        if (! $profile?->currentPosition || $profile->status === CongressionalStaffProfile::STATUS_INACTIVE) {
             return 'inactive_profile';
         }
 

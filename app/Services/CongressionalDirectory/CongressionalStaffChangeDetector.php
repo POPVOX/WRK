@@ -13,6 +13,8 @@ use Illuminate\Support\Str;
 
 class CongressionalStaffChangeDetector
 {
+    private const DEPARTURE_PATTERN = '/(?:no longer\s+(?:with|at)\b|no longer\s+(?:work(?:ing)?|serve|serving|employed)\s+(?:with|for|in|at|by)\b|no longer\s+(?:on\s+(?:the\s+)?(?:capitol\s+)?hill|in\s+(?:congress|the\s+house|the\s+senate))\b|(?:my|this)\s+inbox\s+is\s+no longer monitored|transitioned out of (?:my|the) role|left (?:the )?office|has left|departed|my last day|last day with|moved on from|not employed by)/i';
+
     public function __construct(
         protected CongressionalEmailEvidenceService $emailEvidence,
         protected OutreachResponseClassifier $responseClassifier
@@ -20,10 +22,43 @@ class CongressionalStaffChangeDetector
 
     public function mightContainSignal(string $text): bool
     {
-        return (bool) preg_match(
-            '/no longer (?:with|at)|left (?:the )?office|has left|departed|my last day|delivery status notification|address not found|message (?:was )?not delivered|undeliverable|recipient address rejected|\b550\s+5\./i',
+        return $this->containsDeparture($text) || (bool) preg_match(
+            '/delivery status notification|address not found|message (?:was )?not delivered|undeliverable|recipient address rejected|\b550\s+5\./i',
             $text
         );
+    }
+
+    /** @return array<int,string> */
+    public function candidateSqlPatterns(): array
+    {
+        return [
+            '%no longer with%',
+            '%no longer at%',
+            '%no longer work%',
+            '%no longer serve%',
+            '%no longer on the hill%',
+            '%no longer on hill%',
+            '%no longer on capitol hill%',
+            '%no longer in congress%',
+            '%no longer in the house%',
+            '%no longer in the senate%',
+            '%inbox is no longer monitored%',
+            '%transitioned out of my role%',
+            '%transitioned out of the role%',
+            '%left the office%',
+            '%has left%',
+            '%departed%',
+            '%my last day%',
+            '%last day with%',
+            '%moved on from%',
+            '%not employed by%',
+            '%delivery status notification%',
+            '%address not found%',
+            '%not delivered%',
+            '%undeliverable%',
+            '%recipient address rejected%',
+            '%550 5.%',
+        ];
     }
 
     public function detect(GmailMessage $message): ?CongressionalStaffChangeSignal
@@ -48,7 +83,7 @@ class CongressionalStaffChangeDetector
             '/delivery status notification|address not found|message (?:was )?not delivered|undeliverable|recipient address rejected|\b550\s+5\./i',
             $text
         );
-        $departure = (bool) preg_match('/no longer (?:with|at)|left (?:the )?office|has left|departed|my last day/i', $text);
+        $departure = $this->containsDeparture($text);
         $emails = $this->extractEmails($text);
         $excluded = collect(array_merge(
             [$message->from_email, $message->user?->email],
@@ -118,10 +153,17 @@ class CongressionalStaffChangeDetector
                 ->exists() ? 'accepted' : 'rejected';
         }
 
-        $autoAccept = $deliveryFailure
+        $knownDepartureSource = ! $deliveryFailure
+            && $departure
+            && $sourceEmail
+            && CongressionalStaffEmail::query()->where('email_normalized', $sourceEmail)->exists();
+        $autoAccept = ($deliveryFailure
             && $signal->status === 'pending'
             && ! $signal->reviewed_at
-            && $this->isClearHardBounce($message, $text, $targetEmails);
+            && $this->isClearHardBounce($message, $text, $targetEmails))
+            || ($knownDepartureSource
+                && $signal->status === 'pending'
+                && ! $signal->reviewed_at);
         if ($autoAccept) {
             $signal->status = 'accepted';
             $signal->reviewed_at = now();
@@ -134,6 +176,11 @@ class CongressionalStaffChangeDetector
         }
 
         return $signal->fresh();
+    }
+
+    protected function containsDeparture(string $text): bool
+    {
+        return preg_match(self::DEPARTURE_PATTERN, $text) === 1;
     }
 
     protected function recordOutreachResponse(GmailMessage $message): void

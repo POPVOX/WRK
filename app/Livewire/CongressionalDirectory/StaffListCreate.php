@@ -112,7 +112,7 @@ class StaffListCreate extends Component
             return null;
         }
 
-        $profileIds = CongressionalStaffProfile::query()
+        $profileIds = $this->staffQuery()
             ->whereKey(array_map('intval', $validated['selectedProfileIds']))
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
@@ -172,9 +172,12 @@ class StaffListCreate extends Component
             })
             ->when($this->chamber !== '', fn (Builder $query) => $query->where('chamber', $this->chamber))
             ->when($this->status === 'current', fn (Builder $query) => $query
+                ->directoryActive()
                 ->whereHas('positions', fn (Builder $query) => $query->where('is_current', true)))
             ->when($this->status === 'former', fn (Builder $query) => $query
-                ->whereDoesntHave('positions', fn (Builder $query) => $query->where('is_current', true)))
+                ->where(fn (Builder $query) => $query
+                    ->directoryInactive()
+                    ->orWhereDoesntHave('positions', fn (Builder $query) => $query->where('is_current', true))))
             ->when($this->officeType !== '', fn (Builder $query) => $query
                 ->whereHas('positions.office', fn (Builder $query) => $query->where('office_type', $this->officeType)))
             ->when(trim($this->title) !== '', fn (Builder $query) => $query
