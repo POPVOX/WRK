@@ -76,6 +76,8 @@ class InboxIndex extends Component
 
     public bool $readOnlyMode = false;
 
+    public bool $gmailConnected = false;
+
     public bool $showInboxMenu = false;
 
     public bool $showContextPanel = false;
@@ -95,6 +97,9 @@ class InboxIndex extends Component
         $user = Auth::user();
         $this->lastGmailSyncAt = $user?->gmail_import_date?->diffForHumans();
         $this->readOnlyMode = ! $this->gmailWriteScopesConfigured();
+        $this->gmailConnected = $user
+            ? app(GoogleGmailService::class)->isConnected($user)
+            : false;
     }
 
     public function toggleContextPanel(): void
@@ -381,6 +386,11 @@ class InboxIndex extends Component
             $this->lastGmailSyncAt = $user->gmail_import_date?->diffForHumans();
             $this->isSyncingGmail = false;
         }
+    }
+
+    public function syncGmailOnOpen(): void
+    {
+        $this->syncGmail();
     }
 
     public function sendCompose(): void
