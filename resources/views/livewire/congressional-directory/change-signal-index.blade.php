@@ -1,20 +1,8 @@
 <div class="desk-page">
     <x-congress-nav />
-    <x-desk-page-header eyebrow="Congress · Data quality" title="Staff changes" description="Review departures and replacement contacts observed in Gmail. Clear hard bounces are suppressed automatically; confirming a redirect adds safe person-like replacements as observed congressional contacts.">
+    <x-desk-page-header eyebrow="Congress · Data quality" title="Staff changes" description="Gmail evidence is reconciled automatically. Clear hard bounces and departure notices retire outdated staff profiles; replacement contacts are preserved as observed congressional contacts.">
         <x-slot:actions>
             <div class="flex flex-wrap items-end gap-3">
-                @if(auth()->user()?->isAdmin())
-                    <button
-                        type="button"
-                        wire:click="reconcileImportedEvidence"
-                        wire:loading.attr="disabled"
-                        wire:target="reconcileImportedEvidence"
-                        class="desk-btn desk-btn-secondary"
-                    >
-                        <span wire:loading.remove wire:target="reconcileImportedEvidence">Reconcile Gmail evidence</span>
-                        <span wire:loading wire:target="reconcileImportedEvidence">Reconciling…</span>
-                    </button>
-                @endif
                 <div>
                     <label for="change-status" class="text-sm font-medium text-gray-700">Review status</label>
                     <select id="change-status" wire:model.live="status" class="mt-1 block rounded-lg border-gray-300 text-sm">
@@ -74,7 +62,7 @@
     @empty
         <div class="app-surface px-6 py-14 text-center">
             <h2 class="font-semibold text-gray-900">No {{ $status ?: '' }} staff-change signals</h2>
-            <p class="mt-1 text-sm app-muted">Signals will appear after Gmail sync or the historical scan command runs.</p>
+            <p class="mt-1 text-sm app-muted">Signals appear automatically after Gmail sync and recurring reconciliation.</p>
         </div>
     @endforelse
 

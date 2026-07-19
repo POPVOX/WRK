@@ -107,6 +107,28 @@ test('congress explorer searches and filters staff separately from contacts', fu
         ->assertSee('No staff profiles match these filters');
 });
 
+test('inactive staff stay out of default directory and list-builder searches', function () {
+    config()->set('features.congressional_directory_ui', true);
+    $user = User::factory()->create();
+    $inactive = explorerProfile('Retired Hill Staffer', 'House', 'Office of Representative Retired', 'Member office', 'LEGISLATIVE ASSISTANT');
+    $inactive->update(['status' => CongressionalStaffProfile::STATUS_INACTIVE]);
+
+    Livewire::actingAs($user)
+        ->test(StaffIndex::class)
+        ->assertDontSee('Retired Hill Staffer')
+        ->set('status', 'former')
+        ->assertSee('Retired Hill Staffer');
+
+    Livewire::actingAs($user)
+        ->test(StaffListCreate::class)
+        ->set('search', 'Retired Hill Staffer')
+        ->call('runSearch')
+        ->assertDontSee('Retired Hill Staffer')
+        ->set('status', 'former')
+        ->call('runSearch')
+        ->assertSee('Retired Hill Staffer');
+});
+
 test('contact data enrichment is directory wide and queues without sending', function () {
     config()->set('features.congressional_directory_ui', true);
     Cache::forget(EnrichCongressionalContactData::CACHE_KEY);

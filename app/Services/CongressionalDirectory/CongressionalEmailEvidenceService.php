@@ -2,6 +2,7 @@
 
 namespace App\Services\CongressionalDirectory;
 
+use App\Models\CongressionalOutreachDraftRecipient;
 use App\Models\CongressionalPosition;
 use App\Models\CongressionalStaffChangeSignal;
 use App\Models\CongressionalStaffEmail;
@@ -244,8 +245,69 @@ class CongressionalEmailEvidenceService
                 }
             }
 
+            $retireProfile = $eventType === 'hard_bounce'
+                || ($eventType === 'departure_auto_reply' && (bool) data_get($metadata, 'retire_profile', true));
+            if ($retireProfile) {
+                $this->markProfileInactive(
+                    $staffEmail,
+                    $eventType,
+                    $occurredAt,
+                    $gmailMessageId,
+                    $evidenceExcerpt
+                );
+            }
+
             return $event;
         });
+    }
+
+    protected function markProfileInactive(
+        CongressionalStaffEmail $staffEmail,
+        string $eventType,
+        CarbonInterface $occurredAt,
+        ?int $gmailMessageId,
+        ?string $evidenceExcerpt
+    ): void {
+        $profile = CongressionalStaffProfile::query()
+            ->lockForUpdate()
+            ->find($staffEmail->profile_id);
+        if (! $profile) {
+            return;
+        }
+
+        $metadata = $profile->metadata ?? [];
+        $metadata['inactivity'] = [
+            'reason' => $eventType,
+            'detected_at' => $occurredAt->toIso8601String(),
+            'gmail_message_id' => $gmailMessageId,
+            'staff_email_id' => $staffEmail->id,
+            'evidence_excerpt' => $evidenceExcerpt ? Str::limit(Str::squish($evidenceExcerpt), 600) : null,
+        ];
+
+        $profile->update([
+            'status' => CongressionalStaffProfile::STATUS_INACTIVE,
+            'metadata' => $metadata,
+        ]);
+        $profile->positions()->where('is_current', true)->update([
+            'is_current' => false,
+            'updated_at' => now(),
+        ]);
+
+        CongressionalOutreachDraftRecipient::query()
+            ->where('profile_id', $profile->id)
+            ->whereDoesntHave('outreachCampaignRecipients')
+            ->whereIn('review_status', ['pending', 'approved'])
+            ->eachById(function (CongressionalOutreachDraftRecipient $recipient): void {
+                $metadata = $recipient->metadata ?? [];
+                $metadata['base_exclusion_reason'] = 'inactive_profile';
+                $recipient->update([
+                    'review_status' => 'excluded',
+                    'exclusion_reason' => 'inactive_profile',
+                    'approved_by' => null,
+                    'reviewed_at' => null,
+                    'metadata' => $metadata,
+                ]);
+            });
     }
 
     public function suppressManually(CongressionalStaffEmail $staffEmail, ?int $userId, ?string $notes = null): void
@@ -302,7 +364,12 @@ class CongressionalEmailEvidenceService
             : array_values(array_filter([$signal->source_email]));
         $matched = CongressionalStaffEmail::query()
             ->whereIn('email_normalized', collect($emails)->map(fn ($email) => Str::lower(trim((string) $email))))
+            ->with('profile')
             ->get();
+
+        if ($signal->signal_type === 'departure_redirect' && $matched->isNotEmpty()) {
+            $this->recordReplacementContacts($signal, $matched->first());
+        }
 
         foreach ($matched as $staffEmail) {
             $campaignRecipient = OutreachCampaignRecipient::query()
@@ -314,6 +381,7 @@ class CongressionalEmailEvidenceService
                 ->when($signal->detected_at, fn ($query) => $query->where('sent_at', '<=', $signal->detected_at))
                 ->latest('sent_at')
                 ->first();
+            $retireProfile = ! $this->replacementKeepsProfileActive($signal, $staffEmail);
             $this->recordEvent(
                 $staffEmail,
                 $eventType,
@@ -321,17 +389,34 @@ class CongressionalEmailEvidenceService
                 gmailMessageId: $signal->gmail_message_id,
                 campaignRecipientId: $campaignRecipient?->id,
                 evidenceExcerpt: $signal->evidence_excerpt,
-                metadata: ['change_signal_id' => $signal->id, 'signal_type' => $signal->signal_type],
+                metadata: [
+                    'change_signal_id' => $signal->id,
+                    'signal_type' => $signal->signal_type,
+                    'retire_profile' => $retireProfile,
+                ],
                 occurredAt: $signal->detected_at,
                 eventKey: hash('sha256', "change-signal|{$signal->id}|{$staffEmail->id}|{$eventType}")
             );
         }
 
-        if ($signal->signal_type === 'departure_redirect' && $matched->isNotEmpty()) {
-            $this->recordReplacementContacts($signal, $matched->first());
+        return $matched->count();
+    }
+
+    protected function replacementKeepsProfileActive(
+        CongressionalStaffChangeSignal $signal,
+        CongressionalStaffEmail $sourceEmail
+    ): bool {
+        if ($signal->signal_type !== 'departure_redirect' || ! $sourceEmail->profile) {
+            return false;
         }
 
-        return $matched->count();
+        $sourceName = Str::upper(Str::squish($sourceEmail->profile->display_name));
+
+        return collect($signal->replacement_contacts ?? [])->contains(function (array $contact) use ($sourceName): bool {
+            $replacementName = Str::upper(Str::squish((string) ($contact['display_name'] ?? '')));
+
+            return $replacementName !== '' && $replacementName === $sourceName;
+        });
     }
 
     protected function recordReplacementContacts(

@@ -13,11 +13,22 @@
                     <span class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
                         {{ Str::headline($profile->review_status) }} identity
                     </span>
+                    <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $profile->status === \App\Models\CongressionalStaffProfile::STATUS_INACTIVE ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800' }}">
+                        {{ $profile->status === \App\Models\CongressionalStaffProfile::STATUS_INACTIVE ? 'Inactive' : 'Active' }}
+                    </span>
                 </div>
                 <p class="mt-2 text-gray-600">
                     Seen {{ $profile->first_seen_at?->format('M Y') ?? 'date unknown' }}–{{ $profile->last_seen_at?->format('M Y') ?? 'present' }}
                     · Latest source period {{ $profile->latest_period_end?->format('M j, Y') ?? 'unknown' }}
                 </p>
+                @if($profile->status === \App\Models\CongressionalStaffProfile::STATUS_INACTIVE)
+                    <p class="mt-3 max-w-2xl rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+                        This staffer is inactive and excluded from default directory searches, list building, and campaign delivery.
+                        @if(data_get($profile->metadata, 'inactivity.detected_at'))
+                            Evidence recorded {{ \Illuminate\Support\Carbon::parse(data_get($profile->metadata, 'inactivity.detected_at'))->format('M j, Y') }}.
+                        @endif
+                    </p>
+                @endif
             </div>
 
             @if($profile->person)

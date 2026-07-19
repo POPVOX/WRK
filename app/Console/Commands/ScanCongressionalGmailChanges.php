@@ -24,20 +24,7 @@ class ScanCongressionalGmailChanges extends Command
         $limit = max(1, min((int) $this->option('limit'), 50000));
         $scanned = 0;
         $signals = 0;
-        $patterns = [
-            '%no longer with%',
-            '%no longer at%',
-            '%left the office%',
-            '%has left%',
-            '%departed%',
-            '%my last day%',
-            '%delivery status notification%',
-            '%address not found%',
-            '%not delivered%',
-            '%undeliverable%',
-            '%recipient address rejected%',
-            '%550 5.%',
-        ];
+        $patterns = $detector->candidateSqlPatterns();
 
         GmailMessage::query()
             ->where('is_inbound', true)

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -10,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class CongressionalStaffProfile extends Model
 {
+    public const STATUS_INACTIVE = 'inactive';
+
     protected $fillable = [
         'person_id',
         'profile_key',
@@ -86,5 +89,15 @@ class CongressionalStaffProfile extends Model
             'congressional_staff_profile_id',
             'congressional_staff_list_id'
         )->withPivot(['added_by'])->withTimestamps();
+    }
+
+    public function scopeDirectoryActive(Builder $query): Builder
+    {
+        return $query->where('status', '!=', self::STATUS_INACTIVE);
+    }
+
+    public function scopeDirectoryInactive(Builder $query): Builder
+    {
+        return $query->where('status', self::STATUS_INACTIVE);
     }
 }
