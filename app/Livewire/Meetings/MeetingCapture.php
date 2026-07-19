@@ -4,6 +4,7 @@ namespace App\Livewire\Meetings;
 
 use App\Exceptions\MeetingExtractionException;
 use App\Jobs\ExtractMeetingNotes;
+use App\Models\Action;
 use App\Models\Issue;
 use App\Models\Meeting;
 use App\Models\MeetingAttachment;
@@ -37,6 +38,12 @@ class MeetingCapture extends Component
 
     #[Rule('nullable|string')]
     public $raw_notes = '';
+
+    #[Rule('required|in:stakeholder,internal,research,briefing,formal')]
+    public string $meetingType = Meeting::TYPE_STAKEHOLDER;
+
+    #[Rule('nullable|string|max:1000')]
+    public string $aiFocus = '';
 
     #[Rule('nullable|array')]
     public $attachments = [];
@@ -95,6 +102,10 @@ class MeetingCapture extends Component
 
     public array $suggestedIssues = [];
 
+    public array $suggestedActions = [];
+
+    public array $acceptedSuggestedActions = [];
+
     // Editing mode
     public ?Meeting $editingMeeting = null;
 
@@ -110,6 +121,8 @@ class MeetingCapture extends Component
             $this->aiSummary = $meeting->ai_summary;
             $this->keyAsk = $meeting->key_ask;
             $this->commitmentsMade = $meeting->commitments_made;
+            $this->meetingType = $meeting->meeting_type ?: Meeting::TYPE_STAKEHOLDER;
+            $this->aiFocus = $meeting->ai_focus ?? '';
             $this->audioPath = $meeting->audio_path;
 
             $this->selectedOrganizations = $meeting->organizations->pluck('id')->toArray();
@@ -332,6 +345,8 @@ class MeetingCapture extends Component
                 (string) config('ai.meeting_extraction_model'),
                 35,
                 1200,
+                $this->meetingType,
+                $this->aiFocus,
             );
             $this->applyExtractedData($extractedData);
             $this->reportExtractionApplied();
@@ -382,6 +397,8 @@ class MeetingCapture extends Component
                 (int) Auth::id(),
                 MeetingAIService::prepareNotes($this->raw_notes),
                 $this->extractionNotesHash,
+                $this->meetingType,
+                $this->aiFocus ?: null,
             );
         } catch (\Throwable $exception) {
             \Log::error('Meeting AI extraction could not be queued', [
@@ -495,15 +512,20 @@ class MeetingCapture extends Component
             Issue::class,
             $this->selectedIssues,
         );
+        $this->suggestedActions = collect($extractedData['action_items'] ?? [])
+            ->filter(fn (mixed $action): bool => is_array($action) && trim((string) ($action['description'] ?? '')) !== '')
+            ->values()
+            ->all();
     }
 
     protected function reportExtractionApplied(): void
     {
         $suggestionCount = count($this->suggestedOrganizations)
             + count($this->suggestedPeople)
-            + count($this->suggestedIssues);
+            + count($this->suggestedIssues)
+            + count($this->suggestedActions);
         $message = $suggestionCount > 0
-            ? "AI extraction complete. Review and accept or reject {$suggestionCount} relationship ".Str::plural('suggestion', $suggestionCount).' below.'
+            ? "AI draft ready. Review and accept or reject {$suggestionCount} ".Str::plural('suggestion', $suggestionCount).' below.'
             : 'AI extraction complete. Review the highlighted details before saving.';
         $this->setExtractionMessage('success', $message);
         $this->dispatch('notify', type: 'success', message: $message);
@@ -594,6 +616,44 @@ class MeetingCapture extends Component
     public function acceptAllSuggestedIssues(): void
     {
         $this->acceptAllSuggestedRelationships('issue', $this->suggestedIssues);
+    }
+
+    public function acceptSuggestedAction(string $key): void
+    {
+        if (! $action = $this->suggestedActionByKey($key)) {
+            return;
+        }
+
+        $this->acceptedSuggestedActions[] = $action;
+        $this->suggestedActions = $this->removeSuggestedAction($key);
+        $this->dispatch('notify', type: 'success', message: 'Follow-up accepted. It will become a task when you save the meeting.');
+    }
+
+    public function rejectSuggestedAction(string $key): void
+    {
+        $this->suggestedActions = $this->removeSuggestedAction($key);
+    }
+
+    public function acceptAllSuggestedActions(): void
+    {
+        $count = count($this->suggestedActions);
+        $this->acceptedSuggestedActions = array_values(array_merge(
+            $this->acceptedSuggestedActions,
+            $this->suggestedActions,
+        ));
+        $this->suggestedActions = [];
+
+        if ($count > 0) {
+            $this->dispatch('notify', type: 'success', message: "Accepted {$count} proposed follow-up ".Str::plural('task', $count).'.');
+        }
+    }
+
+    public function removeAcceptedSuggestedAction(string $key): void
+    {
+        $this->acceptedSuggestedActions = collect($this->acceptedSuggestedActions)
+            ->reject(fn (array $action): bool => hash_equals($this->actionSuggestionKey($action), $key))
+            ->values()
+            ->all();
     }
 
     protected function acceptAllSuggestedRelationships(string $type, array $names): void
@@ -692,6 +752,34 @@ class MeetingCapture extends Component
         return null;
     }
 
+    protected function suggestedActionByKey(string $key): ?array
+    {
+        foreach ($this->suggestedActions as $action) {
+            if (hash_equals($this->actionSuggestionKey($action), $key)) {
+                return $action;
+            }
+        }
+
+        return null;
+    }
+
+    protected function removeSuggestedAction(string $key): array
+    {
+        return collect($this->suggestedActions)
+            ->reject(fn (array $action): bool => hash_equals($this->actionSuggestionKey($action), $key))
+            ->values()
+            ->all();
+    }
+
+    public function actionSuggestionKey(array $action): string
+    {
+        return sha1(json_encode([
+            $action['description'] ?? '',
+            $action['owner_name'] ?? null,
+            $action['due_date'] ?? null,
+        ], JSON_THROW_ON_ERROR));
+    }
+
     protected function extractionCacheKey(): string
     {
         return ExtractMeetingNotes::cacheKeyFor($this->extractionRequestId, (int) Auth::id());
@@ -762,6 +850,11 @@ class MeetingCapture extends Component
             'ai_summary' => $this->aiSummary,
             'key_ask' => $this->keyAsk,
             'commitments_made' => $this->commitmentsMade,
+            'meeting_type' => $this->meetingType,
+            'ai_focus' => $this->aiFocus ?: null,
+            'ai_generated_at' => $this->aiSummary || $this->keyAsk || $this->commitmentsMade
+                ? now()
+                : $this->editingMeeting?->ai_generated_at,
         ];
 
         try {
@@ -781,6 +874,20 @@ class MeetingCapture extends Component
                 $meeting->people()->sync($this->selectedPeople);
                 $meeting->issues()->sync($this->selectedIssues);
                 $meeting->teamMembers()->sync($this->selectedTeamMembers);
+
+                foreach ($this->acceptedSuggestedActions as $action) {
+                    $ownerNote = trim((string) ($action['owner_name'] ?? ''));
+                    Action::createResilient([
+                        'meeting_id' => $meeting->id,
+                        'description' => (string) $action['description'],
+                        'notes' => $ownerNote !== '' ? "Proposed owner from meeting notes: {$ownerNote}" : null,
+                        'due_date' => $action['due_date'] ?? null,
+                        'priority' => Action::PRIORITY_MEDIUM,
+                        'status' => Action::STATUS_PENDING,
+                        'source' => Action::SOURCE_AI_SUGGESTED,
+                        'assigned_to' => Auth::id(),
+                    ]);
+                }
 
                 return [$meeting, $message];
             });
@@ -836,6 +943,7 @@ class MeetingCapture extends Component
             'people' => $people,
             'issues' => $issues,
             'teamMembers' => $teamMembers,
+            'meetingTypeLabels' => Meeting::TYPE_LABELS,
             'selectedOrganizationModels' => Organization::whereIn('id', $this->selectedOrganizations)->get(),
             'selectedPeopleModels' => Person::whereIn('id', $this->selectedPeople)->get(),
             'selectedIssueModels' => Issue::whereIn('id', $this->selectedIssues)->get(),

@@ -22,6 +22,8 @@ class Meeting extends Model
         'location',
         'meeting_link',
         'meeting_link_type',
+        'meeting_type',
+        'ai_focus',
         'prep_notes',
         'agenda_notes',
         'prep_analysis',
@@ -32,6 +34,7 @@ class Meeting extends Model
         'notes_summary',
         'key_ask',
         'commitments_made',
+        'ai_generated_at',
         'status',
         'google_event_id',
         'grant_associations',
@@ -41,6 +44,7 @@ class Meeting extends Model
 
     protected $casts = [
         'meeting_date' => 'date',
+        'ai_generated_at' => 'datetime',
         'prep_analysis' => 'array',
         'grant_associations' => 'array',
         'metric_tags' => 'array',
@@ -63,6 +67,28 @@ class Meeting extends Model
         self::STATUS_ACTION_NEEDED,
         self::STATUS_PENDING,
         self::STATUS_COMPLETE,
+    ];
+
+    /**
+     * Meeting purposes change what the AI should prioritize without changing
+     * the user's notes. These labels are intentionally plain-language UX copy.
+     */
+    public const TYPE_STAKEHOLDER = 'stakeholder';
+
+    public const TYPE_INTERNAL = 'internal';
+
+    public const TYPE_RESEARCH = 'research';
+
+    public const TYPE_BRIEFING = 'briefing';
+
+    public const TYPE_FORMAL = 'formal';
+
+    public const TYPE_LABELS = [
+        self::TYPE_STAKEHOLDER => 'Stakeholder conversation',
+        self::TYPE_INTERNAL => 'Internal working meeting',
+        self::TYPE_RESEARCH => 'Research or listening session',
+        self::TYPE_BRIEFING => 'Briefing or presentation',
+        self::TYPE_FORMAL => 'Formal meeting or record',
     ];
 
     /**

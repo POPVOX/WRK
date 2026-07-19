@@ -1,663 +1,327 @@
-<div class="desk-page desk-page-narrow" @if($isExtracting) wire:poll.2s="checkExtractionStatus" @endif>
-    <x-slot name="header">
-        <h2 class="hidden">
-            {{ __('Log New Meeting') }}
-        </h2>
-    </x-slot>
+<div class="desk-page meeting-flow-page" @if($isExtracting) wire:poll.2s="checkExtractionStatus" @endif>
+    <x-slot name="header"><h2 class="hidden">{{ __('Log New Meeting') }}</h2></x-slot>
 
-    <x-desk-page-header eyebrow="Meetings" :title="$editingMeeting ? 'Edit meeting' : 'Log a meeting'" description="Capture the conversation once, then let WRK structure the context and follow-through.">
-        <x-slot:actions><a href="{{ route('meetings.index') }}" wire:navigate class="desk-button-secondary">← Meetings</a></x-slot:actions>
+    <x-desk-page-header
+        eyebrow="Meetings"
+        :title="$editingMeeting ? 'Edit meeting' : 'Capture a meeting'"
+        description="Bring whatever you have. Save the source notes first; ask WRK to enhance them when it is useful."
+    >
+        <x-slot:actions>
+            <a href="{{ route('meetings.index') }}" wire:navigate class="desk-button-secondary">← Meetings</a>
+        </x-slot:actions>
     </x-desk-page-header>
 
-    <div>
-        <div>
-            <div class="meeting-capture-shell overflow-hidden">
-                <form wire:submit="save" class="meeting-capture-form">
-
-                    <!-- Meeting Title -->
+    <form wire:submit="save" class="meeting-capture-form meeting-flow-grid" id="meeting-capture-form">
+        <main class="meeting-capture-main">
+            <section class="meeting-document-section meeting-capture-intro">
+                <div class="meeting-section-heading">
                     <div>
-                        <label for="title" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Meeting Title
-                        </label>
-                        <input type="text" id="title" wire:model="title"
-                            placeholder="e.g., Housing Policy Discussion with City Council"
-                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm">
-                        @error('title') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                        <p class="desk-kicker">1 · Set the context</p>
+                        <h2>What kind of conversation was this?</h2>
                     </div>
+                    <span class="meeting-source-badge">Human context</span>
+                </div>
 
-                    <!-- Meeting Date -->
-                    <div>
-                        <label for="meeting_date" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Meeting Date
+                <div class="meeting-purpose-grid">
+                    @foreach($meetingTypeLabels as $value => $label)
+                        <label class="meeting-purpose-option @if($meetingType === $value) is-selected @endif">
+                            <input type="radio" wire:model.live="meetingType" value="{{ $value }}">
+                            <span>{{ $label }}</span>
                         </label>
-                        <input type="date" id="meeting_date" wire:model="meeting_date"
-                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm">
-                        @error('meeting_date') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    @endforeach
+                </div>
+
+                <label class="meeting-field">
+                    <span>What should WRK notice? <em>Optional</em></span>
+                    <textarea wire:model="aiFocus" rows="2" placeholder="For example: Pay special attention to what they need from us and who owns each follow-up."></textarea>
+                    <small>This instruction changes the AI draft, never your original notes.</small>
+                    @error('aiFocus') <small class="meeting-error">{{ $message }}</small> @enderror
+                </label>
+            </section>
+
+            <section class="meeting-document-section">
+                <div class="meeting-section-heading">
+                    <div>
+                        <p class="desk-kicker">2 · Capture the source</p>
+                        <h2>Your notes</h2>
                     </div>
+                    <span class="meeting-source-badge">Source of truth</span>
+                </div>
 
-                    <!-- POPVOX Team Members -->
+                <textarea
+                    id="raw_notes"
+                    wire:model="raw_notes"
+                    rows="16"
+                    class="meeting-notes-editor"
+                    placeholder="Paste notes, type rough bullets, or record a voice memo. Imperfect notes are welcome."
+                ></textarea>
+                @error('raw_notes') <small class="meeting-error">{{ $message }}</small> @enderror
+
+                <div x-data="voiceRecorder()" x-init="init()" class="meeting-capture-tools">
+                    <button type="button" class="desk-button-secondary" @click="toggleRecording()">
+                        <span x-show="!recording">● Record voice memo</span>
+                        <span x-show="recording">■ Stop <span x-text="recordingTime"></span></span>
+                    </button>
+                    <label class="desk-button-secondary meeting-file-button">
+                        ↑ Upload audio
+                        <input type="file" wire:model="audioFile" accept="audio/*" hidden>
+                    </label>
+                    @if($audioFile || $audioPath)
+                        <button type="button" wire:click="transcribeAudio" wire:loading.attr="disabled" class="desk-link">Add transcript to notes</button>
+                    @endif
+                    <span x-show="error" x-text="error" class="meeting-error"></span>
+                </div>
+
+                @if($audioFile)
+                    <p class="meeting-file-note">Attached audio: {{ $audioFile->getClientOriginalName() }}</p>
+                @elseif($audioPath)
+                    <p class="meeting-file-note">A recorded voice memo is attached.</p>
+                @endif
+
+                <div class="meeting-enhance-bar">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            POPVOX Team Members
-                        </label>
-                        <div class="flex gap-2 mb-2">
-                            <select wire:change="addTeamMember($event.target.value); $event.target.value = ''"
-                                class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm">
-                                <option value="">Select team member to add...</option>
-                                @foreach($teamMembers as $member)
-                                    @if(!in_array($member->id, $selectedTeamMembers))
-                                        <option value="{{ $member->id }}">{{ $member->name }}</option>
-                                    @endif
-                                @endforeach
-                            </select>
+                        <strong>Turn rough notes into a reviewable draft</strong>
+                        <span>WRK can suggest a recap, people, topics, and follow-ups. Nothing is linked or assigned without your review.</span>
+                    </div>
+                    <button type="button" wire:click="extractWithAI" wire:loading.attr="disabled" wire:target="extractWithAI" class="desk-button-dark">
+                        <span wire:loading.remove wire:target="extractWithAI">✦ Enhance notes</span>
+                        <span wire:loading wire:target="extractWithAI">Thinking…</span>
+                    </button>
+                </div>
+
+                @if($isExtracting)
+                    <div class="desk-alert desk-alert-info">✦ Extracting in background... You can keep editing; an older result will not overwrite changed notes.</div>
+                @endif
+                @if($extractionMessage)
+                    <div class="desk-alert desk-alert-{{ $extractionMessageType === 'error' ? 'danger' : ($extractionMessageType === 'success' ? 'success' : 'info') }}">{{ $extractionMessage }}</div>
+                @endif
+            </section>
+
+            @if($aiSummary || $keyAsk || $commitmentsMade || count($suggestedActions) || count($acceptedSuggestedActions))
+                <section class="meeting-document-section meeting-ai-review">
+                    <div class="meeting-section-heading">
+                        <div>
+                            <p class="desk-kicker">3 · Review the AI draft</p>
+                            <h2>AI-extracted meeting details</h2>
+                            <p>Generated from your notes. Edit the wording and accept only the follow-ups that are real.</p>
                         </div>
-                        <div class="flex flex-wrap gap-2">
-                            @foreach($selectedTeamMemberModels as $member)
-                                <span
-                                    class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
-                                    {{ $member->name }}
-                                    <button type="button" wire:click="removeTeamMember({{ $member->id }})"
-                                        class="ml-2 text-blue-600 hover:text-blue-800 dark:text-blue-400">
-                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd"
-                                                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                                                clip-rule="evenodd" />
-                                        </svg>
-                                    </button>
-                                </span>
+                        <span class="meeting-ai-badge">✦ AI draft</span>
+                    </div>
+
+                    <label class="meeting-field">
+                        <span>Recap</span>
+                        <textarea wire:model="aiSummary" rows="5"></textarea>
+                    </label>
+                    <div class="meeting-two-column-fields">
+                        <label class="meeting-field">
+                            <span>Key ask</span>
+                            <textarea wire:model="keyAsk" rows="4"></textarea>
+                        </label>
+                        <label class="meeting-field">
+                            <span>Commitments and next steps</span>
+                            <textarea wire:model="commitmentsMade" rows="4"></textarea>
+                        </label>
+                    </div>
+
+                    @if(count($suggestedActions))
+                        <div class="meeting-suggestion-group">
+                            <div class="meeting-suggestion-header">
+                                <div><strong>Proposed follow-ups</strong><span>These are not tasks yet.</span></div>
+                                <button type="button" wire:click="acceptAllSuggestedActions" class="desk-link">Accept all</button>
+                            </div>
+                            @foreach($suggestedActions as $action)
+                                @php($actionKey = $this->actionSuggestionKey($action))
+                                <div class="meeting-action-proposal" wire:key="suggested-action-{{ $actionKey }}">
+                                    <div>
+                                        <strong>{{ $action['description'] }}</strong>
+                                        @if($action['owner_name'] ?? null)<span>Owner mentioned: {{ $action['owner_name'] }}</span>@endif
+                                        @if($action['due_date'] ?? null)<span>Due {{ $action['due_date'] }}</span>@endif
+                                    </div>
+                                    <div>
+                                        <button type="button" wire:click="acceptSuggestedAction('{{ $actionKey }}')" class="meeting-accept-button" aria-label="Accept follow-up">✓ Accept</button>
+                                        <button type="button" wire:click="rejectSuggestedAction('{{ $actionKey }}')" class="meeting-reject-button" aria-label="Reject follow-up">×</button>
+                                    </div>
+                                </div>
                             @endforeach
                         </div>
-                    </div>
-
-                    <!-- Voice Recording Section -->
-                    <div x-data="voiceRecorder()" class="meeting-capture-voice">
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                            <svg class="w-5 h-5 inline-block mr-1 text-purple-600" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                            </svg>
-                            Voice Memo
-                            <span x-show="!hasPermission" class="text-xs text-yellow-600 dark:text-yellow-400 ml-2">(microphone permission required)</span>
-                        </label>
-
-                        <div class="flex flex-wrap gap-3 items-center">
-                            <!-- Record Button -->
-                            <button type="button" @click="toggleRecording()"
-                                :class="recording ? 'bg-red-600 hover:bg-red-700' : 'bg-purple-600 hover:bg-purple-700'"
-                                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white transition-all duration-200">
-                                <template x-if="recording">
-                                    <span class="inline-flex items-center">
-                                        <span class="relative flex h-3 w-3 mr-2">
-                                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                                            <span class="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
-                                        </span>
-                                        Stop Recording
-                                    </span>
-                                </template>
-                                <template x-if="!recording">
-                                    <span class="inline-flex items-center">
-                                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                            <circle cx="10" cy="10" r="6" />
-                                        </svg>
-                                        Start Recording
-                                    </span>
-                                </template>
-                            </button>
-
-                            <!-- Recording duration -->
-                            <span x-show="recording" x-text="recordingTime" class="text-sm font-mono text-red-600 dark:text-red-400"></span>
-
-                            <!-- Or separator -->
-                            <span class="text-gray-500 dark:text-gray-400 text-sm">or</span>
-
-                            <!-- Audio Upload -->
-                            <label
-                                class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-600 hover:bg-gray-50 dark:hover:bg-gray-500 cursor-pointer transition-colors">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                                </svg>
-                                Upload Audio
-                                <input type="file" wire:model="audioFile" accept="audio/*" class="hidden" />
-                            </label>
-
-                            <!-- Transcribe Button -->
-                            @if($audioFile || $audioPath)
-                                <button type="button" wire:click="transcribeAudio" wire:loading.attr="disabled"
-                                    wire:loading.class="opacity-50 cursor-not-allowed"
-                                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors">
-                                    <span wire:loading.remove wire:target="transcribeAudio">
-                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                        </svg>
-                                        Transcribe
-                                    </span>
-                                    <span wire:loading wire:target="transcribeAudio">
-                                        <svg class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                                stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor"
-                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                                            </path>
-                                        </svg>
-                                        Transcribing...
-                                    </span>
-                                </button>
-                            @endif
-                        </div>
-
-                        <!-- Recording Error Message -->
-                        <template x-if="error">
-                            <div class="mt-2 text-sm text-red-600 dark:text-red-400" x-text="error"></div>
-                        </template>
-
-                        <!-- Audio file name display -->
-                        @if($audioFile)
-                            <div class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                                📎 {{ $audioFile->getClientOriginalName() }}
-                            </div>
-                        @endif
-
-                        @if($audioPath)
-                            <div class="mt-2 text-sm text-green-600 dark:text-green-400">
-                                ✓ Recording saved
-                            </div>
-                        @endif
-                    </div>
-
-                    <!-- Notes with AI extraction -->
-                    <div>
-                        <div class="flex justify-between items-center mb-2">
-                            <label for="raw_notes" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Meeting Notes
-                            </label>
-                            <div class="flex gap-2 items-center">
-                                {{-- Pause/Resume AI --}}
-                                <button type="button" wire:click="toggleExtractionPause"
-                                    class="inline-flex items-center px-2 py-1.5 text-xs font-medium rounded-md transition-all {{ $extractionPaused ? 'text-yellow-700 bg-yellow-100 hover:bg-yellow-200 dark:text-yellow-300 dark:bg-yellow-900' : 'text-gray-600 bg-gray-100 hover:bg-gray-200 dark:text-gray-300 dark:bg-gray-700' }}"
-                                    title="{{ $extractionPaused ? 'Resume AI extraction' : 'Pause AI extraction' }}">
-                                    @if($extractionPaused)
-                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
-                                        </svg>
-                                    @else
-                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-                                        </svg>
-                                    @endif
-                                </button>
-                                {{-- Extract Button --}}
-                                <button type="button" wire:click="extractWithAI" wire:loading.attr="disabled"
-                                    wire:loading.class="opacity-50"
-                                    class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md text-white shadow-sm transition-all {{ $extractionPaused || $isExtracting ? 'bg-gray-400 cursor-not-allowed' : '' }}"
-                                    style="{{ !$extractionPaused && !$isExtracting ? 'background-color: #7c3aed;' : '' }}"
-                                    {{ $extractionPaused || $isExtracting ? 'disabled' : '' }}>
-                                    @if($isExtracting)
-                                        <span class="inline-flex items-center">
-                                            <svg class="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                            Extracting in background...
-                                        </span>
-                                    @else
-                                        <span wire:loading.remove wire:target="extractWithAI">
-                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                            </svg>
-                                            Extract with AI
-                                        </span>
-                                        <span wire:loading wire:target="extractWithAI">
-                                            <svg class="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                                    stroke-width="4"></circle>
-                                                <path class="opacity-75" fill="currentColor"
-                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                                                </path>
-                                            </svg>
-                                            Extracting...
-                                        </span>
-                                    @endif
-                                </button>
-                            </div>
-                        </div>
-                        <x-mention-textarea id="raw_notes" wire:model="raw_notes" rows="8"
-                            placeholder="Enter your meeting notes here. Type @ to mention people, organizations, or staff. Record/upload audio above, then click 'Extract with AI' to auto-fill..." />
-                        @error('raw_notes') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-
-                        @if($extractionMessage)
-                            <div id="ai-extraction-status" aria-live="polite"
-                                class="mt-3 rounded-lg border px-4 py-3 text-sm {{ $extractionMessageType === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300' : ($extractionMessageType === 'error' ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300' : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300') }}">
-                                {{ $extractionMessage }}
-                            </div>
-                        @endif
-                    </div>
-
-                    @if($aiSummary !== null || $keyAsk !== null || $commitmentsMade !== null)
-                        <section id="ai-extraction-results"
-                            class="rounded-lg border border-purple-200 bg-purple-50/70 p-4 dark:border-purple-800 dark:bg-purple-900/20">
-                            <div class="mb-4">
-                                <h3 class="text-sm font-semibold text-purple-900 dark:text-purple-200">AI-extracted meeting details</h3>
-                                <p class="mt-1 text-xs text-purple-700 dark:text-purple-300">These fields will be saved with the meeting. Review and edit them as needed.</p>
-                            </div>
-
-                            <div class="space-y-4">
-                                <div>
-                                    <label for="ai_summary" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Summary</label>
-                                    <textarea id="ai_summary" wire:model="aiSummary" rows="3"
-                                        placeholder="No summary was identified."
-                                        class="mt-1 block w-full rounded-md border-purple-200 shadow-sm focus:border-purple-500 focus:ring-purple-500 dark:border-purple-700 dark:bg-gray-800 dark:text-white sm:text-sm"></textarea>
-                                </div>
-                                <div class="grid gap-4 md:grid-cols-2">
-                                    <div>
-                                        <label for="key_ask" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Key ask</label>
-                                        <textarea id="key_ask" wire:model="keyAsk" rows="3"
-                                            placeholder="No key ask was identified."
-                                            class="mt-1 block w-full rounded-md border-purple-200 shadow-sm focus:border-purple-500 focus:ring-purple-500 dark:border-purple-700 dark:bg-gray-800 dark:text-white sm:text-sm"></textarea>
-                                    </div>
-                                    <div>
-                                        <label for="commitments_made" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Commitments and next steps</label>
-                                        <textarea id="commitments_made" wire:model="commitmentsMade" rows="3"
-                                            placeholder="No commitments were identified."
-                                            class="mt-1 block w-full rounded-md border-purple-200 shadow-sm focus:border-purple-500 focus:ring-purple-500 dark:border-purple-700 dark:bg-gray-800 dark:text-white sm:text-sm"></textarea>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
                     @endif
 
-                    <!-- Organizations -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Organizations
-                        </label>
-                        <div class="flex gap-2 mb-2">
-                            <input type="text" wire:model="newOrganization" wire:keydown.enter.prevent="addOrganization"
-                                placeholder="Type name to add (new or existing)..." list="org-suggestions"
-                                class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm">
-                            <datalist id="org-suggestions">
-                                @foreach($organizations as $org)
-                                    <option value="{{ $org->name }}">
-                                @endforeach
-                            </datalist>
-                            <button type="button" wire:click="addOrganization"
-                                class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                                + Add
-                            </button>
-                        </div>
-                        <div class="flex flex-wrap gap-2">
-                            @foreach($selectedOrganizationModels as $org)
-                                <span
-                                    class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300">
-                                    {{ $org->name }}
-                                    <button type="button" wire:click="removeOrganization({{ $org->id }})"
-                                        class="ml-2 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">
-                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd"
-                                                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                                                clip-rule="evenodd" />
-                                        </svg>
-                                    </button>
-                                </span>
+                    @if(count($acceptedSuggestedActions))
+                        <div class="meeting-accepted-actions">
+                            <strong>Will become tasks when saved</strong>
+                            @foreach($acceptedSuggestedActions as $action)
+                                @php($actionKey = $this->actionSuggestionKey($action))
+                                <div>
+                                    <span>✓ {{ $action['description'] }}</span>
+                                    <button type="button" wire:click="removeAcceptedSuggestedAction('{{ $actionKey }}')">Undo</button>
+                                </div>
                             @endforeach
                         </div>
-                        @if($suggestedOrganizations)
-                            <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
-                                <div class="mb-2 flex items-center justify-between gap-3">
-                                    <span class="text-xs font-semibold text-amber-900 dark:text-amber-200">AI suggestions — accept or reject</span>
-                                    <button type="button" wire:click="acceptAllSuggestedOrganizations"
-                                        class="text-xs font-semibold text-amber-800 underline hover:no-underline dark:text-amber-300">Accept all</button>
-                                </div>
-                                <div class="flex flex-wrap gap-2">
-                                    @foreach($suggestedOrganizations as $name)
-                                        <span wire:key="suggested-organization-{{ sha1($name) }}"
-                                            class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-3 pr-1 text-sm text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-200">
-                                            {{ $name }}
-                                            <button type="button" wire:click="acceptSuggestedOrganizationByKey('{{ sha1($name) }}')"
-                                                aria-label="Accept {{ $name }}" title="Accept"
-                                                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300">✓</button>
-                                            <button type="button" wire:click="rejectSuggestedOrganizationByKey('{{ sha1($name) }}')"
-                                                aria-label="Reject {{ $name }}" title="Reject"
-                                                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 font-bold text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300">×</button>
-                                        </span>
-                                    @endforeach
-                                </div>
-                            </div>
-                        @endif
-                    </div>
+                    @endif
+                </section>
+            @endif
 
-                    <!-- People -->
+            <section class="meeting-document-section">
+                <div class="meeting-section-heading">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Attendees
-                        </label>
-                        <div class="flex gap-2 mb-2">
-                            <input type="text" wire:model="newPerson" wire:keydown.enter.prevent="addPerson"
-                                placeholder="Type name to add (new or existing)..." list="person-suggestions"
-                                class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm">
-                            <datalist id="person-suggestions">
-                                @foreach($people as $person)
-                                    <option value="{{ $person->name }}">
-                                @endforeach
-                            </datalist>
-                            <button type="button" wire:click="addPerson"
-                                class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                                + Add
-                            </button>
-                        </div>
-                        <div class="flex flex-wrap gap-2">
-                            @foreach($selectedPeopleModels as $person)
-                                <span
-                                    class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
-                                    {{ $person->name }}
-                                    <button type="button" wire:click="removePerson({{ $person->id }})"
-                                        class="ml-2 text-green-600 hover:text-green-800 dark:text-green-400">
-                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd"
-                                                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                                                clip-rule="evenodd" />
-                                        </svg>
-                                    </button>
-                                </span>
-                            @endforeach
-                        </div>
-                        @if($suggestedPeople)
-                            <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
-                                <div class="mb-2 flex items-center justify-between gap-3">
-                                    <span class="text-xs font-semibold text-amber-900 dark:text-amber-200">AI suggestions — accept or reject</span>
-                                    <button type="button" wire:click="acceptAllSuggestedPeople"
-                                        class="text-xs font-semibold text-amber-800 underline hover:no-underline dark:text-amber-300">Accept all</button>
-                                </div>
-                                <div class="flex flex-wrap gap-2">
-                                    @foreach($suggestedPeople as $name)
-                                        <span wire:key="suggested-person-{{ sha1($name) }}"
-                                            class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-3 pr-1 text-sm text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-200">
-                                            {{ $name }}
-                                            <button type="button" wire:click="acceptSuggestedPersonByKey('{{ sha1($name) }}')"
-                                                aria-label="Accept {{ $name }}" title="Accept"
-                                                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300">✓</button>
-                                            <button type="button" wire:click="rejectSuggestedPersonByKey('{{ sha1($name) }}')"
-                                                aria-label="Reject {{ $name }}" title="Reject"
-                                                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 font-bold text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300">×</button>
-                                        </span>
-                                    @endforeach
-                                </div>
-                            </div>
-                        @endif
+                        <p class="desk-kicker">Attachments</p>
+                        <h2>Supporting material</h2>
                     </div>
+                </div>
+                <label class="meeting-dropzone">
+                    <span>↑ Add PDFs, images, or documents</span>
+                    <input type="file" wire:model="attachments" multiple hidden>
+                </label>
+                @foreach($attachments as $attachment)
+                    <p class="meeting-file-note">{{ $attachment->getClientOriginalName() }}</p>
+                @endforeach
+            </section>
+        </main>
 
-                    <!-- Issues -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Issues/Topics
-                        </label>
-                        <div class="flex gap-2 mb-2">
-                            <input type="text" wire:model="newIssue" wire:keydown.enter.prevent="addIssue"
-                                placeholder="Type issue or topic..." list="issue-suggestions"
-                                class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm">
-                            <datalist id="issue-suggestions">
-                                @foreach($issues as $issue)
-                                    <option value="{{ $issue->name }}">
-                                @endforeach
-                            </datalist>
-                            <button type="button" wire:click="addIssue"
-                                class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                                Add
-                            </button>
-                        </div>
-                        <div class="flex flex-wrap gap-2">
-                            @foreach($selectedIssueModels as $issue)
-                                <span
-                                    class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300">
-                                    {{ $issue->name }}
-                                    <button type="button" wire:click="removeIssue({{ $issue->id }})"
-                                        class="ml-2 text-purple-600 hover:text-purple-800 dark:text-purple-400">
-                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd"
-                                                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                                                clip-rule="evenodd" />
-                                        </svg>
-                                    </button>
-                                </span>
-                            @endforeach
-                        </div>
-                        @if($suggestedIssues)
-                            <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
-                                <div class="mb-2 flex items-center justify-between gap-3">
-                                    <span class="text-xs font-semibold text-amber-900 dark:text-amber-200">AI suggestions — accept or reject</span>
-                                    <button type="button" wire:click="acceptAllSuggestedIssues"
-                                        class="text-xs font-semibold text-amber-800 underline hover:no-underline dark:text-amber-300">Accept all</button>
-                                </div>
-                                <div class="flex flex-wrap gap-2">
-                                    @foreach($suggestedIssues as $name)
-                                        <span wire:key="suggested-issue-{{ sha1($name) }}"
-                                            class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white py-1 pl-3 pr-1 text-sm text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-200">
-                                            {{ $name }}
-                                            <button type="button" wire:click="acceptSuggestedIssueByKey('{{ sha1($name) }}')"
-                                                aria-label="Accept {{ $name }}" title="Accept"
-                                                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300">✓</button>
-                                            <button type="button" wire:click="rejectSuggestedIssueByKey('{{ sha1($name) }}')"
-                                                aria-label="Reject {{ $name }}" title="Reject"
-                                                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 font-bold text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300">×</button>
-                                        </span>
-                                    @endforeach
-                                </div>
-                            </div>
-                        @endif
-                    </div>
+        <aside class="meeting-context-rail">
+            <section class="meeting-rail-section">
+                <p class="desk-kicker">Meeting record</p>
+                <label class="meeting-field">
+                    <span>Title</span>
+                    <input type="text" wire:model="title" placeholder="Leave blank and WRK can suggest one">
+                    @error('title') <small class="meeting-error">{{ $message }}</small> @enderror
+                </label>
+                <label class="meeting-field">
+                    <span>Date</span>
+                    <input type="date" wire:model="meeting_date">
+                    @error('meeting_date') <small class="meeting-error">{{ $message }}</small> @enderror
+                </label>
+            </section>
 
-                    <!-- Attachments -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Attachments
-                        </label>
-                        <div class="flex items-center justify-center w-full">
-                            <label
-                                class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500">
-                                <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                                    <svg class="w-8 h-8 mb-3 text-gray-400" fill="none" stroke="currentColor"
-                                        viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                    </svg>
-                                    <p class="mb-2 text-sm text-gray-500 dark:text-gray-400">
-                                        <span class="font-semibold">Click to upload</span> or drag and drop
-                                    </p>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">PDF, Images, Documents</p>
-                                </div>
-                                <input type="file" wire:model="attachments" multiple class="hidden" />
-                            </label>
-                        </div>
-                        @if($attachments)
-                            <div class="mt-3 space-y-2">
-                                @foreach($attachments as $index => $file)
-                                    <div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                                        <span
-                                            class="text-sm text-gray-700 dark:text-gray-300">{{ $file->getClientOriginalName() }}</span>
-                                        <button type="button" wire:click="$set('attachments.{{ $index }}', null)"
-                                            class="text-red-500 hover:text-red-700">
-                                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fill-rule="evenodd"
-                                                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                                                    clip-rule="evenodd" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                @endforeach
-                            </div>
-                        @endif
-                        @error('attachments.*') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                    </div>
+            <section class="meeting-rail-section">
+                <div class="meeting-suggestion-header"><strong>POPVOX team</strong></div>
+                <select wire:change="addTeamMember($event.target.value); $event.target.value = ''">
+                    <option value="">Add a team member…</option>
+                    @foreach($teamMembers as $member)
+                        @if(!in_array($member->id, $selectedTeamMembers))<option value="{{ $member->id }}">{{ $member->name }}</option>@endif
+                    @endforeach
+                </select>
+                <div class="meeting-chip-list">
+                    @foreach($selectedTeamMemberModels as $member)
+                        <span>{{ $member->name }} <button type="button" wire:click="removeTeamMember({{ $member->id }})">×</button></span>
+                    @endforeach
+                </div>
+            </section>
 
-                    <!-- Submit -->
-                    <div class="meeting-capture-actions flex items-center justify-end gap-3">
-                        @error('save')
-                            <span class="mr-auto text-sm text-red-600 dark:text-red-400">{{ $message }}</span>
-                        @enderror
-                        <a href="{{ route('meetings.index') }}" wire:navigate class="desk-button-secondary">
-                            Cancel
-                        </a>
-                        <button type="submit" {{ $isExtracting ? 'disabled' : '' }} wire:loading.attr="disabled" wire:target="save"
-                            class="desk-button-primary {{ $isExtracting ? 'cursor-not-allowed opacity-50' : '' }}">
-                            <svg wire:loading.remove wire:target="save" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span wire:loading.remove wire:target="save">{{ $editingMeeting ? 'Save changes' : 'Save meeting' }}</span>
-                            <span wire:loading wire:target="save">Saving…</span>
-                        </button>
-                    </div>
-                </form>
+            @include('livewire.meetings.partials.relationship-suggestions', [
+                'heading' => 'Organizations',
+                'inputModel' => 'newOrganization',
+                'addMethod' => 'addOrganization',
+                'selectedModels' => $selectedOrganizationModels,
+                'removeMethod' => 'removeOrganization',
+                'suggestions' => $suggestedOrganizations,
+                'acceptMethod' => 'acceptSuggestedOrganizationByKey',
+                'rejectMethod' => 'rejectSuggestedOrganizationByKey',
+                'acceptAllMethod' => 'acceptAllSuggestedOrganizations',
+                'wirePrefix' => 'organization',
+            ])
+
+            @include('livewire.meetings.partials.relationship-suggestions', [
+                'heading' => 'People',
+                'inputModel' => 'newPerson',
+                'addMethod' => 'addPerson',
+                'selectedModels' => $selectedPeopleModels,
+                'removeMethod' => 'removePerson',
+                'suggestions' => $suggestedPeople,
+                'acceptMethod' => 'acceptSuggestedPersonByKey',
+                'rejectMethod' => 'rejectSuggestedPersonByKey',
+                'acceptAllMethod' => 'acceptAllSuggestedPeople',
+                'wirePrefix' => 'person',
+            ])
+
+            @include('livewire.meetings.partials.relationship-suggestions', [
+                'heading' => 'Topics',
+                'inputModel' => 'newIssue',
+                'addMethod' => 'addIssue',
+                'selectedModels' => $selectedIssueModels,
+                'removeMethod' => 'removeIssue',
+                'suggestions' => $suggestedIssues,
+                'acceptMethod' => 'acceptSuggestedIssueByKey',
+                'rejectMethod' => 'rejectSuggestedIssueByKey',
+                'acceptAllMethod' => 'acceptAllSuggestedIssues',
+                'wirePrefix' => 'issue',
+            ])
+        </aside>
+
+        <div class="meeting-capture-actions" id="meeting-capture-actions">
+            <div>
+                @error('save') <span class="meeting-error">{{ $message }}</span> @enderror
+                <span>Your notes remain editable after saving.</span>
+            </div>
+            <div>
+                <a href="{{ route('meetings.index') }}" wire:navigate class="desk-link">Cancel</a>
+                <button type="submit" wire:loading.attr="disabled" wire:target="save" class="desk-button-primary">
+                    <span wire:loading.remove wire:target="save">{{ $editingMeeting ? 'Save changes' : 'Save meeting' }}</span>
+                    <span wire:loading wire:target="save">Saving…</span>
+                </button>
             </div>
         </div>
-    </div>
+    </form>
 
-    <!-- Audio Recording Script with Web Speech API Transcription -->
     <script>
         function voiceRecorder() {
             return {
-                recording: false,
-                hasPermission: true,
-                error: null,
-                recordingTime: '0:00',
-                mediaRecorder: null,
-                audioChunks: [],
-                recognition: null,
-                fullTranscript: '',
-                stream: null,
-                timerInterval: null,
-                startTime: null,
-
+                recording: false, error: null, recordingTime: '0:00', mediaRecorder: null,
+                audioChunks: [], recognition: null, fullTranscript: '', stream: null,
+                timerInterval: null, startTime: null,
                 init() {
-                    // Check for browser support
-                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        this.error = 'Your browser does not support audio recording.';
-                        this.hasPermission = false;
+                    if (!navigator.mediaDevices?.getUserMedia) {
+                        this.error = 'Audio recording is not supported in this browser.';
                         return;
                     }
-
-                    // Initialize Web Speech API if available
                     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                     if (SpeechRecognition) {
                         this.recognition = new SpeechRecognition();
                         this.recognition.continuous = true;
                         this.recognition.interimResults = true;
-                        this.recognition.lang = 'en-US';
-
                         this.recognition.onresult = (event) => {
                             for (let i = event.resultIndex; i < event.results.length; i++) {
-                                const transcript = event.results[i][0].transcript;
-                                if (event.results[i].isFinal) {
-                                    this.fullTranscript += transcript + ' ';
-                                }
+                                if (event.results[i].isFinal) this.fullTranscript += event.results[i][0].transcript + ' ';
                             }
                         };
-
-                        this.recognition.onerror = (event) => {
-                            console.error('Speech recognition error:', event.error);
-                        };
                     }
                 },
-
-                async toggleRecording() {
-                    if (this.recording) {
-                        this.stopRecording();
-                    } else {
-                        await this.startRecording();
-                    }
-                },
-
+                async toggleRecording() { this.recording ? this.stopRecording() : await this.startRecording(); },
                 async startRecording() {
                     this.error = null;
-
                     try {
                         this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                        this.hasPermission = true;
                         this.mediaRecorder = new MediaRecorder(this.stream);
-                        this.audioChunks = [];
-                        this.fullTranscript = '';
-
-                        this.mediaRecorder.ondataavailable = (event) => {
-                            this.audioChunks.push(event.data);
-                        };
-
+                        this.audioChunks = []; this.fullTranscript = '';
+                        this.mediaRecorder.ondataavailable = event => this.audioChunks.push(event.data);
                         this.mediaRecorder.onstop = () => {
-                            const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
                             const reader = new FileReader();
-                            reader.onloadend = () => {
-                                @this.call('saveRecordedAudio', reader.result);
-                            };
-                            reader.readAsDataURL(audioBlob);
-
-                            // Stop all tracks
-                            if (this.stream) {
-                                this.stream.getTracks().forEach(track => track.stop());
-                            }
-
-                            // Append transcript to notes
+                            reader.onloadend = () => @this.call('saveRecordedAudio', reader.result);
+                            reader.readAsDataURL(new Blob(this.audioChunks, { type: 'audio/webm' }));
+                            this.stream?.getTracks().forEach(track => track.stop());
                             if (this.fullTranscript.trim()) {
-                                const currentNotes = @this.get('raw_notes') || '';
-                                const separator = currentNotes ? '\n\n--- Voice Memo ---\n' : '';
-                                @this.set('raw_notes', currentNotes + separator + this.fullTranscript.trim());
+                                const current = @this.get('raw_notes') || '';
+                                @this.set('raw_notes', current + (current ? '\n\n— Voice memo —\n' : '') + this.fullTranscript.trim());
                             }
                         };
-
-                        this.mediaRecorder.start();
-                        this.recording = true;
-
-                        // Start timer
-                        this.startTime = Date.now();
+                        this.mediaRecorder.start(); this.recording = true; this.startTime = Date.now();
                         this.timerInterval = setInterval(() => {
                             const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
-                            const minutes = Math.floor(elapsed / 60);
-                            const seconds = elapsed % 60;
-                            this.recordingTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                            this.recordingTime = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`;
                         }, 1000);
-
-                        // Start speech recognition if available
-                        if (this.recognition) {
-                            try {
-                                this.recognition.start();
-                            } catch (e) {
-                                console.log('Speech recognition not started:', e);
-                            }
-                        }
-
+                        try { this.recognition?.start(); } catch (_) {}
                     } catch (error) {
-                        console.error('Error accessing microphone:', error);
-                        this.hasPermission = false;
-                        if (error.name === 'NotAllowedError') {
-                            this.error = 'Microphone access denied. Please allow microphone access in your browser settings and try again.';
-                        } else if (error.name === 'NotFoundError') {
-                            this.error = 'No microphone found. Please connect a microphone and try again.';
-                        } else {
-                            this.error = 'Could not access microphone: ' + error.message;
-                        }
+                        this.error = error.name === 'NotAllowedError'
+                            ? 'Microphone access was denied. Allow it in browser settings and try again.'
+                            : 'Could not start recording.';
                     }
                 },
-
                 stopRecording() {
-                    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-                        this.mediaRecorder.stop();
-                    }
-                    if (this.recognition) {
-                        try {
-                            this.recognition.stop();
-                        } catch (e) {
-                            // Already stopped
-                        }
-                    }
-                    if (this.timerInterval) {
-                        clearInterval(this.timerInterval);
-                        this.timerInterval = null;
-                    }
-                    this.recording = false;
-                    this.recordingTime = '0:00';
+                    if (this.mediaRecorder?.state === 'recording') this.mediaRecorder.stop();
+                    try { this.recognition?.stop(); } catch (_) {}
+                    clearInterval(this.timerInterval); this.recording = false; this.recordingTime = '0:00';
                 }
-            };
+            }
         }
     </script>
 </div>
