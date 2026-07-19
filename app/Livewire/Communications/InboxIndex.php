@@ -14,11 +14,11 @@ use App\Models\Person;
 use App\Models\PersonInteraction;
 use App\Models\Project;
 use App\Services\GoogleGmailService;
+use Google\Service\Gmail as GoogleGmail;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
-use Google\Service\Gmail as GoogleGmail;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -2906,8 +2906,7 @@ class InboxIndex extends Component
             ->values();
 
         return $scopes->contains(GoogleGmail::MAIL_GOOGLE_COM)
-            || $scopes->contains(GoogleGmail::GMAIL_COMPOSE)
-            || $scopes->contains(GoogleGmail::GMAIL_SEND);
+            || $scopes->contains(GoogleGmail::GMAIL_MODIFY);
     }
 
     public function render()

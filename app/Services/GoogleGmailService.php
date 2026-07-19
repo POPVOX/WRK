@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Agent;
+use App\Models\CongressionalStaffChangeSignal;
+use App\Models\CongressionalStaffEmailEvent;
 use App\Models\GmailMessage;
 use App\Models\Person;
 use App\Models\User;
@@ -149,7 +151,10 @@ class GoogleGmailService
                         'labels' => $payload['labels'],
                     ]);
                     $record->save();
-                    $this->congressionalStaffChangeDetector->detect($record);
+                    $staffChangeSignal = $this->congressionalStaffChangeDetector->detect($record);
+                    if ($staffChangeSignal?->status === 'accepted') {
+                        $this->archiveProcessedStaffChangeSignal($staffChangeSignal);
+                    }
                     app(ContactActivityService::class)->recordGmailMessage($record->loadMissing('user'));
 
                     if ($isNew) {
@@ -372,6 +377,105 @@ class GoogleGmailService
                 'thread_id' => (string) ($trashed->getId() ?? $threadId),
             ];
         });
+    }
+
+    public function archiveThread(User $user, string $threadId, ?Agent $agent = null): array
+    {
+        $threadId = trim($threadId);
+        if ($threadId === '') {
+            throw new RuntimeException('No Gmail thread selected.');
+        }
+
+        return $this->executeGmailCall($user, $agent, function (GoogleGmail $gmail) use ($threadId) {
+            $request = new ModifyThreadRequest;
+            $request->setRemoveLabelIds(['INBOX', 'UNREAD']);
+
+            $modified = $gmail->users_threads->modify('me', $threadId, $request);
+
+            return [
+                'thread_id' => (string) ($modified->getId() ?? $threadId),
+                'labels' => array_values(array_filter((array) ($modified->getLabelIds() ?? []))),
+            ];
+        });
+    }
+
+    /**
+     * Archive an accepted staff-change message only after its evidence has been
+     * committed to WRK. Failures remain retryable by the scheduled reconciler.
+     */
+    public function archiveProcessedStaffChangeSignal(CongressionalStaffChangeSignal $signal): bool
+    {
+        if ($signal->status !== 'accepted') {
+            return false;
+        }
+
+        $evidenceCommitted = Schema::hasTable('congressional_staff_email_events')
+            && CongressionalStaffEmailEvent::query()
+                ->where('metadata->change_signal_id', $signal->id)
+                ->exists();
+        if (! $evidenceCommitted) {
+            return false;
+        }
+
+        $message = $signal->gmailMessage()->with('user')->first();
+        if (! $message || $message->automation_processed_at) {
+            return (bool) $message?->automation_processed_at;
+        }
+
+        $threadId = trim((string) $message->gmail_thread_id);
+        $user = $message->user;
+        if (! $user || $threadId === '') {
+            $message->update([
+                'automation_error' => $threadId === ''
+                    ? 'The processed Gmail message does not have a thread ID.'
+                    : 'The Gmail account owner is no longer available.',
+            ]);
+
+            return false;
+        }
+
+        if (! $this->isConnected($user)) {
+            $message->update([
+                'automation_error' => 'Google Workspace must be reconnected before WRK can archive processed messages.',
+            ]);
+
+            return false;
+        }
+
+        try {
+            $this->archiveThread($user, $threadId);
+
+            GmailMessage::query()
+                ->where('user_id', $user->id)
+                ->where('gmail_thread_id', $threadId)
+                ->get()
+                ->each(function (GmailMessage $threadMessage): void {
+                    $threadMessage->update([
+                        'labels' => collect($threadMessage->labels ?? [])
+                            ->reject(fn ($label) => in_array(Str::upper(trim((string) $label)), ['INBOX', 'UNREAD'], true))
+                            ->values()
+                            ->all(),
+                        'automation_processed_at' => now(),
+                        'automation_disposition' => 'archived_staff_change',
+                        'automation_error' => null,
+                    ]);
+                });
+
+            return true;
+        } catch (Throwable $exception) {
+            $message->update([
+                'automation_error' => Str::limit($exception->getMessage(), 2000),
+            ]);
+
+            \Log::warning('Processed congressional Gmail message could not be archived', [
+                'gmail_message_id' => $message->id,
+                'gmail_thread_id' => $threadId,
+                'user_id' => $user->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 
     public function markThreadAsSpam(User $user, string $threadId, ?Agent $agent = null): array
@@ -681,7 +785,7 @@ class GoogleGmailService
         $lower = strtolower($exception->getMessage());
         if (str_contains($lower, 'insufficient') && str_contains($lower, 'scope')) {
             throw new RuntimeException(
-                'Google account needs Gmail send/compose permission. Disconnect and reconnect Google to grant updated Gmail scopes.',
+                'Google account needs updated Gmail permissions for reading, sending, and archiving. Disconnect and reconnect Google Workspace, then try again.',
                 previous: $exception
             );
         }
