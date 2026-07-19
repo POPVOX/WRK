@@ -10,7 +10,7 @@
 
 <svg
     {{ $attributes->class('block shrink-0') }}
-    viewBox="150 55 340 125"
+    viewBox="150 55 380 125"
     role="img"
     aria-label="WRKBench"
     xmlns="http://www.w3.org/2000/svg"
