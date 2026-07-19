@@ -25,8 +25,8 @@ Schedule::command('calendars:sync --sync --past-days=30 --future-days=365')
 
 // Primary Gmail sync: keep outreach signals fresh in the workspace.
 Schedule::command('gmail:sync')
-    ->everyFifteenMinutes()
-    ->withoutOverlapping(12)
+    ->everyTenMinutes()
+    ->withoutOverlapping(9)
     ->onOneServer()
     ->runInBackground()
     ->description('Continuous Gmail metadata sync');
@@ -40,11 +40,11 @@ Schedule::command('gmail:sync --sync --days=90 --max=500')
 
 // Repair imported staff-change evidence automatically after Gmail syncs.
 Schedule::command('congressional:scan-gmail-changes --limit=10000')
-    ->hourlyAt(20)
-    ->withoutOverlapping(30)
+    ->cron('2,12,22,32,42,52 * * * *')
+    ->withoutOverlapping(9)
     ->onOneServer()
     ->runInBackground()
-    ->description('Automatic congressional email evidence reconciliation');
+    ->description('Automatic congressional email evidence reconciliation after Gmail sync');
 
 // Outreach scheduler: send due campaigns and run automation recipes.
 Schedule::command('outreach:run-scheduled')

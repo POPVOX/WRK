@@ -1,4 +1,4 @@
-<div class="desk-page">
+<div class="desk-page" @if($gmailConnected) wire:init="syncGmailOnOpen" @endif>
     <div class="app-page-frame-wide !max-w-none !gap-5">
         <x-desk-page-header eyebrow="Triage" title="Inbox" description="Email that needs action, with CRM context and a clear next step.">
             <x-slot:actions>
