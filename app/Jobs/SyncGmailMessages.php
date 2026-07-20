@@ -18,10 +18,16 @@ class SyncGmailMessages implements ShouldBeUnique, ShouldQueue
 
     public int $uniqueFor = 600;
 
+    public int $timeout = 75;
+
+    public int $tries = 2;
+
+    public bool $failOnTimeout = true;
+
     public function __construct(
         public User $user,
         public int $daysBack = 30,
-        public int $maxMessages = 250
+        public int $maxMessages = 50
     ) {
         $this->daysBack = max(1, min($daysBack, 365));
         $this->maxMessages = max(1, min($maxMessages, 1000));
