@@ -23,8 +23,10 @@ Schedule::command('calendars:sync --sync --past-days=30 --future-days=365')
     ->onOneServer()
     ->description('Daily inline calendar backstop sync');
 
-// Primary Gmail sync: keep outreach signals fresh in the workspace.
-Schedule::command('gmail:sync')
+// Primary Gmail sync: process a bounded batch inline so imports do not depend
+// on a long-running queue worker. Incremental checkpoints continue catch-up
+// across subsequent ten-minute windows without blocking browser requests.
+Schedule::command('gmail:sync --sync --days=30 --max=50')
     ->everyTenMinutes()
     ->withoutOverlapping(9)
     ->onOneServer()

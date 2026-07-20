@@ -374,7 +374,7 @@ class InboxIndex extends Component
             $this->gmailSyncStartedAt = now()->toIso8601String();
             $this->isSyncingGmail = true;
 
-            SyncGmailMessages::dispatch($user, 90, 300)->onQueue($queueName);
+            SyncGmailMessages::dispatch($user, 30, 50)->onQueue($queueName);
 
             if ($notify) {
                 $this->dispatch(
@@ -391,8 +391,8 @@ class InboxIndex extends Component
                 snapshot: null,
                 details: [
                     'queue' => $queueName,
-                    'queued_days_back' => 90,
-                    'queued_max_messages' => 300,
+                    'queued_days_back' => 30,
+                    'queued_max_messages' => 50,
                     'trigger' => $notify ? 'manual' : 'inbox_open',
                 ]
             );

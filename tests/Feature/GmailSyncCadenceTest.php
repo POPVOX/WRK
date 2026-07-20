@@ -30,7 +30,10 @@ test('opening the connected inbox always starts a Gmail sync', function () {
         ->assertSeeHtml('wire:poll.5s="refreshGmailSyncStatus"')
         ->assertHasNoErrors();
 
-    Queue::assertPushed(SyncGmailMessages::class, fn (SyncGmailMessages $job) => $job->user->is($user));
+    Queue::assertPushed(SyncGmailMessages::class, fn (SyncGmailMessages $job) => $job->user->is($user)
+        && $job->daysBack === 30
+        && $job->maxMessages === 50
+        && $job->timeout === 75);
 });
 
 test('the inbox stops polling after a queued Gmail sync completes', function () {
@@ -60,10 +63,12 @@ test('the inbox stops polling after a queued Gmail sync completes', function () 
         ->assertDontSeeHtml('wire:poll.5s="refreshGmailSyncStatus"');
 });
 
-test('Gmail sync runs every ten minutes and reconciliation follows two minutes later', function () {
+test('Gmail sync runs inline in bounded batches every ten minutes and reconciliation follows two minutes later', function () {
     $events = collect(app(Schedule::class)->events());
-    $gmailSync = $events->first(fn ($event) => Str::contains($event->command, 'gmail:sync')
-        && ! Str::contains($event->command, '--sync'));
+    $gmailSync = $events->first(fn ($event) => Str::contains(
+        $event->command,
+        'gmail:sync --sync --days=30 --max=50'
+    ));
     $reconciliation = $events->first(fn ($event) => Str::contains(
         $event->command,
         'congressional:scan-gmail-changes'
