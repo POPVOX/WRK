@@ -2,7 +2,6 @@
 
 namespace App\Livewire\Communications;
 
-use App\Jobs\SyncGmailMessages;
 use App\Models\Action;
 use App\Models\GmailMessage;
 use App\Models\Grant;
@@ -29,6 +28,10 @@ use Livewire\Component;
 #[Title('Inbox')]
 class InboxIndex extends Component
 {
+    private const GMAIL_SYNC_BATCH_SIZE = 10;
+
+    private const GMAIL_SYNC_MAX_MINUTES = 10;
+
     #[Url(as: 'folder')]
     public string $folder = 'inbox';
 
@@ -73,6 +76,10 @@ class InboxIndex extends Component
     public bool $isSyncingGmail = false;
 
     public ?string $gmailSyncStartedAt = null;
+
+    public int $gmailSyncProcessed = 0;
+
+    public bool $gmailSyncNotifyOnCompletion = false;
 
     public ?string $lastGmailSyncAt = null;
 
@@ -310,12 +317,12 @@ class InboxIndex extends Component
 
     public function syncGmail(): void
     {
-        $this->queueGmailSync(notify: true);
+        $this->startGmailSync(notify: true);
     }
 
     public function syncGmailOnOpen(): void
     {
-        $this->queueGmailSync(notify: false);
+        $this->startGmailSync(notify: false);
     }
 
     public function refreshGmailSyncStatus(): void
@@ -325,29 +332,84 @@ class InboxIndex extends Component
             return;
         }
 
-        $user->refresh();
-        $this->lastGmailSyncAt = $user->gmail_import_date?->diffForHumans();
-
         $startedAt = Carbon::parse($this->gmailSyncStartedAt);
-        if ($user->gmail_import_date?->gte($startedAt->copy()->subSecond())) {
-            $this->isSyncingGmail = false;
-            $this->gmailSyncStartedAt = null;
+        if ($startedAt->lte(now()->subMinutes(self::GMAIL_SYNC_MAX_MINUTES))) {
+            $this->finishGmailSync();
+            $this->dispatch(
+                'notify',
+                type: 'info',
+                message: 'Gmail sync paused after ten minutes. Open the Inbox again to continue from the saved checkpoint.'
+            );
 
             return;
         }
 
-        if ($startedAt->lte(now()->subMinutes(3))) {
-            $this->isSyncingGmail = false;
-            $this->gmailSyncStartedAt = null;
+        try {
+            $summary = app(GoogleGmailService::class)->syncRecentMessages(
+                $user,
+                30,
+                self::GMAIL_SYNC_BATCH_SIZE
+            );
+            $processed = (int) ($summary['processed'] ?? 0);
+            $errors = (int) ($summary['errors'] ?? 0);
+            $this->gmailSyncProcessed += $processed;
+
+            $user->refresh();
+            $this->lastGmailSyncAt = $user->gmail_import_date?->diffForHumans();
+
+            if ($errors > 0) {
+                $this->finishGmailSync();
+                $this->recordInboxAction(
+                    suggestionKey: 'sync_gmail',
+                    actionLabel: 'Sync Gmail',
+                    actionStatus: 'failed',
+                    snapshot: null,
+                    details: [
+                        'mode' => 'browser_micro_batches',
+                        'processed' => $this->gmailSyncProcessed,
+                        'errors' => $errors,
+                    ]
+                );
+                $this->dispatch(
+                    'notify',
+                    type: 'warning',
+                    message: 'Gmail sync stopped because one or more messages could not be processed. The messages were left in Gmail for a safe retry.'
+                );
+
+                return;
+            }
+
+            if ($processed < self::GMAIL_SYNC_BATCH_SIZE) {
+                $totalProcessed = $this->gmailSyncProcessed;
+                $notify = $this->gmailSyncNotifyOnCompletion;
+                $this->finishGmailSync();
+
+                if ($notify) {
+                    $this->dispatch(
+                        'notify',
+                        type: 'success',
+                        message: "Gmail sync complete ({$totalProcessed} messages checked)."
+                    );
+                }
+            }
+        } catch (\Throwable $exception) {
+            $this->finishGmailSync();
             $this->dispatch(
                 'notify',
-                type: 'info',
-                message: 'Gmail sync is still running in the background. New messages will appear automatically when it finishes.'
+                type: 'error',
+                message: 'Gmail sync failed: '.$exception->getMessage()
+            );
+            $this->recordInboxAction(
+                suggestionKey: 'sync_gmail',
+                actionLabel: 'Sync Gmail',
+                actionStatus: 'failed',
+                snapshot: null,
+                details: ['error' => $exception->getMessage()]
             );
         }
     }
 
-    private function queueGmailSync(bool $notify): void
+    private function startGmailSync(bool $notify): void
     {
         $user = Auth::user();
         if (! $user || $this->isSyncingGmail) {
@@ -370,17 +432,16 @@ class InboxIndex extends Component
                 return;
             }
 
-            $queueName = (string) (config('queue.gmail_queue') ?: env('GMAIL_SYNC_QUEUE', 'default'));
             $this->gmailSyncStartedAt = now()->toIso8601String();
+            $this->gmailSyncProcessed = 0;
+            $this->gmailSyncNotifyOnCompletion = $notify;
             $this->isSyncingGmail = true;
-
-            SyncGmailMessages::dispatch($user, 30, 50)->onQueue($queueName);
 
             if ($notify) {
                 $this->dispatch(
                     'notify',
                     type: 'success',
-                    message: 'Gmail sync started. You can keep using the Inbox while it runs.'
+                    message: 'Gmail sync started. Keep the Inbox open while it checks small batches.'
                 );
             }
 
@@ -390,15 +451,13 @@ class InboxIndex extends Component
                 actionStatus: 'applied',
                 snapshot: null,
                 details: [
-                    'queue' => $queueName,
-                    'queued_days_back' => 30,
-                    'queued_max_messages' => 50,
+                    'mode' => 'browser_micro_batches',
+                    'batch_size' => self::GMAIL_SYNC_BATCH_SIZE,
                     'trigger' => $notify ? 'manual' : 'inbox_open',
                 ]
             );
         } catch (\Throwable $exception) {
-            $this->isSyncingGmail = false;
-            $this->gmailSyncStartedAt = null;
+            $this->finishGmailSync();
             $this->dispatch('notify', type: 'error', message: 'Gmail sync failed: '.$exception->getMessage());
             $this->recordInboxAction(
                 suggestionKey: 'sync_gmail',
@@ -408,6 +467,13 @@ class InboxIndex extends Component
                 details: ['error' => $exception->getMessage()]
             );
         }
+    }
+
+    private function finishGmailSync(): void
+    {
+        $this->isSyncingGmail = false;
+        $this->gmailSyncStartedAt = null;
+        $this->gmailSyncNotifyOnCompletion = false;
     }
 
     public function sendCompose(): void
