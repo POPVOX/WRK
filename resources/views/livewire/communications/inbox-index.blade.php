@@ -5,7 +5,7 @@
                 @if($readOnlyMode)<span class="text-xs font-semibold text-[#8a6d1f]">Gmail is read-only</span>@endif
                 <button type="button" wire:click="openComposer" class="desk-button-primary" @disabled($readOnlyMode)>＋ Compose</button>
                 <button type="button" wire:click="syncGmail" wire:loading.attr="disabled" class="desk-button-secondary" @disabled($isSyncingGmail)>
-                    {{ $isSyncingGmail ? 'Syncing Gmail…' : ($lastGmailSyncAt ? 'Gmail '.$lastGmailSyncAt : 'Sync Gmail') }}
+                    {{ $isSyncingGmail ? 'Syncing Gmail'.($gmailSyncProcessed > 0 ? ' · '.$gmailSyncProcessed : '').'…' : ($lastGmailSyncAt ? 'Gmail '.$lastGmailSyncAt : 'Sync Gmail') }}
                 </button>
                 <button type="button" wire:click="toggleContextPanel" class="desk-button-secondary">{{ $showContextPanel ? 'Close context' : 'Open context' }}</button>
             </x-slot:actions>
